@@ -1,0 +1,3 @@
+import "..\\mac\\bfsofia\\ContClnLib.mac";
+
+macMain("",0);

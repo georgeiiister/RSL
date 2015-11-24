@@ -1,0 +1,26 @@
+file acc0 (account) key 0;
+file accSpr() txt;
+
+Var
+   i=0;
+
+Const
+   strLim="#",	
+   strPathFile="..\\TXTFILE\\",
+   strFileName="accCN.txt";
+
+Rewind(acc0);
+ClearRecord(acc0);
+
+SetOutput(strPathFile+strFileName,false);
+While (next(acc0))
+  i=i+1; 
+  Message("Подождите... Идет просмотр записи: "+i);
+  If ((acc0.Open_Close!="З") And ((Acc0.Balance=="40502") Or (Acc0.Balance=="40602") Or (Acc0.Balance=="40702") Or (Acc0.Balance=="40802")))	
+     println(acc0.Client+strLim+Trim(acc0.Account)+strLim);
+  End;	
+End;
+
+Close(acc0);
+Close(strPathFile+strFileName);
+SetOutput(Null,True);

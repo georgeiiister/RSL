@@ -1,0 +1,360 @@
+/*
+Макрос для формирования отчетности по 322-П 
+developer Polyakov S.George 24.02.2010
+edit Polyakov S.George 01.09.2011
+*/
+
+import bankinter,rsexts;
+
+file ac_ar(ac_arest,"bank.def") key 1;
+//file acc0(account,"bank.def") key 0;
+file r_acc0(account,"bank.def") key 0;
+file r_accv0("account$","bank.def") key 0;
+file stop(stop_op,"bank.def") key 0;
+file cln0 (client,"bank.def") key 0;
+file st_od (st_op_od,"bfsofia1.def") write;
+file st_od0 (st_op_od,"bfsofia1.def") key 0;
+file st_od1 (st_op_od,"bfsofia1.def") key 1;
+file st_od2 (st_op_od,"bfsofia1.def") key 2;
+
+var flgRet=false,
+    strAcc="",
+    intChapter=1,
+    intCode_Currency=0,
+    flgNext=true,
+    dteCurDate=Date(),
+    strKind="",
+    strSKind="",
+    intA=0,
+    mneSumArestItog=Moneyl(0),
+    mneSumP=Moneyl(0), //Итоговая сумма с накоплением для ПРИОСТ
+    mneSumO=Moneyl(0), //Итоговая сумма с накоплением для ОТМЕНА
+    flgFullArest=False,
+    mneCanSumTmp=Moneyl(0),
+    intReturn=int(0), //add Polyakov S. George 13.01.2011
+    acc0="";
+
+const STR_FILE_TMP=GetWorkFileName("st_od"),  //Имя временного файла в WorkFile
+      I_VAL=int(810); //константа национальной валюты 
+
+//Подготовка заголовка 
+macro macTopRpt(strCln)
+  //println("");
+  [Отчет о приост./ об отмене приост. движения по счету на ########## г. 
+   По счету: #################### 
+   Наименование клиента: #################################################################################
+   +---+-------+---------------------+----------+---------------+---------------------+----------+---------------+-------+
+     N    Вид        Номер решения       Дата         Сумма              Номер           Дата        Отмена на      Вид 
+    п/п  сообщ.   о приост./об отмене   решения       ареста      отмененного решения   решения        сумму       отмены
+   +---+-------+---------------------+----------+---------------+---------------------+----------+---------------+-------+
+  ]
+  (dteCurDate=Date(),strAcc,StrUpr(Trim(strCln)));
+end;
+
+//Печать тела отчета
+macro macBodyRpt(intCA,chrKind,strStopNum,dteStopDte,mneSumArest,strCanStopN,dteCanStopD,mneCanSum,chrCanStopKind);
+  println(intCA:r:4,chrKind:r:8,strStopNum:r:22,dteStopDte:r:11,mneSumArest:r:16,strCanStopN:r:22,dteCanStopD:r:11,mneCanSum:r:16,chrCanStopKind:r:8);  
+end;
+
+macro macMain(in,blnMsg,blnOnlyRet)
+//blnMsg true - вывод сообщения в MsgBox, false - вывод информации на экран  
+//blnOnlyRet true - процедура выполняет только код ошибки, false - работа в обычном режиме
+/**********СОЧЕТАНИЯ ПАРАМЕТРОВ:*************/
+/*
+macMain(in,false,false) - выводим отчет и показываем сообщения об ошибках и дополнительную информацию
+macMain(in,true,false) - выводим итоговый MsgBox и показываем сообщения об ошибках и дополнительную информацию
+macMain(in,false,true) - выводим отчет и скрываем сообщения об ошибка и дополнительную информацию (смотрим только коды возвращаемых макросом)
+macMain(in,true,true) - скрываем итоговый MsgBox, а также сообщения об ошибка и дополнительную информацию (смотрим только коды возвращаемых макросом)
+
+*/
+/****************************************** Основной макрос ***************************/
+//поиск счета
+//strAcc="40802810901000001628";
+
+strAcc="";
+
+if (StrLen(Trim(String(in)))==0)
+  if (GetString(strAcc,"Введите номер счета",20))
+    flgRet=true;
+  end;
+else
+    strAcc=Trim(String(in));
+    flgRet=true;
+end;
+
+
+if (flgRet)
+  flgRet=false;
+  if (StrLen(Trim(strAcc))!=0)
+    if (substr(strAcc,6,3)==I_VAL)
+      acc0=r_acc0;
+    else
+      acc0=r_accv0;
+    end;
+    rewind(acc0);
+    acc0.account=strAcc;
+    acc0.code_currency=substr(strAcc,6,3);
+    if (getEQ(acc0))
+      rewind(ac_ar);
+      ac_ar.Chapter=intChapter;
+      intCode_Currency=acc0.Code_Currency;
+      ac_ar.Code_Currency=intCode_Currency;
+      ac_ar.Account=Trim(acc0.Account);
+      if (getEQ(ac_ar))
+        //MsgBox("!");
+        rewind(cln0);
+        cln0.Client=acc0.Client;
+        if (getEQ(cln0))
+          //MsgBox("!");
+          rewind(stop);
+          stop.ID=ac_ar.ID;
+          if (getEQ(stop))
+            //MsgBox("!");
+            flgRet=true;
+          else
+            //stop_op 
+		//add Polyakov S.George 13.01.2011
+		if (not blnOnlyRet)
+              MsgBox("ПО УКАЗАННОМУ СЧЕТУ НЕ ЗАПОЛНЕНЫ ПАРАМЕТРЫ СООБЩЕНИЯ!");
+		end;
+		intReturn=int(1);
+            return intReturn;
+          end;
+        else
+          //client
+	    //add Polyakov S.George 13.01.2011
+	    if (not blnOnlyRet)
+            MsgBox("КЛИЕНТ С ДАННЫМ СЧЕТОМ НЕ НАЙДЕН!");
+          end;
+          intReturn=int(2);
+          return intReturn; 
+        end;
+      else
+        //ac_arest
+        //add Polyakov S.George 13.01.2011
+        if (not blnOnlyRet)
+          MsgBox("ПО УКАЗАННОМУ СЧЕТУ НЕ БЫЛО АРЕСТОВ/СНЯТИЙ!");
+        end;
+        intReturn=int(3); 
+        return intReturn;
+      end;
+    else
+      //account
+	//add Polyakov S.George 13.01.2011
+      if (not blnOnlyRet)
+        MsgBox("УКАЗАННЫЙ СЧЕТ НЕ НАЙДЕН!");
+      end;
+      intReturn=int(4);  
+      return intReturn;        
+    end;
+  end;
+end;
+
+//удаляем файл и создаем новый
+
+if (flgRet)
+  flgRet=false;
+  if (Create(st_od,STR_FILE_TMP))
+    flgRet=true;
+  else
+    //add Polyakov S.George 13.01.2011
+    if (not blnOnlyRet)		
+      MsgBox("ВРЕМЕННЫЙ ФАЙЛ "+STR_FILE_TMP+" НЕ СОЗДАН!");
+    end;
+    intReturn=int(5);
+    return intReturn;
+  end;
+end;
+
+if (flgRet)
+  //есть клиент, счета, сообщения, аресты/снятия
+  flgRet=false;
+  //MsgBox("!");
+  //Работаем с ac_arest и stop_op
+  //++
+  //MsgBox(flgNext);
+  if (open(st_od,STR_FILE_TMP))
+    intA=0;
+    while(flgNext)
+      flgNext=false;
+      if ((ac_ar.Account==strAcc) and (ac_ar.Chapter==intChapter) and (ac_ar.Code_Currency==intCode_Currency))  
+        intA=intA+1;
+        //MsgBox(ac_ar.Account);
+        message("Идет подготовка данных для записи "+intA+" по счету:"+strAcc);
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        //Анализ для отчета
+        rewind(stop);
+        stop.ID=ac_ar.ID;
+        if (getEQ(stop))
+          if (Trim(stop.Kind)=="Р")
+            strKind="ПРИОСТ";
+          elif (Trim(stop.Kind)=="О")
+            strKind="ОТМЕНА"    
+          end;
+          strSKind=stop.CancStopKind;
+          if (strSKind=="1")
+            strSKind="ПОЛНАЯ";
+          end;
+          //перегрузка для выполнения сортировки по дате+типу сообщения по обрабатываемому счету
+          st_od.StopNumber=Trim(stop.StopNumber);
+          st_od.StopDate=stop.StopDate;
+          st_od.SumArest=ac_ar.SumArest;
+          st_od.CancStopNumber=Trim(stop.CancStopNumber);
+          st_od.CancStopDate=stop.CancStopDate;
+          st_od.Kind=strKind;
+          st_od.CancStopKind=strSKind;
+          insert(st_od);
+          flgRet=true;
+        end;
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        flgNext=next(ac_ar);
+      end;
+    end; //while
+    flgNext=true; //Установили флаг в исходное состояние
+    //++
+    close(st_od);
+  else
+    //add Polyakov S.George 13.01.2011
+    if (not blnOnlyRet)			
+      MsgBox("ВРЕМЕННЫЙ ФАЙЛ "+STR_FILE_TMP+" НЕ ОТКРЫТ!");
+    end;
+    intReturn=int(5);
+    return intReturn;	
+  end;
+    //**
+    if (flgRet)
+      flgRet=false;
+      if (open(st_od0,STR_FILE_TMP))
+        rewind(st_od0);
+        intA=0;
+        mneSumArestItog=Moneyl(0);
+        mneSumP=Moneyl(0);
+        mneSumO=Moneyl(0);
+        flgFullArest=false;
+        //add Polyakov S.George 13.01.2011
+        if (not blnMsg)   
+          macTopRpt(cln0.Name_Client);
+        end;
+        while(next(st_od0))
+          intA=intA+1;
+          mneCanSumTmp=Moneyl(0);
+          message("Идет подведение итогов: "+intA);
+          if (st_od0.Kind=="ПРИОСТ")
+            open(st_od1,STR_FILE_TMP); //не будем делать проверку в цикле на открытие
+            //MsgBox("!");
+            rewind(st_od1);
+            st_od1.CancStopNumber=st_od0.StopNumber;
+            st_od1.CancStopDate=st_od0.StopDate;
+            if (not getEQ(st_od1))
+              //отмены нет, накапливаем сумму приостановки либо полный арест
+              if (st_od0.SumArest!=Moneyl(0))
+                mneSumArestItog=mneSumArestItog+st_od0.SumArest;
+              else
+                //Полный арест счета
+                flgFullArest=true;
+              end;
+            else
+              if (st_od1.CancStopKind!="ПОЛНАЯ")
+                //Если есть отмена на сообщение, но отмена неполная!
+                //На это надо обратить внимание,может ли такое быть и как обрабатывать это
+                //add Polyakov S.George 13.01.2011
+		    if (not blnOnlyRet)	
+                  MsgBox("ВНИМАНИЕ! НЕПОЛНАЯ ОТМЕНА!");
+                end;
+                mneSumArestItog=mneSumArestItog-st_od0.SumArest;
+              end;
+            end;
+            //Накапливаем сумму всех приостановок
+            mneSumP=mneSumP+st_od0.SumArest;
+            close(st_od1);
+          elif (st_od0.Kind=="ОТМЕНА")
+            if ((Trim(st_od0.CancStopNumber)!="") and (Trim(st_od0.CancStopDate)!=""))
+              //add Polyakov S.George 13.01.2011
+              if (not blnOnlyRet)  
+                MsgBox("ВНИМАНИЕ! ОТМЕНА № "+st_od0.StopNumber+" ОТ "+Trim(String(st_od0.StopDate))+" НЕ СОДЕРЖИТ РЕКВИЗИТЫ ОТМЕНЯЕМОГО РЕШЕНИЯ");
+              end; 
+            else
+               open(st_od2,STR_FILE_TMP); //не будем делать проверку в цикле на открытие
+               rewind(st_od2);
+               st_od2.StopNumber=st_od0.CancStopNumber;
+               st_od2.StopDate=st_od0.CancStopDate;
+               if (getEQ(st_od2))
+                  if (st_od2.Kind=="ПРИОСТ")
+                     mneCanSumTmp=Moneyl(st_od2.SumArest);
+                     if (st_od0.CancStopKind=="ПОЛНАЯ")
+                       mneSumO=mneSumO+mneCanSumTmp;
+                     else
+                       mneSumO=mneSumO+st_od0.SumArest;
+                     end;
+                  else
+                    //add Polyakov S.George 13.01.2011
+                    if (not blnOnlyRet)
+                      MsgBox ("ВНИМАНИЕ! ОТМЕНЕНОЕ РЕШЕНИЕ № "+st_od0.CancStopNumber+" ОТ "+Trim(String(st_od0.CancStopDate))+" НЕ ПРИОСТАНОВЛЕНИЕ!");
+                    end;
+                  end;
+               else
+                  //add Polyakov S.George 13.01.2011
+                  if (not blnOnlyRet)
+                    MsgBox("ВНИМАНИЕ! НЕ НАЙДЕНО ОТМЕНЯЕМОЕ РЕШЕНИЕ № "+st_od0.CancStopNumber+" ОТ "+Trim(String(st_od0.CancStopDate)));
+                  end;  
+               end;
+               close(st_od2);
+            end;
+          end;
+          //Формируем вывод
+          //add Polyakov S.George 13.01.2011
+          if (not blnMsg)
+            macBodyRpt(intA,st_od0.Kind,st_od0.StopNumber,st_od0.StopDate,st_od0.SumArest,st_od0.CancStopNumber,st_od0.CancStopDate,mneCanSumTmp,st_od0.CancStopKind);
+          end;
+        end;
+        close(st_od0);
+        //MsgBox("!");
+        if (not blnMsg)
+          println("");
+          print("ИТОГО: "+mneSumP:r:61); //Сумма всех арестов
+          println("ИТОГО: "+mneSumO:r:49); //Сумма всех отмен
+          println("");
+          if (flgFullArest)
+            println("ОКОНЧАТЕЛЬНАЯ СУММА АРЕСТА: --ПОЛНЫЙ АРЕСТ СЧЕТА--":r:61);
+          else  
+            println("ОКОНЧАТЕЛЬНАЯ СУММА АРЕСТА: "+String(mneSumArestItog):r:61);
+          end;                                                                                                           
+          println("=======================================================================================================================");
+        else
+          if (flgFullArest)
+		//add Polyakov S.George 13.01.2011
+            if (not blnOnlyRet) 
+              MsgBox("Сумма арестов: "+String(mneSumP)+" Сумма отмен: "+String(mneSumO)+" Окончательная сумма ареста: --ПОЛНЫЙ АРЕСТ СЧЕТА--");  
+            end;
+		intReturn=int(6);
+          	return intReturn;
+          else
+            //add Polyakov S.George 13.01.2011
+            if (not blnOnlyRet) 
+              MsgBox("Сумма арестов: "+String(mneSumP)+" Сумма отмен: "+String(mneSumO)+" Окончательная сумма ареста: "+String(mneSumArestItog));
+            end;
+		if (mneSumArestItog!=Moneyl(0))
+              //АРЕСТ НА СУММУ
+              intReturn=int(7);
+              return intReturn;
+          	else
+              //ВСЕ АРЕСТЫ ПО СЧЕТУ ОТМЕНЕНЫ
+		  intReturn=int(8);
+              return intReturn;	
+            end;	
+          end;
+        end;
+        //MsgBox("!");
+      else
+        //add Polyakov S.George 13.01.2011
+        if (not blnOnlyRet) 
+          MsgBox("ВРЕМЕННЫЙ ФАЙЛ "+STR_FILE_TMP+" НЕ ОТКРЫТ!");
+        end;
+        intReturn=int(5);
+        return intReturn;    
+      end; //open
+    end;
+    //**
+end;
+/****************************************** Основной макрос ***************************/
+end;   

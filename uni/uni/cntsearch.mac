@@ -1,0 +1,51 @@
+/*
+  процедура выбора клиента
+  входной параметр - ФИО клиента
+  выходной - номер найденного 
+*/
+
+import cntTools;
+import cntaddcl;
+
+
+
+macro Search_Client(FIO, paymID)
+file myCl (client, "bank.def") key 0;
+array ClName, ClCode;
+
+var myLogic, i;
+var myMenu;
+
+      ClName (asize(ClName)) = "Новый клиент";
+      ClCode (asize(ClCode)) = 0;
+
+rewind (myCl);
+InitProgress (nrecords (MyCl));
+i = 0;
+myLogic = True;
+ while (myLogic)
+   //перебираем клиентов
+   if (StrUpr(StrSubst(myCl.Name_Client," ","")) ==  StrUpr(StrSubst(FIO," ","")))
+      ClName(asize(ClName))  = myCl.Name_Client + " " + GetClientDocType(myCl.Client) + " " + GetClientDocSer(myCl.Client) + " " + GetClientDocNum(myCl.Client);
+      ClCode (asize(ClCode)) = myCl.Client;
+   end;
+   myLogic = next (myCl);
+   i = i + 1;
+   UseProgress (i);
+ end;
+RemProgress();
+
+myMenu = menu (ClName, "Выберите клиента");
+if (myMenu < 0)
+Return 0;
+end;
+
+if (myMenu == 0)
+
+CntAddClient(FIO, paymID);
+Return ContactClientID;
+end;
+
+
+Return Trim(String(ClCode(myMenu)));
+end;

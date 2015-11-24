@@ -1,0 +1,33 @@
+file doc(document) sort 6 write;
+file scsh(symbcash) sort 0;
+
+i=0; //Счетчик итераций
+j=0; //Счетчик обработанных документов
+b=0; //Счетчик балансовых документов
+n=0; //Счетчик внебалансовых документов
+rewind(scsh);
+while(next(scsh))
+rewind(doc);
+While(next(doc))
+i=i+1;
+Message("Для позиции: "+scsh.ApplicationKey+" Идет обработка документа: "+doc.ApplicationKey); 
+If (doc.ApplicationKey==scsh.ApplicationKey)
+  j=j+1;
+  If ((int(SubStr(trim(scsh.Symbol),1,2))<=72) and (int(trim(doc.Symbol_Cach))==0))
+     b=b+1;
+     doc.Symbol_Cach=String(scsh.Symbol);
+     println(doc.Real_Payer,"  ",doc.Sum:r:10," ", "Cимвол:"," ",doc.Symbol_Cach:r:3);
+  update(doc);
+  End;
+  If ((int(SubStr(trim(scsh.Symbol),1,2))>72) and (int(trim(doc.SymbNotBal))==0))
+     n=n+1;
+     doc.SymbNotBal=String(scsh.Symbol);
+     println(doc.Real_Payer,"  ",doc.Sum:r:10," ","Cимвол:"," ",doc.SymbNotBal:r:3);  
+  update(doc);
+  End;
+End; 
+End;
+End;
+println();
+println();
+println("Обработано документов: "+j+" По балансу выбрано: "+b+" По внебалансу выбрано: "+n);

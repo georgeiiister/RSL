@@ -1,0 +1,499 @@
+/*
+  Макрос импорта документов из системы "Юнистрим" и записи данных в структуру
+  unistr.dbt (unistr.def)
+  Челбухов А.А. 16.11.2010
+*/
+import "cntTools.mac";
+import "txml.mac";
+var xmlObject: object = txml;
+
+file unistr ("unistr.dbt", "unistr.def") key 0 write;
+var myF1, i,myDate, myStr, myCount;
+var myFIO;
+myFIO = "";
+myCount = 0;
+myDate 	= {curdate};
+myStr	= "";
+i = 0;
+
+
+
+macro AddRecordUnistream(unipay)
+var myKey;
+// процедура добавляет запись в базу unistr.dbt
+
+ xmlObject.load(unipay);
+ xmlObject.rewind ("//ROWDATA");
+
+ while (xmlObject.next () )
+
+
+	myKey = KeyNum (unistr);
+	KeyNum (unistr,1);
+	ClearRecord(unistr);
+	unistr.Alter_Control	= xmlObject.getcurr().Attributes.getNamedItem("ALTER_CONTROL").Text;
+
+  if (GetEQ (unistr))
+	msgbox ("Данный перевод уже есть в базе данных!");
+  else
+      unistr.Transfer_ID 	= xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_ID").Text;
+      unistr.Transfer_Date 	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_DATE").Text);
+      unistr.Transfer_Number 	= xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_NUMBER").Text;
+      unistr.Transfer_Control 	= xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_CONTROL").Text;
+      //Валюта: 1-Рубль, 2-Доллар США, 3-ЕВРО
+      if (xmlObject.getcurr().Attributes.getNamedItem("CURRENCY_ID").Text == "1")
+	      unistr.Currency_Id = 810;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("CURRENCY_ID").Text == "2")
+	      unistr.Currency_Id = 840;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("CURRENCY_ID").Text == "3")
+	      unistr.Currency_Id = 978;
+      end;	
+      unistr.Amount 		= xmlObject.getcurr().Attributes.getNamedItem("AMOUNT").Text;
+      unistr.Commis1 		= xmlObject.getcurr().Attributes.getNamedItem("COMMIS1").Text;
+      unistr.Commis2 		= xmlObject.getcurr().Attributes.getNamedItem("COMMIS2").Text;
+      unistr.Commis3 		= xmlObject.getcurr().Attributes.getNamedItem("COMMIS3").Text;
+      unistr.CommisSum 		= xmlObject.getcurr().Attributes.getNamedItem("COMMISSUM").Text;
+      unistr.AmountSum 		= xmlObject.getcurr().Attributes.getNamedItem("AMOUNTSUM").Text;
+
+      if (xmlObject.getcurr().Attributes.getNamedItem("REALCURRENCY").Text == "1")
+	      unistr.RealCurrency = 810;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("REALCURRENCY").Text == "2")
+	      unistr.RealCurrency = 840;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("REALCURRENCY").Text == "3")
+	      unistr.RealCurrency = 978;
+      end;	
+
+      unistr.RealAmount		= xmlObject.getcurr().Attributes.getNamedItem("REALAMOUNT").Text;
+      unistr.RateAmount		= xmlObject.getcurr().Attributes.getNamedItem("RATEAMOUNT").Text;
+
+      if (xmlObject.getcurr().Attributes.getNamedItem("REALCOMMISCUR").Text == "1")
+	      unistr.RealCommisCur = 810;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("REALCOMMISCUR").Text == "2")
+	      unistr.RealCommisCur = 840;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("REALCOMMISCUR").Text == "3")
+	      unistr.RealCommisCur = 978;
+      end;	
+
+      unistr.RealCommis1	= xmlObject.getcurr().Attributes.getNamedItem("REALCOMMIS1").Text;
+      unistr.RealCommis2	= xmlObject.getcurr().Attributes.getNamedItem("REALCOMMIS2").Text;
+      unistr.RealCommis3	= xmlObject.getcurr().Attributes.getNamedItem("REALCOMMIS3").Text;
+      unistr.RealCommisSum	= xmlObject.getcurr().Attributes.getNamedItem("REALCOMMISSUM").Text;
+      unistr.RateCommis		= xmlObject.getcurr().Attributes.getNamedItem("RATECOMMIS").Text;
+
+      unistr.Client_ID		= xmlObject.getcurr().Attributes.getNamedItem("CLIENT_ID").Text;
+
+      unistr.Sender_BankID	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_BANKID").Text;
+      unistr.Sender_FirstName	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_FIRSTNAME").Text;
+      unistr.Sender_MiddleName	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_MIDDLENAME").Text;
+      unistr.Sender_LastName	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_LASTNAME").Text;
+      unistr.Sender_DocID	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCID").Text;
+      unistr.Sender_DocSeries	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCSERIES").Text;
+      unistr.Sender_DocNumber	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCNUMBER").Text;
+      unistr.Sender_DocWhom	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCWHOM").Text;
+      unistr.Sender_Phone	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_PHONE").Text;
+      unistr.Sender_Type	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_TYPE").Text;
+
+      unistr.Receiver_RegionID	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_REGIONID").Text;
+      unistr.Receiver_BankID	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_BANKID").Text;
+      unistr.Receiver_FirstName	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_FIRSTNAME").Text;
+      unistr.Receiver_MiddleName = xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_MIDDLENAME").Text;
+      unistr.Receiver_LastName 	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_LASTNAME").Text;
+      unistr.Receiver_DocID 	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_DOCID").Text;
+      unistr.Receiver_DocSeries	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_DOCSERIES").Text;
+      unistr.Receiver_DocNumber	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_DOCNUMBER").Text;
+      unistr.Receiver_DocWhom	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_DOCWHOM").Text;
+      unistr.Receiver_Phone	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_PHONE").Text;
+      unistr.Receiver_Type	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_TYPE").Text;
+
+      unistr.Transfer_Comment	= xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_COMMENT").Text;
+      unistr.Transfer_Status	= xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_STATUS").Text;
+
+      unistr.Transfer_InsDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_INSTIME").Text);
+      unistr.Transfer_InsTime	= GetUnistreamTime (xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_INSTIME").Text);
+      unistr.Transfer_UpdDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_UPDTIME").Text);
+      unistr.Transfer_UpdTime	= GetUnistreamTime (xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_UPDTIME").Text);
+
+      unistr.User_ID		= xmlObject.getcurr().Attributes.getNamedItem("USER_ID").Text;
+      unistr.BankFrom		= xmlObject.getcurr().Attributes.getNamedItem("BANKFROM").Text;
+      unistr.BankTo		= xmlObject.getcurr().Attributes.getNamedItem("BANKTO").Text;
+      unistr.RecState		= xmlObject.getcurr().Attributes.getNamedItem("RECSTATE").Text;
+      unistr.UpdCount		= xmlObject.getcurr().Attributes.getNamedItem("UPDCOUNT").Text;
+      unistr.Cashier		= xmlObject.getcurr().Attributes.getNamedItem("CASHIER").Text;
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_REGIONID")) != V_UNDEF)
+      unistr.Real_RegionID	= xmlObject.getcurr().Attributes.getNamedItem("REAL_REGIONID").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_BANKID")) != V_UNDEF)
+      unistr.Real_BankID	= xmlObject.getcurr().Attributes.getNamedItem("REAL_BANKID").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_FIRSTNAME")) != V_UNDEF)
+      unistr.Real_FirstName	= xmlObject.getcurr().Attributes.getNamedItem("REAL_FIRSTNAME").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_MIDDLENAME")) != V_UNDEF)
+      unistr.Real_MiddleName	= xmlObject.getcurr().Attributes.getNamedItem("REAL_MIDDLENAME").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_LASTNAME")) != V_UNDEF)
+      unistr.Real_LastName	= xmlObject.getcurr().Attributes.getNamedItem("REAL_LASTNAME").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCID")) != V_UNDEF)
+      unistr.Real_DocID		= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCID").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCSERIES")) != V_UNDEF)
+      unistr.Real_DocSeries	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCSERIES").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCNUMBER")) != V_UNDEF)
+      unistr.Real_DocNumber	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCNUMBER").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCWHOM")) != V_UNDEF)
+      unistr.Real_DocWhom	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCWHOM").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_PHONE")) != V_UNDEF)
+      unistr.Real_Phone		= xmlObject.getcurr().Attributes.getNamedItem("REAL_PHONE").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_TYPE")) != V_UNDEF)
+      unistr.Real_Type		= xmlObject.getcurr().Attributes.getNamedItem("REAL_TYPE").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_ADDRESS")) != V_UNDEF)
+      unistr.Real_Address	= xmlObject.getcurr().Attributes.getNamedItem("REAL_ADDRESS").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_ISSUEDATE")) != V_UNDEF)
+      unistr.Transfer_IssueDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_ISSUEDATE").Text);
+      else
+      unistr.Transfer_IssueDate = Date(0,0,0); 
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("DIASOFT_ACCOUNT")) != V_UNDEF)
+      unistr.Diasoft_Account	= xmlObject.getcurr().Attributes.getNamedItem("DIASOFT_ACCOUNT").Text;
+      end;
+      unistr.Signed		= xmlObject.getcurr().Attributes.getNamedItem("SIGNED").Text;
+      unistr.Tax_ID		= xmlObject.getcurr().Attributes.getNamedItem("TAX_ID").Text;
+
+      unistr.Sender_Phone	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_PHONE").Text;
+      unistr.Sender_Address	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_ADDRESS").Text;
+      unistr.Sender_BirthDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_BIRTHDATE").Text);
+      unistr.Sender_DocWhen	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCWHEN").Text);
+
+      unistr.Real_PaidAmount	= xmlObject.getcurr().Attributes.getNamedItem("REAL_PAIDAMOUNT").Text;
+      if (xmlObject.getcurr().Attributes.getNamedItem("REAL_PAIDCURR").Text == "1")
+	      unistr.Real_PaidCurr = 810;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("REAL_PAIDCURR").Text == "2")
+	      unistr.Real_PaidCurr = 840;
+      elif (xmlObject.getcurr().Attributes.getNamedItem("REAL_PAIDCURR").Text == "3")
+	      unistr.Real_PaidCurr = 978;
+      end;	
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_PAIDRATE")) != V_UNDEF)
+      unistr.Real_PaidRate	= xmlObject.getcurr().Attributes.getNamedItem("REAL_PAIDRATE").Text;
+      else
+      unistr.Real_PaidRate	= ""; 
+      end;
+
+
+      unistr.Receiver_BirthDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_BIRTHDATE").Text);
+
+      unistr.Sender_CountryCode	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_COUNTRYCODE").Text;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_COUNTRYCODE")) != V_UNDEF)
+      unistr.Real_CountryCode	= xmlObject.getcurr().Attributes.getNamedItem("REAL_COUNTRYCODE").Text;
+      else
+      unistr.Real_CountryCode	= "";
+      end;
+
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_BIRTHDATE")) != V_UNDEF)
+      unistr.Real_BirthDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_BIRTHDATE").Text);
+      end;
+      unistr.Receiver_Account	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_ACCOUNT").Text;
+      unistr.Receiver_Address	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_ADDRESS").Text;
+
+      unistr.Alter_Control	= xmlObject.getcurr().Attributes.getNamedItem("ALTER_CONTROL").Text;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("FLAGS")) != V_UNDEF)
+      unistr.Flags		= xmlObject.getcurr().Attributes.getNamedItem("FLAGS").Text;
+      end;
+      unistr.Transfer_Type	= xmlObject.getcurr().Attributes.getNamedItem("TRANSFER_TYPE").Text;
+      unistr.Receiver_Contract	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_CONTRACT").Text;
+      unistr.Receiver_CntrDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_CNTRDATE").Text);
+
+      unistr.Sender_BirthPlace	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_BIRTHPLACE").Text;
+      if (ValType (xmlObject.getcurr().Attributes.getNamedItem("REAL_BIRTHPLACE")) != V_UNDEF)
+      unistr.Real_BirthPlace	= xmlObject.getcurr().Attributes.getNamedItem("REAL_BIRTHPLACE").Text;
+      else
+      unistr.Real_BirthPlace	= "";
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("SOURCE_ID")) != V_UNDEF)
+      unistr.Source_ID		= xmlObject.getcurr().Attributes.getNamedItem("SOURCE_ID").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("CASHIER_NAME")) != V_UNDEF)
+      unistr.Cashier_Name	= xmlObject.getcurr().Attributes.getNamedItem("CASHIER_NAME").Text;
+      end;
+      unistr.Sender_ZIP		= xmlObject.getcurr().Attributes.getNamedItem("SENDER_ZIP").Text;
+      unistr.Receiver_ZIP	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_ZIP").Text;
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_ZIP")) != V_UNDEF)
+      unistr.Real_ZIP		= xmlObject.getcurr().Attributes.getNamedItem("REAL_ZIP").Text;
+      end;
+      unistr.Sender_PersonalID	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_PERSONALID").Text;
+      unistr.Receiver_PersonalID = xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_PERSONALID").Text;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_PERSONALID")) != V_UNDEF)
+      unistr.Real_PersonalID 	= xmlObject.getcurr().Attributes.getNamedItem("REAL_PERSONALID").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCEXP")) != V_UNDEF)
+      unistr.Real_DocExp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCEXP").Text);
+      end;
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCWHEN")) != V_UNDEF)
+      unistr.Real_DocWhen	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCWHEN").Text);
+      end;
+      unistr.Sender_Doc2ID	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2ID").Text;
+      unistr.Sender_Doc2Series	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2SERIES").Text;
+      unistr.Sender_Doc2Number	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2NUMBER").Text;
+      unistr.Sender_Doc2Whom	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2WHOM").Text;
+
+      unistr.Sender_Doc3ID	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3ID").Text;
+      unistr.Sender_Doc3Series	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3SERIES").Text;
+      unistr.Sender_Doc3Number	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3NUMBER").Text;
+      unistr.Sender_Doc3Whom	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3WHOM").Text;
+
+
+      if (ValType (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2ID")) != V_UNDEF)
+      unistr.Real_Doc2ID	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2ID").Text;
+      unistr.Real_Doc2Series	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2SERIES").Text;
+      unistr.Real_Doc2Number	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2NUMBER").Text;
+      unistr.Real_Doc2Whom	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2WHOM").Text;
+      unistr.Real_Doc2Exp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2EXP").Text);
+      unistr.Real_Doc2When	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2WHEN").Text);
+      unistr.Real_Doc2Division	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC2DIVISION").Text;
+      else
+      unistr.Real_Doc2ID	= 0;
+      unistr.Real_Doc2Series	= "";
+      unistr.Real_Doc2Number	= "";
+      unistr.Real_Doc2Whom	= "";
+      unistr.Real_Doc2Exp	= Date(0,0,0);
+      unistr.Real_Doc2When	= Date(0,0,0);
+      unistr.Real_Doc2Division	= "";
+      end;
+
+      if (ValType (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3ID")) != V_UNDEF)
+      unistr.Real_Doc3ID	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3ID").Text;
+      unistr.Real_Doc3Series	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3SERIES").Text;
+      unistr.Real_Doc3Number	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3NUMBER").Text;
+      unistr.Real_Doc3Whom	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3WHOM").Text;
+      unistr.Real_Doc3Exp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3EXP").Text);
+      unistr.Real_Doc3When	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3WHEN").Text);
+      unistr.Real_Doc3Division	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOC3DIVISION").Text;
+      else
+      unistr.Real_Doc3ID	= 0;
+      unistr.Real_Doc3Series	= "";
+      unistr.Real_Doc3Number	= "";
+      unistr.Real_Doc3Whom	= "";
+      unistr.Real_Doc3Exp	= Date(0,0,0);
+      unistr.Real_Doc3When	= Date(0,0,0);
+      unistr.Real_Doc3Division	= "";
+      end;
+
+      unistr.Sender_DocExp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCEXP").Text);
+      unistr.Sender_Doc2Exp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2EXP").Text);
+      unistr.Sender_Doc2When	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2WHEN").Text);
+      unistr.Sender_Doc3Exp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3EXP").Text);
+      unistr.Sender_Doc3When	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3WHEN").Text);
+
+      unistr.Receiver_DocExp	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_DOCEXP").Text);
+      unistr.Receiver_DocWhen	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_DOCWHEN").Text);
+
+
+      unistr.Sender_City	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_CITY").Text;
+      unistr.Receiver_City	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_CITY").Text;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_CITY")) != V_UNDEF)
+      unistr.Real_City	= xmlObject.getcurr().Attributes.getNamedItem("REAL_CITY").Text;
+      end;
+      unistr.Sender_Proof	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_PROOF").Text;
+      unistr.Sender_Flags	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_FLAGS").Text;
+
+      unistr.CreateDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("CREATETIME").Text);
+      unistr.CreateTime	= GetUnistreamTime (xmlObject.getcurr().Attributes.getNamedItem("CREATETIME").Text);
+      unistr.UpdateDate	= GetUnistreamDate (xmlObject.getcurr().Attributes.getNamedItem("UPDATETIME").Text);
+      unistr.UpdateTime	= GetUnistreamTime (xmlObject.getcurr().Attributes.getNamedItem("UPDATETIME").Text);
+
+      unistr.Sender_DocDivision	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOCDIVISION").Text;
+      unistr.Sender_Doc2Division = xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC2DIVISION").Text;
+      unistr.Sender_Doc3Division = xmlObject.getcurr().Attributes.getNamedItem("SENDER_DOC3DIVISION").Text;
+
+      if (ValType (xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCDIVISION")) != V_UNDEF)
+      unistr.Real_DocDivision	= xmlObject.getcurr().Attributes.getNamedItem("REAL_DOCDIVISION").Text;
+      end;
+
+      unistr.RegionTo		= xmlObject.getcurr().Attributes.getNamedItem("REGIONTO").Text;
+
+      unistr.Sender_State	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_STATE").Text;
+      unistr.Sender_Street	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_STREET").Text;
+      unistr.Sender_House	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_HOUSE").Text;
+      unistr.Sender_Building	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_BUILDING").Text;
+      unistr.Sender_Flat	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_FLAT").Text;
+
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_STATE")) != V_UNDEF)
+      unistr.Real_State		= xmlObject.getcurr().Attributes.getNamedItem("REAL_STATE").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_STREET")) != V_UNDEF)
+      unistr.Real_Street	= xmlObject.getcurr().Attributes.getNamedItem("REAL_STREET").Text;
+      unistr.Real_House		= xmlObject.getcurr().Attributes.getNamedItem("REAL_HOUSE").Text;
+      unistr.Real_Building	= xmlObject.getcurr().Attributes.getNamedItem("REAL_BUILDING").Text;
+      unistr.Real_Flat		= xmlObject.getcurr().Attributes.getNamedItem("REAL_FLAT").Text;
+      end;
+
+
+      unistr.Receiver_State	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_STATE").Text;
+
+//      unistr.Window		= xmlObject.getcurr().Attributes.getNamedItem("WINDOW").Text;
+//      unistr.Window2		= xmlObject.getcurr().Attributes.getNamedItem("WINDOW2").Text;
+
+      unistr.Sender_FullName	= xmlObject.getcurr().Attributes.getNamedItem("SENDER_FULLNAME").Text;
+      unistr.Receiver_FullName	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVER_FULLNAME").Text;
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REAL_FULLNAME")) != V_UNDEF)
+      unistr.Real_FullName	= xmlObject.getcurr().Attributes.getNamedItem("REAL_FULLNAME").Text;
+      end;
+
+      unistr.AmountAlt		= xmlObject.getcurr().Attributes.getNamedItem("AMOUNTALT").Text;
+
+      unistr.BankFrom_Name	= xmlObject.getcurr().Attributes.getNamedItem("BANKFROM_NAME").Text;
+      unistr.BankFrom_Prefix	= xmlObject.getcurr().Attributes.getNamedItem("BANKFROM_PREFIX").Text;
+      unistr.BankTo_Name	= xmlObject.getcurr().Attributes.getNamedItem("BANKTO_NAME").Text;
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("BANKTO_PREFIX")) != V_UNDEF)
+      unistr.BankTo_Prefix	= xmlObject.getcurr().Attributes.getNamedItem("BANKTO_PREFIX").Text;
+      end;
+      unistr.SenderBank_Name	= xmlObject.getcurr().Attributes.getNamedItem("SENDERBANK_NAME").Text;
+      unistr.SenderBank_Prefix	= xmlObject.getcurr().Attributes.getNamedItem("SENDERBANK_PREFIX").Text;
+      unistr.ReceiverBank_Name	= xmlObject.getcurr().Attributes.getNamedItem("RECEIVERBANK_NAME").Text;
+      unistr.ReceiverBank_Prefix = xmlObject.getcurr().Attributes.getNamedItem("RECEIVERBANK_PREFIX").Text;
+
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REALBANK_NAME")) != V_UNDEF)
+      unistr.RealBank_Name	= xmlObject.getcurr().Attributes.getNamedItem("REALBANK_NAME").Text;
+      end;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REALBANK_PREFIX")) != V_UNDEF)
+      unistr.RealBank_Prefix 	= xmlObject.getcurr().Attributes.getNamedItem("REALBANK_PREFIX").Text;
+      end;
+      unistr.SenderRegion_Name	= xmlObject.getcurr().Attributes.getNamedItem("SENDERREGION_NAME").Text;
+      unistr.ReceiverRegion_Name = xmlObject.getcurr().Attributes.getNamedItem("RECEIVERREGION_NAME").Text;
+      unistr.RegionTo_Name	= xmlObject.getcurr().Attributes.getNamedItem("REGIONTO_NAME").Text;
+      if (ValType(xmlObject.getcurr().Attributes.getNamedItem("REALREGION_NAME")) != V_UNDEF)
+      unistr.RealRegion_Name	= xmlObject.getcurr().Attributes.getNamedItem("REALREGION_NAME").Text;
+      end;
+      unistr.RS_Account		= "";
+      unistr.RS_Account_Status	= "нет счета";
+      unistr.RS_Client_code	= 0;
+
+      if (myUniFilial == unistr.SenderBank_Prefix ) //отправляем перевод
+      unistr.RS_Client_Name	= unistr.Sender_FullName;
+      else
+      unistr.RS_Client_Name	= unistr.Receiver_FullName;
+      end;
+      unistr.RS_Date_to_load	= Date();
+      unistr.RS_Time_to_load	= Time();
+      unistr.RS_Oper		= {Oper};
+
+
+
+
+
+
+
+
+      if (insert(unistr));
+	  myCount = myCount + 1;
+      else
+         msgbox ("Ошибка при записи в БД. Обратитесь к Администратору !!!");
+      end;
+  end;
+ end;
+         msgbox ("Загружено ", String(myCount), " док.");
+	 KeyNum (unistr, myKey);
+
+OnError
+msgbox("Ошибка при загрузке файла. Обратитесь к администратору");
+end;
+
+
+
+
+
+
+
+macro Import_Unistream()
+
+/*
+для примера
+   if (IsStandalone ())
+     Command = "copy /y "+DocDogStr+" "+DocDog2Str;
+     Run(GetEnv("COMSPEC"),"/c "+Command,null,null);
+   else
+     if(not lgServTerm (DocDogStr, DocDog2Str))
+       MsgBox("Не удалось скопировать | "+DocDogStr+ " в | "+DocDog2Str);
+       exit(1);
+     end;
+   end;
+*/
+
+var myArcDir, myF1, myF2, myName, myExt, myInputDir;
+var mySourceFile, myDestFile;
+
+
+   // готовим файл для загрузки - копируем в каталог S:\RS50\IN
+   if(IsStandAlone) /* Двухзвенка */
+	myArcDir = "C:\\Unistream\\ARC\\";
+	myInputDir ="C:\\Unistream\\";
+	myF1 = "C:\\Unistream\\*.xml";
+
+   else
+
+	mySourceFile 	= "$C:\\Unistream\\records.xml";
+	myDestFile	= "..\\In\\UNI\\unistream" + {oper} + ".xml";
+
+	myF1 = "..\\In\\UNI\\unistream" + {oper} + ".xml";
+
+	// копируем файл с удаленной машины оператора из C:\Contact
+	if ( CopyFile (mySourceFile, myDestFile, True, "...Копируется файл перевода Unistream..."))
+	    //Если копирование завершено успешно - удаляем исходный файл	
+		RemoveFile (mySourceFile);
+	else
+	    msgbox("Копирование не удалось");
+	end;
+   end;
+
+if(not SelectFile ( myF1, myF1,"Выберите файл системы \"Unistream\""));
+	return;
+end;
+
+
+AddRecordUnistream(myF1);
+
+
+//удаляем загруженный файл
+      if( ExistFile(myF1) )
+          if( GetTRUE(TRUE, "Удалить исходный файл ?") )
+
+	      //копируем в архив - только для двухзвенки
+	   if(IsStandAlone) /* Двухзвенка */
+	      SplitFile(myF1, myName, myExt);
+              myF2 = myArcDir+myName+myExt;
+//		msgbox(myF2);
+              if (NOT CopyFile (myF1, myF2))
+                  msgbox("Ошибка при копировании в архив - файл не удален");
+	      else
+	      //удаляем
+              DelFile(myF1);
+	      end;
+	   else
+              DelFile(myF1);
+	   end;
+
+	  end;
+      end;
+
+
+return;
+end;
+
+
+
+
+end;

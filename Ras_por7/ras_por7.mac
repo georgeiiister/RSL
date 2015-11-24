@@ -1,0 +1,26 @@
+file doc(document) sort 6 write;
+file scsh(symbcash) sort 0;
+
+i=0; //Счетчик итераций
+j=0; //Счетчик обработанных документов
+
+rewind(doc);
+While(next(doc))
+ i=i+1;
+ if (String(Trim(doc.Symbol_Cach))!="0") 
+    rewind(scsh);
+    While(Next(scsh))
+       Message("Для Документа: "+doc.ApplicationKey+" Идет поиск символа в: "+scsh.ApplicationKey); 
+	If (doc.ApplicationKey==scsh.ApplicationKey)
+          j=j+1;
+          doc.Symbol_Cach="0"; 
+          update(doc);       	
+          println(j,"  ",doc.Real_Payer,"  ",doc.Sum:r:10);
+       End;
+    End;
+ End;
+End;
+
+
+
+

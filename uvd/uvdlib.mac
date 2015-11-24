@@ -1,0 +1,398 @@
+/*
+  Библиотечный макрос запуска процедуры формирования уведомлений о предоставлении
+  документов и информации, связанных с проведением валютных операций
+  author: Polyakov S.George
+  ver: 1.00-06.06.2013
+
+  ver: 1.01-07.06.2013
+    Введен дополнительный анализ проводок по счетам рублевого покрытия, но ТОЛЬКО для
+    архивных документов, так как нет смысла обрабатывать рублевое покрытие в текущем
+    операционном дне
+  ver: 1.02-17.06.2013
+    Дополнительные условия на формирование уведомлений (анализ bVal для обоих для всех вариантов)
+  ver: 1.03-25.06.2013
+    Добавлено формирование номера уведомления из пользовательского поля 3
+*/
+
+import "..\\mac\\bfsofia\\acclib.mac";
+import "..\\mac\\bfsofia\\utllib.mac";
+import "..\\mac\\bfsofia\\clnlib.mac";
+import "..\\mac\\bfsofia\\Wordlib.mac";
+import "param.mac";
+import "Календарь";
+
+
+var
+   sErr:string,
+   iNum:integer,
+   sInf:string;
+   sInf="Информация: ";
+   sErr="Ошибка! ";
+   iNum=0;
+
+const 
+     S_LOC_DIR:string="RSDOCS", //папка для локального хранения щаблонов
+     I_UVD_DAY:integer=15,
+     S_SRV_DIR:string="uvd";
+
+array 
+      arrDot, //файлы шаблонов
+      arrVal;
+
+//участок заполнения массивов с начальными установками
+ 
+arrDot(0)="uvedm0.doc";
+arrDot(1)="uvedm1.doc";
+arrDot(2)="uvedm2.doc"; 
+                              
+//формируем по календарю дату по истечении iDay (РАБОЧИХ ДНЕЙ)
+macro macGetDayPlusWork(dDate:date,iDay:integer,iDprt:integer):date
+  while (iDay>0)
+    if (
+        (IsWorkDay(dDate+1)==1) and
+        (not macULHappyDay(dDate,iDprt))
+       )
+      iDay=iDay-1;
+    end;
+    dDate=dDate+1;
+  end;
+  return dDate;
+end;
+
+//замена текста в открытом документе
+macro macReplace(obW:object,fnd:string,rep:string)
+  obW.FindAndReplace(fnd,rep);
+end;
+
+//передача значений для замены
+macro macGetArr(obW:object,arrVal:arrayref)
+  var
+     iC:integer;
+
+  iC=aSize(arrVal);
+  while((iC-1)>=0)
+    macReplace(obW,"##"+string(iC-1)+"##",arrVal(iC-1));
+   iC=iC-1;
+  end
+end;
+
+//обработка шаблона
+macro macToW(sPath:string)
+  var 
+     obW:ToWord;
+  if (ValType(sPath)==V_STRING)
+    if (sPath!="");
+      obW.CreateWordDocument(sPath,true); //сначала не визуализируем
+      macGetArr(obW,arrVal);
+      obW.ShowDocument;
+    end;
+  end;
+end;
+
+macro macUVYesUvd(
+                  sAccPay:string,
+                  sRealPay:string,
+                  sAccRec:string,
+                  sRealRec:string,
+                  mSum:money,
+                  bUved:bool,
+                  dDateCarry:date,
+                  sGround:string,
+                  sNumDoc:string,
+                  dDateDoc:date,
+                  bVal:bool,
+                  iDprt:integer,
+                  iautokey:integer,
+                  sUserField1:string
+                 ):integer
+  var
+     iRet:integer,
+     iCln:integer,
+     sCln:string,
+     iValCode:integer,
+     sPathDot:string;
+  iRet=-1;
+  //println(string(macALCheckNAcAcc(sAccRec))+" "+bVal+" "+" "+mSum);
+  if (macALCheckClnAcc(sAccRec)) //клиентские счета?
+    if (
+        (macALYesSym14Acc(sAccRec)) and
+        (not macALCheckNAcAcc(sAccRec)) and 
+        (bVal)
+       )
+      //msgbox(sAccRec);
+      iNum=iNum+1;
+      iRet=0; //транзитные счета
+    elif (
+          (index(sGround,"VO13")>0) and
+          (not bVal)
+         )
+      iNum=iNum+1;
+      iRet=1; //валютная операция (товары)
+    elif (
+          (index(sGround,"VO")>0) and
+          (not bVal)
+         )
+      iNum=iNum+1;
+      iRet=2; //валютная операция (остальные)
+    end;
+    if (iRet!=-1)
+      macULRpt(iNum,sAccRec,mSum);  
+    end;
+  end;
+  if (
+      (iRet!=-1) and 
+      (bUved)
+     )
+    if (bVal)
+      iValCode=SubStr(sAccRec,6,3);
+    else
+      iValCode=int(S_NAC_VAL);
+    end;
+    sPathDot=macULServTempl();
+    if (iRet==0)
+      if (valType(iAutoKey)!=V_UNDEF) //проставляем только по текущему опердню
+        arrVal(0)=macULGetCBnz(macULUpdValDocAccUvd(iAutoKey,dDateCarry));
+      else
+        if (ValType(sUserField1)!=V_UNDEF)
+          arrVal(0)=macULGetCBnz(trim(sUserField1));
+        end;
+      end;
+    else
+      arrVal(0)=string(iNum);  
+    end;
+    arrVal(1)=macULGetStrDate(dDateCarry);
+    arrVal(2)=sAccRec;
+    if (bVal)
+      sCln=macCLGetNameClnAcc(arrVal(2),true,S_NAC_VAL);
+    else
+      sCln=macCLGetNameClnAcc(arrVal(2),true);
+    end;
+    iCln=int(macULGetOneT(sCln,false,"^"));
+    arrVal(3)=macULGetOneT(sCln,true,"^");
+    arrVal(4)=string(mSum:a);
+    arrVal(5)=getfiooper({oper});
+    arrVal(6)=macULGetStrDate(macGetDayPlusWork(dDateCarry,I_UVD_DAY,iDprt));
+    arrVal(7)=CurToStrAlt(mSum,null,null,iValCode);
+    arrVal(8)=sNumDoc;
+    arrVal(9)=macULGetStrDate(dDateDoc);
+    arrVal(10)=macULGetIsoCur(string(iValCode));
+    macToW(macCopyDot(sPathDot+S_SRV_DIR+"\\",arrDot(iRet),S_LOC_DIR,iNum));
+  end;
+  return iRet;
+end;
+
+//макрос поиска проводок, подпадающих под уведомления
+macro macUVFindDoc(dSDate:date,dEDate:date,iDprt):bool
+  var
+     oTbl:object,
+     iA:integer,
+     bRec:bool,
+     bRet:bool,
+     bArh:bool,
+     bUved:bool,
+     bNext:bool,
+     iGetDprt:integer,
+     iTypeUved:integer,
+     bDprt:bool,
+     iN:integer,
+     bVal:bool,
+     bCur:bool;
+
+array
+     arrTbl;
+
+  bArh=false;
+  bCur=false;
+  bRet=false; //true - если отказ пользователя
+  bRec=false;
+  bUved=false;
+  iA=0;
+  iTypeUved=0;
+  iGetDprt=-2;
+
+  if (
+      (dSDate=={curdate}) or 
+      (dEDate=={curdate})
+     )
+    //смотрим текущие валютные документы
+    bCur=true;
+  end;
+  if (
+      (dSDate<{curdate}) or
+      (dEDate<{curdate})
+     )
+    bArh=true;
+  end;
+  if (
+      (bArh) or 
+      (bCur)
+     )
+    if (gettrue(bUved,"Формировать уведомления? (Нет - будет выведен только реестр)"))
+    end;
+    [Документы с ########## по ##########] 
+    (macULGetStrDate(dSDate),macULGetStrDate(dEDate));
+    //
+    if (bArh) //смотрим по архивным документам
+      println("Архивные документы:");
+      arrTbl(0)="arhdoc$.dbt";
+      arrTbl(1)="arhdoc.dbt";
+      iN=0;
+      while (iN<asize(arrTbl));
+        oTbl=TBFile(arrTbl(iN),"r",0,null,"bank.def");
+        oTbl.rec.Date_Carry=dSDate;
+        rewind(oTbl);
+        if (getGE(oTbl))
+           //формируем реестр
+           bNext=true;
+           while (bNext)
+             if (
+                 (oTbl.rec.Date_Carry>=dSDate) and
+                 (oTbl.rec.Date_Carry<=dEDate)
+                )
+                iGetDprt=macALGetDprtAcc(oTbl.rec.Account_Receiver);
+                bDprt=false;
+                if (
+                    (iDprt==-1) or
+                    (iGetDprt==-2) //если не проставлено подразделение
+                   )
+                  bDprt=true;
+                else
+                   if (iDprt==iGetDprt)
+                     bDprt=true
+                   end;
+                end;
+                if (bDprt)
+                  bVal=false;
+                  if (iN==0)
+                    bVal=true;
+                  end;
+                  iTypeUved=macUVYesUvd(
+                                        oTbl.rec.Account_Payer,
+                                        oTbl.rec.Real_Payer,
+                                        oTbl.rec.Account_Receiver,
+                                        oTbl.rec.Real_Receiver,
+                                        oTbl.rec.Sum,
+                                        bUved,
+                                        oTbl.rec.Date_Carry,
+                                        oTbl.rec.Ground,
+                                        oTbl.rec.Numb_Document,
+                                        oTbl.rec.Date_Document,
+                                        bVal,
+                                        iDprt,
+                                        null,
+                                        oTbl.rec.userfield1
+                                       );
+                  if (iTypeUved!=-1)
+                    bRec=true;
+                  end; 
+                end;
+                bNext=next(oTbl);
+             else
+               bNext=false;
+             end;
+           end;
+        end;
+      iN=iN+1;
+      end;
+    end;
+    //----
+    if (bCur) //смотрим по документам текущего операционного дня
+      iNum=0;
+      println("Документы текущего операционного дня:");
+      oTbl=TBFile("documnt$.dbt","r",0,null,"bank.def");
+      rewind(oTbl);
+      while(next(oTbl))
+        //msgbox("!");
+        iGetDprt=macALGetDprtAcc(oTbl.rec.Account_Receiver);
+        bDprt=false;
+        if (
+            (iDprt==-1) or
+            (iGetDprt==-2) //если не проставлено подразделение
+           )
+          bDprt=true;
+        else
+          if (iDprt==iGetDprt)
+            bDprt=true
+          end;
+        end;
+        if (bDprt)
+          if (oTbl.rec.Result_Carry==23)
+            bDprt=false;
+          end;
+        end;
+          if (bDprt)
+            iTypeUved=macUVYesUvd(
+                                  oTbl.rec.Account_Payer,
+                                  oTbl.rec.Real_Payer,
+                                  oTbl.rec.Account_Receiver,
+                                  oTbl.rec.Real_Receiver,
+                                  oTbl.rec.Sum,
+                                  bUved,
+                                  {curdate},
+                                  oTbl.rec.Ground,
+                                  oTbl.rec.Numb_Document,
+                                  oTbl.rec.Date_Document,
+                                  true,
+                                  iDprt,
+                                  oTbl.rec.autokey,
+                                  null
+                                 );
+            if (iTypeUved!=-1)
+              bRec=true;
+            end;
+          end;
+      end;
+    end;
+    if (not bRec)
+      sInf=sInf+"НЕТ ДОКУМЕНТОВ ДЛЯ ВЫВОДА!";
+    end;
+  else
+    sErr=sErr+"НЕКОРРЕКТНЫЙ ДИАПАЗОН ДАТ!";
+  end;
+  return bRet;
+end;
+
+macro macUVMain()
+  var
+     bCanc:bool,
+     iDprt:integer,
+     sDate:string,
+     dSdate:date,
+     dEdate:date;
+
+  bCanc=false;
+  
+
+  iDprt=macALGetDprt();
+
+  if (iDprt>=-1)
+    sDate=macULSetDate1to2();
+    if (StrLen(sDate)!=0)
+      //парсим строку с диапазоном
+      dSDate=macULGetDateStr(macULGetOneT(sDate,true));
+      dEDate=macULGetDateStr(macULGetOneT(sDate,false));
+      if (
+          (dSDate!=Date(0,0,0)) and 
+          (dEDate!=Date(0,0,0))
+         )
+         //вызов макроса на дальнейшую обработку
+         bCanc=macUVFindDoc(dSDate:date,dEDate:date,iDprt);
+      else
+        sErr=sErr+"ОШИБКА ПРЕОБРАЗОВАНИЯ УКАЗАННОЙ ДАТЫ!";
+      end;
+    else
+      bCanc=true;
+    end;
+  else
+    bCanc=true;
+  end;
+  if (sInf!="Информация: ")
+    println(sInf);
+  end;
+  if (sErr!="Ошибка! ")
+    println(sErr);
+  end;
+  if (bCanc)
+    println("ДЕЙСТВИЕ ОТМЕНЕНО ПОЛЬЗОВАТЕЛЕМ!");
+  end;
+end;

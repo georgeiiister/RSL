@@ -1,0 +1,156 @@
+/*Макропрограмма для работы с остатками на балансовых счетах 70601,70603...*/
+/*Developed Polyakov*/
+
+file acc(account) sort 0;
+file pos(postdoc) sort 2 write;
+
+
+/*Для включения балансового счета в обработку достаточно ввести его в массив*/
+/*Для удобства вводим в порядке убывания !!!*/
+
+array AccBal;
+      AccBal(0)="70603";
+      AccBal(1)="70601";
+
+array MneRpt;
+      MneRpt(0)="Сформировать только отчет";
+      MneRpt(1)="Сформировать отчет и проводки"; 
+
+var
+    {curdate},
+    flgIns=False,
+    flgRpt=False,
+    MenuMneRpt,  
+    AccBalStr="",  
+    SizeAccBal=0,  
+    {oper},
+    {Name_Bank},
+    NumSh="30301810001000000001", /*Значение Кт. по умолчанию*/
+    Itog,
+    Rec,
+    i=0,
+    j=0,
+    N,PaySh,RecSh,SumOth,curyear,
+    NR;
+
+Const 
+    NumP=971;
+
+
+
+//Процедура формирования отчета
+
+macro Otch(N,PaySh,RecSh,SumOth,Itog)
+      println(N:c:3,PaySh:c:22,RecSh:c:22,SumOth:a:15)
+End;
+
+
+//Точка входа в программу
+
+MenuMneRpt=Menu(MneRpt,"Выбор варианта работы программы","Выбор варианта работы");
+
+If (MenuMneRpt>=0) //Если выбран какой либо пункт меню
+
+
+
+SizeAccBal=Asize(AccBal)-1;
+While(SizeAccBal>=0)
+   AccBalStr=AccBalStr+AccBal(SizeAccBal)+" ";
+   SizeAccBal=SizeAccBal-1
+End;
+
+If (GetTrue(True,"В качестве дебетовых счетов используются балансовые счета: " + Trim(AccBalStr)));
+
+If (GetString(NumSh,"Введите Кредетовый счет",20))
+
+rewind(acc);
+clearrecord(acc);
+acc.account=NumSh;
+
+If (GetEQ(acc))
+If (MenuMneRpt==1)
+   If (GetTrue(True,"Закрытие остатков на данных счетах производится в последний рабочий день года! Текущая дата: "+{curdate}+" - Последний рабочий день года?"))
+      flgIns=True; //Формируем проводки
+      flgRpt=True; //Формируем отчет
+   Else
+      MsgBox("Проводки сформированы не будут!");
+      If (GetTrue(True,"Сформировать только отчет?"))
+         flgRpt=True;
+      End;
+   End;
+ElIf (MenuMneRpt==0)
+   flgRpt=True;
+End;
+   
+If (flgRpt)
+DateSplit({curdate},null,null,curyear);
+
+//Форма отчета
+
+[          Отчет по закрытию остатков на ##########
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ N     Счет плательщика      Счет получателя           Сумма
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -]
+({curdate});
+
+   Rec=acc.NameAccount;
+   rewind(acc);
+   clearrecord(acc);
+   Itog=Money(0);
+   NR=NRecords(acc);
+   InitProgress(NR,"Подождите идет обработка данных...","Обработка");
+   While(next(acc))
+        i=i+1;
+        UseProgress(i);
+        SizeAccBal=Asize(AccBal)-1;
+        While (SizeAccBal>=0)
+        If ((acc.balance==AccBal(SizeAccBal)) And (acc.R0!=Money(0)))
+           j=j+1;
+           Itog=Itog+acc.R0;
+           If (flgIns)
+              clearrecord(pos);
+              pos.account_payer=acc.account;
+              pos.real_payer=acc.account;
+              pos.Payer=acc.NameAccount;
+              pos.Bank_Payer={Name_Bank};
+              pos.account_receiver=NumSh;
+              pos.real_receiver=NumSh;
+              pos.receiver=Rec;
+              pos.MFO_Receiver="";
+              pos.CorAcc_receiver="";
+              pos.Bank_receiver={Name_Bank}; 
+              pos.sum=acc.R0;
+              pos.ground="Закрывается остаток счета на финансовый результат "+ curyear+"г.";
+              //Дополнительные параметры проводки
+              pos.oper={oper};
+              pos.Shifr_Oper="09";
+              pos.Kind_oper="1";
+              pos.date_document={curdate};
+              pos.date_value={curdate};
+              pos.Dispatch=0;
+              pos.Symbol_Cach="  0";
+              pos.SymbNotBal="  0";
+              pos.Number_Pack=NumP;
+              pos.iApplicationKind=0;
+              pos.ApplicationKey="";
+              pos.Kind_Carry=0;
+              pos.Numb_Document=j;
+              pos.Pay_Date={curdate};
+              pos.Payment=6;
+              Insert(pos);
+           End;
+           Otch(j,acc.account,NumSh,acc.R0,Itog);        
+        End;
+           SizeAccBal=SizeAccBal-1;
+        End;
+   End;
+   Println("- Итого -":c:47,Itog:a:15);
+   RemProgress;
+   close(pos);
+End;
+Else
+   MsgBox("Не найден указанный счет получателя")
+End;
+End;
+End;
+End;

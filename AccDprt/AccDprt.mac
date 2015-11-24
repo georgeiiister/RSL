@@ -1,0 +1,255 @@
+/*
+  Макрос для вывода общего кол-ва счетов по подразделению
+  developer Polyakov S.George
+  v.1.00-05.09.2012
+*/
+import "..\\mac\\bfsofia\\AccLib.mac";
+
+array
+    aDprt;
+
+//макрос для разработчика для самопроверки
+macro macADAccDprt();
+  var
+     i:integer,
+     j:integer,
+     iDprt:integer,
+     oTbl:Object;
+ 
+  array
+     aTbl;
+
+  aTbl(0)="account.dbt";
+  aTbl(1)="account$.dbt";
+  aTbl(2)="obacnt.dbt";
+  aTbl(3)="obacnt$.dbt";
+  
+  i=-1;
+
+  i=menu(aTbl,"Выбор","Выбор");
+  
+  if (i>=0)
+    iDprt=0;
+    if (GetInt(iDprt,"Укажите подразделение для которого необходимо узнать число счетов"));
+      oTbl=TBFile(aTbl(i),0,"r",aTbl(i));
+      rewind(oTbl);
+      j=0;
+      while (Next(oTbl))
+        if (oTbl.rec.department==iDprt)
+        j=j+1;
+        end;
+      end;
+      println("Итого счетов по подразделению "+string(iDprt)+" по структуре "+oTbl.TblName+" "+string(j));
+    end;
+  end;
+end;
+
+//макрос формирования заголовка отчета
+macro macADHeadRpt()
+  [Подразделение  Бал.Рубли  Бал.Валюта  Внебал.Рубли  Внебал.Валюта
+   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+  ];
+end;
+
+//макрос формирования отчета
+macro macADBodyRpt(iDprt,vCntAccB,vCntAccBV,vCntAccV,vCntAccVV)
+  var
+     i:integer;
+  if (ValType(vCntAccB)==V_UNDEF)
+    vCntAccB=0;
+  end;
+  if (ValType(vCntAccBV)==V_UNDEF)
+    vCntAccBV=0;
+  end;
+  if (ValType(vCntAccV)==V_UNDEF)
+    vCntAccV=0;
+  end;
+  if (ValType(vCntAccVV)==V_UNDEF)
+   vCntAccVV=0;
+  end;
+  [#############  #########  ##########  ############  #############]
+  (iDprt,vCntAccB,vCntAccBV,vCntAccV,vCntAccVV);
+end;
+
+//макрос накопления подразделений
+macro macADGetDprt(iDprt:integer):integer
+  var
+     iRet:integer,
+     i:integer;
+
+     i=0;
+     iRet=-1;
+
+  while (i<asize(aDprt))
+    if (aDprt(i)==iDprt)
+      iRet=i;    
+    end;
+    i=i+1;
+  end;
+  if (iRet==-1)
+    aDprt(i)=iDprt;
+    iRet=i;
+  end;
+  return iRet;
+end;
+
+//основной макрос
+macro macADMain()
+  var
+     bClose:bool,
+     iM:integer,
+     bAll:bool,
+     bNext:bool,
+     i:integer,
+     j:integer,
+     iIndDprt:integer,
+     dDate1:date,
+     dDate2:date,
+     oTbl:Object;
+
+  array
+       aM,
+       aTbl, 
+       aB,
+       aBV,
+       aV,
+       aVV;
+
+  aTbl(0)="account.dbt";
+  aTbl(1)="account$.dbt";
+  aTbl(2)="obacnt.dbt";
+  aTbl(3)="obacnt$.dbt";
+ 
+  i=0;
+  if (GetDate(dDate1,"Счета открыты с даты:"))
+    if (GetDate(dDate2,"По дату:"))
+      if (dDate2<dDate1)
+        msgbox("Неверно указан диапазон дат");
+        i=asize(aTbl)+1;  
+      end;
+    else
+      i=asize(aTbl)+1;
+    end;
+  else
+    i=asize(aTbl)+1;
+  end;
+  aM(0)="Фильтрация по балансовым счетам";
+  aM(1)="По всем счетам без фильтрации";
+  iM=-1;
+  if (i!=asize(aTbl)+1)
+    iM=menu(aM,"Укажите критерий фильтрации","Выбор");
+  end;
+  if (iM<0)
+    i=asize(aTbl)+1;
+  end;
+  bAll=false; //не по всем счетам
+  if (iM==1)
+    bAll=true;
+  else
+    // вызов макроса формирования балансовых счетов
+    if (i!=asize(aTbl)+1)
+      if (not macIASetBalArray())
+        i=asize(aTbl)+1;
+      end;
+    end;
+  end;
+  bClose=true;
+  if (i!=asize(aTbl)+1)
+    if (GetTrue(bClose,"Включать закрытые?"))
+      bClose=true;
+    end;
+  end;
+  while (i<asize(aTbl))
+    oTbl=TBFile(aTbl(i),"r",0,aTbl(i));
+    rewind(oTbl);
+    j=0;
+    while (next(oTbl))
+      bNext=false;
+      //проверка по датам открытия
+      if (
+          (oTbl.rec.Open_Date>=dDate1) and
+          (oTbl.rec.Open_Date<=dDate2)
+         )
+         bNext=true;
+      end;
+      if (bNext)
+        if (not bClose)
+          if (
+              (StrLen(trim(oTbl.rec.Open_Close))!=0) or
+              (oTbl.rec.Close_Date!=Date(0,0,0)) 
+             )
+            bNext=false;
+          end;
+        end;
+      end;
+      if (bNext)
+        if (
+            (i==0) or
+            (i==2)
+           )
+          if (substr(oTbl.rec.Account,6,3)!="810")
+            //println(oTbl.rec.Account);
+            bNext=false;
+          end;
+        end;
+      end;
+      if (bNext)
+        if (Not bAll)
+          if (
+              not macALBalAcc(oTbl.rec.Account)
+             )
+             bNext=false;
+          end;
+        end;
+      end;
+      if (bNext)
+        //println(oTbl.rec.Open_Date+" "+oTbl.rec.Account);
+        j=j+1;
+        iIndDprt=macADGetDprt(oTbl.rec.Department);
+        if (iIndDprt!=-1)
+          if (i==0)
+            if (ValType(aB(iIndDprt))!=V_UNDEF)
+              aB(iIndDprt)=aB(iIndDprt)+1; //account.dbt
+            else
+              aB(iIndDprt)=1;
+            end;
+          elif (i==1)
+            if (ValType(aBV(iIndDprt))!=V_UNDEF)
+              aBV(iIndDprt)=aBV(iIndDprt)+1; //account$.dbt
+            else
+              aBV(iIndDprt)=1;
+            end
+          elif (i==2)
+            if (ValType(aV(iIndDprt))!=V_UNDEF)
+              aV(iIndDprt)=aV(iIndDprt)+1; //obacnt.dbt
+            else
+              aV(iIndDprt)=1;
+            end;
+          elif (i==3)
+            if (ValType(aVV(iIndDprt))!=V_UNDEF)
+              aVV(iIndDprt)=aVV(iIndDprt)+1; //account.dbt
+            else
+              aVV(iIndDprt)=1;
+            end
+          else
+            println("Ошибка обработки расширенного массива таблиц счетов");
+          end;
+        else
+          println("Неизвестная ошибка получения кода подразделения");
+          exit;
+        end;
+      end;
+    message("Идет обработка таблицы "+oTbl.TblName+" Обработано:"+j);
+    end;
+    close(oTbl);
+    i=i+1;
+  end;
+  i=0;
+  macADHeadRpt(); //заголовок
+  while (i<asize(aDprt))
+    macADBodyRpt(aDprt(i),aB(i),aBV(i),aV(i),aVV(i));
+    i=i+1;
+  end;
+end;
+
+macADMain()

@@ -1,0 +1,1095 @@
+/*
+Функции для работы макросов по системе "Контакт"
+Челбухов А.А. 20.10.10
+*/
+//  const myFilial = "ZRVM";
+
+import "orscheme.mac";
+
+
+ array myArr;
+  var Err, Str, myCurrency, myFilial, myHead, DopOfis1, DopOfis2, myUniFilial;
+  var myView; //0 - все, 1- открытые, 2 - закрытые, 3 - нет счета
+myView = 0;
+myFilial = "ZRVM"; //для головного офиса АКБ "СОФИЯ"(ЗАО)
+
+myHead   = "ZRVM"; //Эти три переменные используются в макросе cntcomm
+DopOfis1 = "ZRVN"; // проверка на внутренний перевод
+DopOfis2 = "ZRVO"; // стр. 1441-1466
+
+myUniFilial = "650"; //для АКБ СОФИЯ ЗАО по Юнистрим
+
+macro GetClientDocType(ClCode)
+//получение типа документа клиента по его коду
+file myAddCl1 (clients1, "clients.def") key 0;
+myAddCl1.Client = ClCode;
+  if (GetEQ(myAddCl1))
+    Return myAddCl1.PassportType;
+  else
+    Return "";
+  end;
+end;
+
+macro GetClientDocNum(ClCode)
+//получение номера документа клиента по его коду
+file myAddCl1 (clients1, "clients.def") key 0;
+myAddCl1.Client = ClCode;
+  if (GetEQ(myAddCl1))
+    Return myAddCl1.PassportNum;
+  else
+    Return "";
+  end;
+end;
+
+macro GetClientDocSer(ClCode)
+//получение серии документа клиента по его коду
+file myAddCl1 (clients1, "clients.def") key 0;
+myAddCl1.Client = ClCode;
+  if (GetEQ(myAddCl1))
+    Return myAddCl1.PassportSeria;
+  else
+    Return "";
+  end;
+end;
+
+
+
+macro GetClientName(ClCode)
+//получение ФИО клиента по его коду
+file myCl (client, "bank.def") key 0;
+myCl.Client = ClCode;
+  if (GetEQ(myCl))
+    Return myCl.Name_Client;
+  else
+    Return "";
+  end;
+end;
+
+
+macro GetClientShortName(Name)
+var Name1, Name2, Name3;
+//получение ФИО клиента по его наименованию
+ Name1 = Name;
+ if (Index(Name," ") > 0)
+ Name1 = Trim(SubStr(Name,1,Index(Name," ")));
+ end;
+ Name2 = Trim(SubStr(Name,StrLen(Name1)+1));
+
+ if (Index(Name2," ") > 0)
+ Name3 = Trim(SubStr(Name2,Index(Name2," ")));
+ Name2 = Trim(SubStr(Name2,1,Index(Name2," ")));
+ end;
+
+ if (STRLen(Name2) > 0)
+    Name = Name1 + " " + SubStr(Name2,1,1) + ".";
+
+ end;
+ if (StrLen(Name3) > 0)
+    Name = Name + SubStr(Name3,1,1) + ".";
+
+ end;
+ Return Trim(Name);
+
+end;
+
+
+macro IsExistAccR(myAccount)
+ //проверяем, существует счет или нет 
+ file acc (account, "bank.def") key 0;
+ acc.Account = myAccount;
+ if (GetEQ(acc))
+    Return true;
+ else
+    Return false;
+ end;
+end;
+
+macro IsExistAccC(myAccount)
+var myCur;
+myCur = INT(SubStr(myAccount,6,3));
+ //проверяем, существует валютный счет или нет 
+ file acc ("account$.dbt", "bank.def") key 0;
+ acc.Account = myAccount;
+ acc.Code_Currency = myCur;
+ if (GetEQ(acc))
+    Return true;
+ else
+    Return false;
+ end;
+end;
+
+macro IsAccCloseR(myAccount)
+ //проверяем, не закрыт ли рублевый счет 
+ file acc (account, "bank.def") key 0;
+ acc.Account = myAccount;
+ if (GetEQ(acc))
+      if (acc.Open_Close == "З")
+         Return true;
+      else
+         Return false;
+      end;
+ else
+    Return false;
+ end;
+end;
+
+macro IsAccCloseC(myAccount)
+var myCur;
+ //проверяем, не закрыт ли валютный счет 
+ file acc ("account$.dbt", "bank.def") key 0;
+myCur = INT(SubStr(myAccount,6,3));
+ acc.Account = myAccount;
+ acc.Code_Currency = myCur;
+ if (GetEQ(acc))
+      if (acc.Open_Close == "З")
+         Return true;
+      else
+         Return false;
+      end;
+ else
+    Return false;
+ end;
+end;
+
+
+macro IsAccOpenR(myAccount)
+ //проверяем, не открыт ли рублевый счет 
+ file acc (account, "bank.def") key 0;
+ acc.Account = myAccount;
+ if (GetEQ(acc))
+      if (acc.Open_Close == "")
+         Return true;
+      else
+         Return false;
+      end;
+ else
+    Return false;
+ end;
+end;
+
+macro IsAccOpenC(myAccount)
+var myCur;
+ //проверяем, не открыт ли валютный счет 
+myCur = INT(SubStr(myAccount,6,3));
+ file acc ("account$.dbt", "bank.def") key 0;
+ acc.Account = myAccount;
+ acc.Code_Currency = myCur;
+ if (GetEQ(acc))
+      if (acc.Open_Close == "")
+         Return true;
+      else
+         Return false;
+      end;
+ else
+    Return false;
+ end;
+end;
+
+
+
+macro IsPostDoc(myAccount)
+  // проверяем, что в отложенных нет документов с таким счетом
+
+  file postd1 (postdoc, "bank.def");
+  file postd2 ("postdoc$.dbt", "bank.def");
+   if (SubStr(myAccount, 6,3) == "810")
+	// рубли
+	rewind (postd1);
+	 while (next(postd1))
+	     if ((postd1.Account_Payer == myAccount) or (postd1.Account_Receiver == myAccount))
+	         Return true;
+	     end;
+	 end;
+        Return false;
+   else
+	// валюта
+	rewind (postd2);
+	 while (next(postd2))
+	     if ((postd2.Account_Payer == myAccount) or (postd2.Account_Receiver == myAccount))
+	         Return true;
+	     end;
+	 end;
+        Return false;
+
+   end;
+end;
+
+
+macro GetNameAccount (myAccount)
+  //получаем наименование счета
+ file acc (account, "bank.def") key 0;
+ acc.Account = myAccount;
+ if (GetEQ(acc))
+         Return acc.NameAccount;
+ else
+         Return "";
+ end;
+end;
+
+macro GetClientCodeByAccount (myAccount)
+  // получаем код клиента по счету
+ file acc (account, "bank.def") key 0;
+ acc.Account = myAccount;
+ if (GetEQ(acc))
+         Return acc.Client;
+ else
+         Return 0;
+ end;
+
+end;
+
+macro GetCntPayerBirthDay (myPaymID)
+  // получаем Birthday плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_BirthDay;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+macro GetCntPayerIndex (myPaymID)
+  // получаем Birthday плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_Index;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetCntPayerRegion (myPaymID)
+  // получаем Region плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_Region;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetCntPayerCity (myPaymID)
+  // получаем City плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_City;
+ else
+         Return "";
+ end;
+end;
+
+macro GetCntPayerPhone (myPaymID)
+  // получаем Phone плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_Phone;
+ else
+         Return "";
+ end;
+end;
+
+macro GetCntPayerDocSer (myPaymID)
+  // получаем Серию документа плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ var myDoc;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+   myDoc = pay.P_Doc_Num;
+   if (Index(myDoc," ") > 0) 
+       myDoc = SubStr(myDoc,1,Index(myDoc," "))
+   end;
+         Return myDoc;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetCntReceiverDocSer (myPaymID)
+  // получаем Серию документа получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ var myDoc;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+   myDoc = pay.R_Doc_Num;
+   if (Index(myDoc," ") > 0) 
+       myDoc = SubStr(myDoc,1,Index(myDoc," "))
+   end;
+         Return myDoc;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetCntPayerDocNum (myPaymID)
+  // получаем Номер документа плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ var myDoc;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+   myDoc = pay.P_Doc_Num;
+   if (Index(myDoc," ") > 0) 
+       myDoc = trim(SubStr(myDoc,Index(myDoc," ")));
+   end;
+         Return myDoc;
+ else
+         Return "";
+ end;
+end;
+
+
+
+macro GetCntReceiverDocNum (myPaymID)
+  // получаем Номер документа получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ var myDoc;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+   myDoc = pay.R_Doc_Num;
+   if (Index(myDoc," ") > 0) 
+       myDoc = trim(SubStr(myDoc,Index(myDoc," ")))
+   end;
+         Return myDoc;
+ else
+         Return "";
+ end;
+end;
+
+
+
+macro GetCntPayerDocDate (myPaymID)
+  // получаем Дату выдачи документа плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_Doc_Date;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+macro GetCntReceiverDocDate (myPaymID)
+  // получаем Дату выдачи документа получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_Doc_Date;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+macro GetCntPayerDocKem (myPaymID)
+  // получаем место выдачи документа плательщика по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_Doc_Kem;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+
+macro GetCntReceiverDocKem (myPaymID)
+  // получаем место выдачи документа получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_Doc_Kem;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+
+
+macro GetCntReceiverBirthDay (myPaymID)
+  // получаем Birthday по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_BirthDay;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+macro GetCntReceiverIndex (myPaymID)
+  // получаем Birthday по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_Index;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetCntReceiverRegion (myPaymID)
+  // получаем Region получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_Region;
+ else
+         Return "";
+ end;
+end;
+
+macro GetCntReceiverCity (myPaymID)
+  // получаем City получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_City;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetCntReceiverPhone (myPaymID)
+  // получаем Phone получателя по ID перевода
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_Phone;
+ else
+         Return "";
+ end;
+end;
+
+macro GetContactPayerDocName (myPaymID)
+  //получаем документ отправителя
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.P_Doc_Type;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetContactReceiverDocName (myPaymID)
+  //получаем документ получателя
+ file pay (contpaym, "contact.def") key 0;
+ pay.Doc_ID = myPaymID;
+ if (GetEQ(pay))
+         Return pay.R_Doc_Type;
+ else
+         Return "";
+ end;
+end;
+
+
+
+MACRO GetRSDocType (ContactDocName)
+
+/*	функция возвращает номер типа документа в RS-BANK
+	==список типов документов в системе Контакт==
+	тип паспорта
+        ПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ
+	ЗАГРАНПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ
+	ИНОСТРАННЫЙ ПАСПОРТ
+	ПАСПОРТ МОРЯКА
+	ПАСПОРТ ГРАЖДАНИНА СССР
+	ЗАГРАНПАСПОРТ ГРАЖДАНИНА СССР
+	СВИДЕТЕЛЬСТВО О РОЖДЕНИИ
+	УДОСТОВЕРЕНИЕ ЛИЧНОСТИ ОФИЦЕРА
+	ВОЕННЫЙ БИЛЕТ СОЛДАТА (МАТРОСА, СЕРЖАНТА, СТАРШИНЫ)
+	ВОЕННЫЙ БИЛЕТ ОФИЦЕРА ЗАПАСА
+	СПРАВКА ОБ ОСВОБОЖДЕНИИ ИЗ МЕСТА ЛИШЕНИЯ СВОБОДЫ
+	ДИПЛОМАТИЧЕСКИЙ ПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ
+	СВИДЕТЕЛЬСТВО О РЕГИСТРАЦИИ ХОДАТАЙСТВА О ПРИЗНАНИИ ИММИГРАНТА БЕЖЕНЦЕМ
+	ВИД НА ЖИТЕЛЬСТВО
+	УДОСТОВЕРЕНИЕ БЕЖЕНЦА В РОССИЙСКОЙ ФЕДЕРАЦИИ
+	ВРЕМЕННОЕ УДОСТОВЕРЕНИЕ ЛИЧНОСТИ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ
+	ИНЫЕ ДОКУМЕНТЫ, ВЫДАВАЕМЫЕ ОРГАНАМИ МВД
+
+	==список документов в справочнике клиентов в RS-Bank==
+
+	0- Паспорт СССР
+	1- Паспорт РФ
+	2- Иное
+	3- Паспорт иностранца
+	4- Загран.паспорт гражданина РФ
+	5- Паспорт моряка
+	6- Военный билет
+	7- Временное уд.личн.гр-на РФ
+	8- Вид на жительство
+	9- Разрешение на врем. проживание
+	10- Удостоверение беженца
+	11- Миграционная карта
+	12- Виза
+	13- Свид-во о рождении
+
+*/
+	if (trim(ContactDocName) == "ПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ")
+	    Return 1;
+	elif (trim(ContactDocName) == "ЗАГРАНПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ")
+	    Return 4;
+	elif (trim(ContactDocName) == "ИНОСТРАННЫЙ ПАСПОРТ")
+	    Return 3;
+	elif (trim(ContactDocName) == "ПАСПОРТ МОРЯКА")
+	    Return 5;
+	elif (trim(ContactDocName) == "ПАСПОРТ ГРАЖДАНИНА СССР")
+	    Return 0;
+	elif (trim(ContactDocName) == "ЗАГРАНПАСПОРТ ГРАЖДАНИНА СССР")
+	    Return 2;
+	elif (trim(ContactDocName) == "СВИДЕТЕЛЬСТВО О РОЖДЕНИИ")
+	    Return 13;
+	elif (trim(ContactDocName) == "УДОСТОВЕРЕНИЕ ЛИЧНОСТИ ОФИЦЕРА")
+	    Return 2;
+	elif (trim(ContactDocName) == "ВОЕННЫЙ БИЛЕТ СОЛДАТА (МАТРОСА, СЕРЖАНТА, СТАРШИНЫ)")
+	    Return 6;
+	elif (trim(ContactDocName) == "ВОЕННЫЙ БИЛЕТ ОФИЦЕРА ЗАПАСА")
+	    Return 6;
+	elif (trim(ContactDocName) == "СПРАВКА ОБ ОСВОБОЖДЕНИИ ИЗ МЕСТА ЛИШЕНИЯ СВОБОДЫ")
+	    Return 2;
+	elif (trim(ContactDocName) == "ДИПЛОМАТИЧЕСКИЙ ПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ")
+	    Return 2;
+	elif (trim(ContactDocName) == "СВИДЕТЕЛЬСТВО О РЕГИСТРАЦИИ ХОДАТАЙСТВА О ПРИЗНАНИИ ИММИГРАНТА БЕЖЕНЦЕМ")
+	    Return 2;
+	elif (trim(ContactDocName) == "ВИД НА ЖИТЕЛЬСТВО")
+	    Return 8;
+	elif (trim(ContactDocName) == "УДОСТОВЕРЕНИЕ БЕЖЕНЦА В РОССИЙСКОЙ ФЕДЕРАЦИИ")
+	    Return 10;
+	elif (trim(ContactDocName) == "ВРЕМЕННОЕ УДОСТОВЕРЕНИЕ ЛИЧНОСТИ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ")
+	    Return 7;
+	elif (trim(ContactDocName) == "ИНЫЕ ДОКУМЕНТЫ, ВЫДАВАЕМЫЕ ОРГАНАМИ МВД")
+	    Return 2;
+	end;
+    Return 2;
+end;
+
+
+macro GetCurrencyName (myCurrency)
+	if (myCurrency == 0)
+		Return ("Рублей");
+	elif (myCurrency == 840)
+		Return ("Долларов США");
+	elif (myCurrency == 978)
+		Return ("ЕВРО");
+	end;
+end;
+
+
+macro IsYourDepart(myPaymID, myOper)
+	/* процедура возвращает True, если оператор пытается "зайти" в перевод своего доп. офиса
+	   Хамовники - операторы 43,44,45
+	   Кунцево -   операторы 24,25
+
+	*/
+	file cnt ("contpaym.dbt", "contact.def") key 0;
+	   	cnt.Doc_ID = myPaymID;
+	   	if (GetEQ(cnt))
+		        if ((myOper == 38) or (myOper == 9989))
+			       Return True;
+			end;
+
+
+			if ((cnt.RS_Oper == 43) or (cnt.RS_Oper == 44) or (cnt.RS_Oper == 45))
+			    // Хамовники
+			    if ((myOper == 43) or (myOper == 44) or (myOper == 45))
+			       Return True;
+			    else
+			       msgbox ("Нет прав для редактирования переводов других офисов");	
+			       Return False;
+			    end	;
+			end;
+			if ((cnt.RS_Oper == 24) or (cnt.RS_Oper == 25))
+			    // Кунцево
+			    if ((myOper == 24) or (myOper == 25))
+			       Return True;
+			    else
+			       msgbox ("Нет прав для редактирования переводов других офисов");	
+			       Return False;
+			    end	;
+			end;
+			// Остальным (пока) разрешено все!
+			       Return True;  	
+		end;
+end;
+
+
+
+
+macro IsYourDepartUnistream(myPaymID, myOper)
+	/* процедура возвращает True, если оператор пытается "зайти" в перевод своего доп. офиса
+	   Хамовники - операторы 43,44,45
+	   Кунцево -   операторы 24,25
+
+	*/
+	file uni ("unistr.dbt", "unistr.def") key 1;
+	   	uni.alter_control = myPaymID;
+	   	if (GetEQ(uni))
+		        if ((myOper == 38) or (myOper == 9989))
+			       Return True;
+			end;
+
+
+			if ((uni.RS_Oper == 43) or (uni.RS_Oper == 44) or (uni.RS_Oper == 45))
+			    // Хамовники
+			    if ((myOper == 43) or (myOper == 44) or (myOper == 45))
+			       Return True;
+			    else
+			       msgbox ("Нет прав для редактирования переводов других офисов");	
+			       Return False;
+			    end	;
+			end;
+			if ((uni.RS_Oper == 24) or (uni.RS_Oper == 25))
+			    // Кунцево
+			    if ((myOper == 24) or (myOper == 25))
+			       Return True;
+			    else
+			       msgbox ("Нет прав для редактирования переводов других офисов");	
+			       Return False;
+			    end	;
+			end;
+			// Остальным (пока) разрешено все!
+			       Return True;  	
+		end;
+end;
+
+
+macro mySetORScheme (myAccount)
+// Устанавливаем схему переоценки для открытого счета
+   /*
+	задаем схему переоценки счета
+	для пассивных счетов USD - 110, EUR - 111
+   */
+
+file acc (account, "bank.def") write;
+var myORScheme;
+	acc.Account = myAccount;
+	if (GetEQ(acc))
+   	myORScheme	 = GetORScheme (1, acc.Kind_Account, substr (acc.Account, 6,3));
+   	   if (myORScheme != 0)
+   	       acc.ORScheme = myORScheme;
+	       Update(acc); 
+	   end;
+	end;
+end;
+
+macro GetUnistreamDate(myDate)
+// Возврат даты в читаемом виде ДД.ММ.ГГГГ
+// Входной параметр - число дней начиная с 01.01.1900
+	if (int(myDate) <= 60)
+	Return Date(0,0,0);
+	else
+	Return Date(01,01,1900) + Int(myDate) - 2;
+	end;
+end;
+
+macro GetUnistreamTime(myTime)
+//Возврат времени в читаемом виде ЧЧ:ММ:СС
+//Входной параметр - дробное кол-во в секундах
+	var a = "";
+	var b: numeric;
+	var Str;
+	var ss = 0, mm = 0, hh = 0;
+	var mySecond;
+	a = "0." + SubStr(myTime,Index(myTime,".")+1);
+	b = a;
+	//86400 секунд в сутках
+	mySecond = b * 86400; //столько секунд во входном параметре
+	hh = floor (double(mySecond / 3600));
+	mySecond = mySecond - hh * 3600;
+	mm = floor (double(mySecond / 60));
+	mySecond = mySecond - mm * 60;
+	ss = floor(double(mySecond));
+	Str =  int(hh) + ":" + int(mm) + ":" + int(ss);
+	Return time(Str);
+end;
+
+macro GetUnistreamDocType(myType)
+/*
+входной параметр по классификации Unistream
+выходной - по RS-Bank
+	функция возвращает номер типа документа в RS-BANK
+
+=======	Классификация документов в системе Unistream =======
+
+ID="1" DOC_NAME="Паспорт" 
+ID="6" DOC_NAME="Вид на жительство" 
+ID="7" DOC_NAME="Паспорт моряка" 
+ID="9" DOC_NAME="Временное удостоверение личности" 
+ID="10" DOC_NAME="Удостоверение личности военнослужащего" 
+ID="11" DOC_NAME="Водительские права" 
+ID="12" DOC_NAME="Удостоверение МВД" 
+ID="13" DOC_NAME="." 
+ID="21" DOC_NAME="Кредитная карта" 
+ID="22" DOC_NAME="Паспорт иностранного гражданина" 
+ID="23" DOC_NAME="Миграционная карта" 
+ID="29" DOC_NAME="Виза" 
+ID="30" DOC_NAME="Приглашение" 
+ID="38" DOC_NAME="Дипломатический паспорт" 
+ID="40" DOC_NAME="Иной документ" 
+ID="42" DOC_NAME="Удостоверение личности гражданина иностр. гос-ва" 
+ID="45" DOC_NAME="Св-во о предоставлении вр. убежища на терр. РФ" 
+ID="33" DOC_NAME="Свид-во о рассмотрении признания лица беженцем" 
+ID="32" DOC_NAME="Разрешение на временное проживание" 
+ID="39" DOC_NAME="Разрешение на временное проживание в РФ" 
+ID="31" DOC_NAME="Свидетельство органов ЗАГС" RECSTATE="0" 
+ID="34" DOC_NAME="Удостоверение беженца" 
+ID="8" DOC_NAME="Общегражданский заграничный паспорт" 
+ID="35" DOC_NAME="Паспорт гражданина РФ" 
+ID="36" DOC_NAME="Временное удостоверение личности гражданина РФ" 
+ID="2" DOC_NAME="Военный билет" 
+ID="37" DOC_NAME="Вид на жительство в РФ" 
+ID="14" DOC_NAME="Идентификационная карта СНГ" 
+ID="26" DOC_NAME="Выписка с кредитной/дебетной карты" 
+ID="16" DOC_NAME="Карточка иностранца" RECSTATE="0" 
+ID="15" DOC_NAME="Идентификационная карта" 
+ID="19" DOC_NAME="Номер социального обеспечения" 
+ID="17" DOC_NAME="Государственное удостоверение личности" 
+ID="24" DOC_NAME="Счет за коммунальные услуги" 
+ID="20" DOC_NAME="ИНН" 
+ID="28" DOC_NAME="Судебная повестка" 
+ID="25" DOC_NAME="Текущая выписка из банковского счета" 
+ID="18" DOC_NAME="Сертификат о натурализации" 
+ID="41" DOC_NAME="Свидетельство на возвращение в страну гражданства" 
+ID="27" DOC_NAME="Текущий запрос о выписке налогооблажения" 
+ID="44" DOC_NAME="Свидетельство о предоставлении временного убежища" 
+
+	==список документов в справочнике клиентов в RS-Bank==
+
+	0- Паспорт СССР
+	1- Паспорт РФ
+	2- Иное
+	3- Паспорт иностранца
+	4- Загран.паспорт гражданина РФ
+	5- Паспорт моряка
+	6- Военный билет
+	7- Временное уд.личн.гр-на РФ
+	8- Вид на жительство
+	9- Разрешение на врем. проживание
+	10- Удостоверение беженца
+	11- Миграционная карта
+	12- Виза
+	13- Свид-во о рождении
+
+*/
+
+
+
+	if (myType == 0)
+		Return 2;
+	elif (myType == 35)
+		Return 1;
+	elif (myType == 1)
+		Return 0;
+	elif (myType == 6)
+		Return 8;
+	elif (myType == 7)
+		Return 5;
+	elif (myType == 22)
+		Return 3;
+	elif (myType == 23)
+		Return 11;
+	elif (myType == 29)
+		Return 12;
+	elif (myType == 39)
+		Return 9;
+	elif (myType == 34)
+		Return 10;
+	elif (myType == 8)
+		Return 4;
+	elif (myType == 36)
+		Return 7;
+	elif (myType == 2)
+		Return 6;
+	elif (myType == 37)
+		Return 8;
+	else 
+		Return 2;
+	end;
+end;
+
+
+macro GetDocName (DocID)
+/* получаем наименование документа
+	0- Паспорт СССР
+	1- Паспорт РФ
+	2- Иное
+	3- Паспорт иностранца
+	4- Загран.паспорт гражданина РФ
+	5- Паспорт моряка
+	6- Военный билет
+	7- Временное уд.личн.гр-на РФ
+	8- Вид на жительство
+	9- Разрешение на врем. проживание
+	10- Удостоверение беженца
+	11- Миграционная карта
+	12- Виза
+	13- Свид-во о рождении
+*/
+  if (DocID == 0) 
+	Return "Паспорт СССР";
+  elif (DocID == 1) 
+	Return "Паспорт РФ";
+  elif (DocID == 2) 
+	Return "Иное";
+  elif (DocID == 3) 
+	Return "Паспорт иностранца";
+  elif (DocID == 4) 
+	Return "Загран.паспорт гражданина РФ";
+  elif (DocID == 5) 
+	Return "Паспорт моряка";
+  elif (DocID == 6) 
+	Return "Военный билет";
+  elif (DocID == 7) 
+	Return "Временное уд.личн.гр-на РФ";
+  elif (DocID == 8) 
+	Return "Вид на жительство";
+  elif (DocID == 9) 
+	Return "Разрешение на врем. проживание";
+  elif (DocID == 10) 
+	Return "Удостоверение беженца";
+  elif (DocID == 11) 
+	Return "Миграционная карта";
+  elif (DocID == 12) 
+	Return "Виза";
+  elif (DocID == 13) 
+	Return "Свид-во о рождении";
+  else  
+	Return "Иное";
+  end;
+end;
+
+macro GetUniPayerBirthDay (myPaymID)
+  // получаем Birthday плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_BirthDate;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+macro GetUniReceiverBirthDay (myPaymID)
+  // получаем Birthday получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_BirthDate;
+ else
+         Return date(0,0,0);
+ end;
+end;
+
+
+
+
+macro GetUniPayerIndex (myPaymID)
+  // получаем Index плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_ZIP;
+ else
+         Return "";
+ end;
+end;
+
+macro GetUniReceiverIndex (myPaymID)
+  // получаем Index получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_ZIP;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetUniPayerRegion (myPaymID)
+  // получаем Region плательщика по ID перевода
+         Return "";
+end;
+
+macro GetUniReceiverRegion (myPaymID)
+  // получаем Region получателя по ID перевода
+         Return "";
+end;
+
+
+macro GetUniPayerCity (myPaymID)
+  // получаем City плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_City;
+ else
+         Return "";
+ end;
+end;
+
+macro GetUniReceiverCity (myPaymID)
+  // получаем City получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_City;
+ else
+         Return "";
+ end;
+end;
+
+
+
+macro GetUniPayerPhone (myPaymID)
+  // получаем Phone плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_Phone;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetUniReceiverPhone (myPaymID)
+  // получаем Phone получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_Phone;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetUniPayerDocSer (myPaymID)
+  // получаем серию документа плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_DocSeries;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetUniReceiverDocSer (myPaymID)
+  // получаем серию документа получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_DocSeries;
+ else
+         Return "";
+ end;
+end;
+
+
+
+macro GetUniPayerDocNum (myPaymID)
+  // получаем номер документа плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_DocNumber;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetUniReceiverDocNum (myPaymID)
+  // получаем номер документа получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_DocNumber;
+ else
+         Return "";
+ end;
+end;
+
+
+
+macro GetUnistreamPayerDocName (myPaymID)
+  // получаем DocType плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_DocID;
+ else
+         Return "";
+ end;
+end;
+
+macro GetUnistreamReceiverDocName (myPaymID)
+  // получаем DocType получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_DocID;
+ else
+         Return "";
+ end;
+end;
+
+macro GetUniPayerDocDate (myPaymID)
+  // получаем дату документа плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_DocWhen;
+ else
+         Return Date(0,0,0);
+ end;
+end;
+
+
+macro GetUniReceiverDocDate (myPaymID)
+  // получаем дату документа получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_DocWhen;
+ else
+         Return Date(0,0,0);
+ end;
+end;
+
+
+macro GetUniPayerDocKem (myPaymID)
+  // получаем "Кем выдан" документа плательщика по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Sender_DocWhom;
+ else
+         Return "";
+ end;
+end;
+
+
+macro GetUniReceiverDocKem (myPaymID)
+  // получаем "Кем выдан" документа получателя по ID перевода
+ file pay (unistr, "unistr.def") key 1;
+ pay.alter_Control = myPaymID;
+ if (GetEQ(pay))
+         Return pay.Receiver_DocWhom;
+ else
+         Return "";
+ end;
+end;

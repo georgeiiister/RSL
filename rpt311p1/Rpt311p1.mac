@@ -1,0 +1,87 @@
+/*
+ * Макрос для отчетности по обмену сообщениями с НО при о/з счетов
+ * developer Polyakov S.George 27.04.2010
+   edt Polyakov S.George 09.10.2012
+   деление по подразделениям	
+*/
+
+import "..\\mac\\bfsofia\\AccLib.mac";
+
+file  p_izv1 (nal_izv,  "sofia.def") key 1;
+file  p_out0 (nal_out,  "sofia.def") key 0;
+strComment="";
+strTypeCh="";
+bNext;
+rewind(p_izv1);
+flgYes=false;
+iDprt=-1;
+dteDate1=Date();
+dteDate2=Date();
+j=0;
+if (GetDate(dteDate1,"Начальная дата отправки сообщений в НО"))
+   dteDate2=dteDate1;
+   if (GetDate(dteDate2,"Конечная дата отправки сообщений в НО"))
+     if (dteDate2>=dteDate1)
+       flgYes=true;	
+     else
+        MsgBox("Ошибка при указании диапазона дат!");
+     end;	
+   end;
+end;
+if (flgYes)
+  flgYes=false;
+  iDprt=MacALGetDprt();
+  if (iDprt!=-2)
+    flgYes=true;
+  else
+    MsgBox("Ошибка указания кода подразделения");
+  end;
+end;
+if (flgYes)
+[Отчет по обмену сообщениями с НО при о/з счетов с ########## по ##########  Код подразделения  #
++--------------------+-------------------------------+--------------+--------------+----------------------------------------------------------------------------------------------------+
+    Номер счета          Тип операции со счетом       Дата операции  Дата отсылки                     Ответ налоговой
++--------------------+-------------------------------+--------------+--------------+----------------------------------------------------------------------------------------------------+
+](dteDate1,dteDate2,iDprt);
+  while(next(p_izv1))
+    message("Подождите! Идет просмотр счетов: "+p_izv1.Account);
+    if (
+        (p_izv1.Date_Send>=dteDate1) and 
+        (p_izv1.Date_Send<=dteDate2)
+       )
+      bNext=true;
+      if (iDprt!=-1)  //-2 быть не может, выше проверили
+        if (macALGetDprtAcc(p_izv1.Account)!=iDprt)
+          bNext=false;
+        end;
+      end;
+      if (bNext)
+        strComment="";
+        rewind(p_out0);
+        p_out0.ID=p_izv1.ID_Account;
+        if (GetEQ(p_out0))
+         strComment=" "+p_out0.Comment;
+         if (StrLen(trim(sTrComment))==0)
+           strComment=" "+p_izv1.Comment;
+         end;
+        end;
+        strTypeCh="";
+        if (Trim(p_out0.Type_Change)=="0")
+          strTypeCh=" "+"Открыли";
+        elif(Trim(p_out0.Type_Change)=="10") 
+          strTypeCh=" "+"Открыли взамен старого";
+        elif (Trim(p_out0.Type_Change)=="2")
+          strTypeCh=" "+"Закрыли";
+        elif (Trim(p_out0.Type_Change)=="21")
+          strTypeCh=" "+"Закрыли в одностороннем порядке";
+        elif (Trim(p_out0.Type_Change)=="22")
+          strTypeCh=" "+"Закрыли по решению суда";
+        elif (Trim(p_out0.Type_Change)=="12")
+          strTypeCh=" "+"Закрыли после открытия нового";
+        end;
+        println(p_izv1.Account:r:21,strTypeCh:l:32,p_izv1.Date_Change:r:15,p_izv1.Date_Send:r:15,strComment:l:101);
+      end;
+    end;
+  end;
+end;
+

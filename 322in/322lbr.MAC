@@ -1,0 +1,253 @@
+/*
+Макрос для формирования отчетности по 322-П 
+developer Polyakov S.George 24.02.2010
+edit Polyakov S.George 01.09.2011
+*/
+
+import bankinter;
+
+file ac_ar(ac_arest,"bank.def") key 1;
+//file acc(account,"bank.def") key 0;
+file r_acc0(account,"bank.def") key 0;
+file r_accv0("account$","bank.def") key 0;
+file stop(stop_op,"bank.def") key 0;
+file cln (client,"bank.def") key 0;
+file st_od (st_op_od,"bfsofia1.def") write;
+file st_od0 (st_op_od,"bfsofia1.def") key 0;
+file st_od1 (st_op_od,"bfsofia1.def") key 1;
+file st_od2 (st_op_od,"bfsofia1.def") key 2;
+
+var flgRet=false,
+    strAcc="",
+    intChapter=1,
+    intCode_Currency=0,
+    flgNext=true,
+    {curdate},
+    strKind="",
+    strSKind="",
+    intA=0,
+    mneSumArestItog=Moneyl(0),
+    mneSumP=Moneyl(0), //Итоговая сумма с накоплением для ПРИОСТ
+    mneSumO=Moneyl(0), //Итоговая сумма с накоплением для ОТМЕНА
+    flgFullArest=False,
+    mneCanSumTmp=Moneyl(0),
+    acc="";
+
+const STR_FILE_TMP=GetWorkFileName("st_od"), //Имя временного файла в WorkFile
+      I_VAL=int(810); //константа национальной валюты
+
+//Подготовка заголовка 
+macro macTopRpt(strCln)
+  println("");
+  [Отчет о приост./ об отмене приост. движения по счету на ########## г. 
+   По счету: #################### 
+   Наименование клиента: #################################################################################
+   +---+-------+---------------------+----------+---------------+---------------------+----------+---------------+-------+
+     N    Вид        Номер решения       Дата         Сумма              Номер           Дата        Отмена на      Вид 
+    п/п  сообщ.   о приост./об отмене   решения       ареста      отмененного решения   решения        сумму       отмены
+   +---+-------+---------------------+----------+---------------+---------------------+----------+---------------+-------+
+  ]
+  ({curdate},strAcc,StrUpr(Trim(strCln)));
+end;
+
+//Печать тела отчета
+macro macBodyRpt(intCA,chrKind,strStopNum,dteStopDte,mneSumArest,strCanStopN,dteCanStopD,mneCanSum,chrCanStopKind);
+  println(intCA:r:4,chrKind:r:8,strStopNum:r:22,dteStopDte:r:11,mneSumArest:r:16,strCanStopN:r:22,dteCanStopD:r:11,mneCanSum:r:16,chrCanStopKind:r:8);  
+end;
+
+macro macMain(in)
+/****************************************** Основной макрос ***************************/
+//поиск счета
+//strAcc="40802810901000001628";
+
+if (StrLen(Trim(String(in)))==0)
+  if (GetString(strAcc,"Введите номер счета",20))
+    flgRet=true;
+  end;
+else
+    strAcc=Trim(String(in));
+    flgRet=true;
+end;
+
+if (flgRet)
+  if (StrLen(Trim(strAcc))!=0)
+    if (substr(strAcc,6,3)==I_VAL)
+      acc=r_acc0;
+    else
+      acc=r_accv0;
+    end;
+    rewind(acc);
+    acc.account=strAcc;
+    acc.code_currency=substr(strAcc,6,3);
+    if (getEQ(acc))
+      rewind(ac_ar);
+      ac_ar.Chapter=intChapter;
+      intCode_Currency=acc.Code_Currency;
+      ac_ar.Code_Currency=intCode_Currency;
+      ac_ar.Account=Trim(acc.Account);
+      if (getEQ(ac_ar))
+        //MsgBox("!");
+        rewind(cln);
+        cln.Client=acc.Client;
+        if (getEQ(cln))
+          //MsgBox("!");
+          rewind(stop);
+          stop.ID=ac_ar.ID;
+          if (getEQ(stop))
+            //MsgBox("!");
+            flgRet=true;
+          else
+            //stop_op 
+            MsgBox("ПО УКАЗАННОМУ СЧЕТУ НЕ ЗАПОЛНЕНЫ ПАРАМЕТРЫ СООБЩЕНИЯ");
+          end;
+        else
+          //client
+          MsgBox("КЛИЕНТ С ДАННЫМ СЧЕТОМ НЕ НАЙДЕН!");
+        end;
+      else
+        //ac_arest
+        MsgBox("ПО УКАЗАННОМУ СЧЕТУ НЕ БЫЛО АРЕСТОВ/СНЯТИЙ!");
+      end;
+    else
+      //account
+      MsgBox("УКАЗАННЫЙ СЧЕТ НЕ НАЙДЕН!");
+    end;
+  end;
+end;
+
+//удаляем файл и создаем новый
+if (flgRet)
+  flgRet=false;
+  if (Create(st_od,STR_FILE_TMP))
+    flgRet=true;
+  else
+    MsgBox("ВРЕМЕННЫЙ ФАЙЛ "+STR_FILE_TMP+" НЕ СОЗДАН!");
+  end;
+end;
+
+if (flgRet)
+  //есть клиент, счета, сообщения, аресты/снятия
+  flgRet=false;
+  //MsgBox("!");
+  //Работаем с ac_arest и stop_op
+  //++
+  if (open(st_od,STR_FILE_TMP))
+    while(flgNext)
+      flgNext=false;
+      if ((ac_ar.Account==strAcc) and (ac_ar.Chapter==intChapter) and (ac_ar.Code_Currency==intCode_Currency))  
+        intA=intA+1;
+        //MsgBox(ac_ar.Account);
+        message("Идет подготовка данных для записи "+intA+" по счету:"+strAcc);
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        //Анализ для отчета
+        rewind(stop);
+        stop.ID=ac_ar.ID;
+        if (getEQ(stop))
+          if (Trim(stop.Kind)=="Р")
+            strKind="ПРИОСТ";
+          elif (Trim(stop.Kind)=="О")            strKind="ОТМЕНА"    
+          end;
+          strSKind=stop.CancStopKind;
+          if (strSKind=="1")
+            strSKind="ПОЛНАЯ";
+          end;
+          //перегрузка для выполнения сортировки по дате+типу сообщения по обрабатываемому счету
+          st_od.StopNumber=Trim(stop.StopNumber);
+          st_od.StopDate=stop.StopDate;
+          st_od.SumArest=ac_ar.SumArest;
+          st_od.CancStopNumber=Trim(stop.CancStopNumber);
+          st_od.CancStopDate=stop.CancStopDate;
+          st_od.Kind=strKind;
+          st_od.CancStopKind=strSKind;
+          insert(st_od);
+          flgRet=true;
+        end;
+        //++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+        flgNext=next(ac_ar);
+      end;
+    end; //while
+    //++
+    close(st_od);
+  else
+    MsgBox("ВРЕМЕННЫЙ ФАЙЛ "+STR_FILE_TMP+" НЕ ОТКРЫТ!");
+  end;
+    //**
+    if (flgRet)
+      flgRet=false;
+      if (open(st_od0,STR_FILE_TMP))
+        rewind(st_od0);
+        intA=0;
+        macTopRpt(cln.Name_Client);
+        while(next(st_od0))
+          intA=intA+1;
+          mneCanSumTmp=Moneyl(0);
+          message("Идет подведение итогов: "+intA);
+          if (st_od0.Kind=="ПРИОСТ")
+            open(st_od1,STR_FILE_TMP); //не будем делать проверку в цикле на открытие
+            rewind(st_od1);
+            st_od1.CancStopNumber=st_od0.StopNumber;
+            st_od1.CancStopDate=st_od0.StopDate;
+            if (not getEQ(st_od1))
+              //отмены нет, накапливаем сумму приостановки либо полный арест
+              if (st_od0.SumArest!=Moneyl(0))
+                mneSumArestItog=mneSumArestItog+st_od0.SumArest;
+              else
+                //Полный арест счета
+                flgFullArest=true;
+              end;
+            else
+              if (st_od1.CancStopKind!="ПОЛНАЯ")
+                //Если есть отмена на сообщение, но отмена неполная!
+                //На это надо обратить внимание,может ли такое быть и как обрабатывать это
+                MsgBox("ВНИМАНИЕ! НЕПОЛНАЯ ОТМЕНА!");
+                mneSumArestItog=mneSumArestItog-st_od0.SumArest;
+              end;
+            end;
+          //Накапливаем сумму всех приостановок
+          mneSumP=mneSumP+st_od0.SumArest;
+          elif (st_od0.Kind=="ОТМЕНА")
+            if ((Trim(st_od0.CancStopNumber)!="") and (Trim(st_od0.CancStopDate)!=""))
+              MsgBox("ВНИМАНИЕ! ОТМЕНА № "+st_od0.StopNumber+" ОТ "+Trim(String(st_od0.StopDate))+" НЕ СОДЕРЖИТ РЕКВИЗИТЫ ОТМЕНЯЕМОГО РЕШЕНИЯ");
+            else
+               open(st_od2,STR_FILE_TMP); //не будем делать проверку в цикле на открытие
+               rewind(st_od2);
+               st_od2.StopNumber=st_od0.CancStopNumber;
+               st_od2.StopDate=st_od0.CancStopDate;
+               if (getEQ(st_od2))
+                  if (st_od2.Kind=="ПРИОСТ")
+                     mneCanSumTmp=Moneyl(st_od2.SumArest);
+                     if (st_od0.CancStopKind=="ПОЛНАЯ")
+                       mneSumO=mneSumO+mneCanSumTmp;
+                     else
+                       mneSumO=mneSumO+st_od0.SumArest;
+                     end;
+                  else
+                    MsgBox ("ВНИМАНИЕ! ОТМЕНЕНОЕ РЕШЕНИЕ № "+st_od0.CancStopNumber+" ОТ "+Trim(String(st_od0.CancStopDate))+" НЕ ПРИОСТАНОВЛЕНИЕ!");
+                  end;
+               else
+                  MsgBox("ВНИМАНИЕ! НЕ НАЙДЕНО ОТМЕНЯЕМОЕ РЕШЕНИЕ № "+st_od0.CancStopNumber+" ОТ "+Trim(String(st_od0.CancStopDate)));
+               end;
+            end;
+          end;
+          //Формируем вывод
+          macBodyRpt(intA,st_od0.Kind,st_od0.StopNumber,st_od0.StopDate,st_od0.SumArest,st_od0.CancStopNumber,st_od0.CancStopDate,mneCanSumTmp,st_od0.CancStopKind);
+        end;
+        close(st_od0);
+        println("");
+        print("ИТОГО: "+mneSumP:r:61); //Сумма всех арестов
+        println("ИТОГО: "+mneSumO:r:49); //Сумма всех отмен
+        println("");
+        if (flgFullArest)
+          println("ОКОНЧАТЕЛЬНАЯ СУММА АРЕСТА: --ПОЛНЫЙ АРЕСТ СЧЕТА--":r:61);
+        else  
+          println("ОКОНЧАТЕЛЬНАЯ СУММА АРЕСТА: "+String(mneSumArestItog):r:61);
+        end;                                                                                                           
+        println("=======================================================================================================================");
+      else
+        MsgBox("ВРЕМЕННЫЙ ФАЙЛ "+STR_FILE_TMP+" НЕ ОТКРЫТ!");  
+      end; //open
+    end;
+    //**
+end;
+/****************************************** Основной макрос ***************************/
+end;   

@@ -1,0 +1,18 @@
+/*Polyakov обнуление поля UrAddrResp */
+
+file cli_1 (clients1,"..\\DBFILE\\clients.def") key 0 write;
+var i,j;
+ rewind(cli_1);
+ i=0;
+ j=0;
+ InitProgress(NRecords(cli_1),"Подсчёт","Обработано строк");
+ while (next(cli_1))                    
+  j=j+1;
+  UseProgress(j); 
+   if (StrUpr(cli_1.UrAddrResp)=="РФ") 
+      cli_1.UrAddrResp="";
+      update(cli_1);
+     i=i+1;
+   end;
+ end;
+println("Обработано ",j," Изменения внесены в ",i," записей")

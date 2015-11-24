@@ -1,0 +1,176 @@
+/*
+  Макрос удаления сообщений по 311-П из структур: 
+  nal_izv.dbt
+  nal_out.dbt
+  developer Polyakov S.George
+  v.1.00-09.10.2012
+*/
+
+import "..\\mac\\bfsofia\\acclib.mac";
+import "..\\mac\\bfsofia\\utllib.mac";
+
+var
+   sAcc:string,
+   bNext:bool;
+
+bNext=true;
+sAcc="";
+
+macro mac31DComment(iID:integer):string
+  var
+     sRet:string,
+     oTbl:object;
+  const
+     S_NOT_ERR:string="Нет ошибок";
+  sRet="";
+  oTbl=TBFile("nal_out.dbt","r",0,null,"sofia.def");
+  rewind(oTbl);
+  oTbl.rec.id=iID;
+  if (geteq(oTbl))
+    sRet=trim(oTbl.rec.Comment);	
+    if (StrLen(sRet)==0)
+      sRet="ОЖИДАЕТСЯ ОТВЕТ";
+    elif (index(sRet,S_NOT_ERR)!=0)
+      sRet="ПРИНЯТО";
+    else
+      sRet="ОШИБОЧНОЕ";
+    end;
+  end;
+  return sRet;;
+end;
+
+//проверка на наличие в nal_izv.dbt записей 
+//с определенным ID_Account и Account
+//для исключения удаления записи с nal_out.dbt
+//и нарушения ссылочной целостности
+macro mac31DCheckId(sAcc:string,iID:integer):bool
+  var
+     oTbl:object,
+     bAcc:bool,
+     bRet:bool;
+  bRet=false;
+  oTbl=TBFile("nal_izv.dbt","w",1,null,"sofia.def");
+  rewind(oTbl);
+  oTbl.rec.account=sAcc;
+  if (geteq(oTbl))
+    bAcc=true;
+    while(bAcc)
+      if (oTbl.rec.account==sAcc)
+        if (oTbl.rec.ID_Account==iID)
+          bAcc=false;
+          bRet=true;
+        else
+          bAcc=next(oTbl);
+        end;
+      else
+        bAcc=false;
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+macro mac31Ddelizv(iID:integer):bool
+  var
+     bRet:bool,
+     oTbl:object;
+  bRet=false;
+  oTbl=TBFile("nal_izv.dbt","w",0,null,"sofia.def");
+  rewind(oTbl);
+  oTbl.rec.id=iID;
+  if (geteq(oTbl))
+    bRet=delete(oTbl);  
+  end;
+  return bRet;
+end;
+
+macro mac31Ddelout(iID:integer):bool
+  var
+     bRet:bool,
+     oTbl:object;
+  bRet=false;
+  oTbl=TBFile("nal_out.dbt","w",0,null,"sofia.def");
+  rewind(oTbl);
+  oTbl.rec.id=iID;
+  if (geteq(oTbl))
+    bRet=delete(oTbl);  
+  end;
+  return bRet;;
+end;
+
+macro macMain():bool
+  var
+     i:integer,
+     iDel:integer,
+     bAcc:bool,
+     oTbl:object,
+     bRet:bool;
+  array 
+       aMenu,aIDIzv,aIDOut;
+  bRet=false;
+  i=0;
+  iDel=-2;
+  if (GetString(sAcc,"Укажите счет",20))
+    if (macALLenAcc(sAcc))
+      oTbl=TBFile("nal_izv.dbt","r",1,null,"sofia.def");
+      rewind(oTbl);
+      oTbl.rec.account=sAcc;
+      if (geteq(oTbl))
+        bAcc=true;
+        while(bAcc)
+          if (oTbl.rec.account==sAcc)
+            aMenu(i)="Дата:"+macULGetStrDate(oTbl.rec.Date_Send)
+                     +" "+oTbl.rec.File_SName
+                     +" "+mac31DComment(oTbl.rec.ID_Account);
+            aIDIzv(i)=oTbl.rec.ID;
+            aIDOut(i)=oTbl.rec.ID_Account;
+            bAcc=next(oTbl);
+            i=i+1;
+          else
+            bAcc=false;
+          end;
+        end;
+        if (asize(aMenu)>0)
+          iDel=menu(aMenu,"Выбор сообщение для удаления","Удалить по счету:"+sAcc);
+          if (iDel>=0)
+            if (getTrue(true,"Удалить сообщение?\n"+aMenu(iDel)))
+              bRet=mac31Ddelizv(aIDIzv(iDel));
+              if (bRet)
+                if (not mac31DCheckId(sAcc,aIDOut(iDel)))
+                  //удаляем окончательно
+                  bRet=mac31Ddelout(aIDOut(iDel));
+                  if (not bRet)
+                    msgbox("Ошибка окончательного удаления данных по счету!\n"+
+                           "Возможно нарушение ссылочной целостности!");
+                  end;
+                end;
+              else
+                msgbox("Ошибка удаления сообщения");
+              end;
+            end;
+          end;
+        end;
+      else
+        msgbox("Указанный счет не найден");
+      end;
+    else
+      MsgBox("Счет указан неверно!");
+    end;
+  end;
+  return bRet;
+end;
+
+//точка входа в программу
+while (bNext)
+  bNext=macMain();
+  if (bNext)
+    if (not gettrue(true,"Операция выполнена успешно! Повторить?"))
+      bNext=false;
+    end;
+  else
+    if (gettrue(false,"Операция не выполнена. Продолжить?"))
+      bNext=true  
+    end;
+  end;
+end;
+exit(1);

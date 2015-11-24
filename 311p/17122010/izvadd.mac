@@ -1,0 +1,400 @@
+/* */
+
+//import globals;
+
+file  izv (nal_out,"sofia.def") key 0 write;
+file  acc1 (account,  "sofia.def") key 0;
+file  acc2 (account,  "sofia.def") key 0;
+file  acc0 (account,  "sofia.def") key 0;
+file  clt1 (client,   "sofia.def") key 0;
+file  clt0 (client,   "sofia.def") key 0;
+file  cls1 (clients1, "sofia.def") key 0;
+file  cls3 (clients3, "sofia.def") key 0;
+
+record id (izvscr,"..\\obj\\michael.lbr") dialog;    
+
+const   F9 = 323,ESC = 27;
+//      UP = 328,DOWN = 336,PGUP = 329,PGDOWN = 337, HOME = 327,ENDKEY = 335,
+//      ENTER = 13,F9 = 323,F8 = 322,F6 = 320, F7 = 321,ESC = 27,F5 = 319,
+//      CTRLF5=354,F4=318, SPACE = 32;
+
+
+array OperT;                
+OperT(0)  = "СЧЕТ ОРГАНИЗАЦИИ";
+OperT(1)  = "СЧЕТ ИП";
+OperT(2)  = "СЧЕТ НОТАРИУСА";
+OperT(3)  = "СЧЕТ АДВОКАТА";
+OperT(4)  = "ИЗМЕНЕНИЕ";
+
+
+array Acc_change;                
+Acc_change(0)  = "ОТКРЫТИЕ НОВОГО СЧЕТА";
+Acc_change(1)  = "ОТКРЫТИЕ СЧЕТА ПРИ ИЗМЕНЕНИИ НОМЕРА СЧЕТА";
+Acc_change(2)  = "ЗАКРЫТИЕ СЧЕТА";
+Acc_change(3)  = "ЗАКРЫТИЕ СЧЕТА В ОДНОСТОРОННЕМ ПОРЯДКЕ";
+Acc_change(4)  = "ЗАКРЫТИЕ СЧЕТА ПО РЕШЕНИЮ СУДА";
+Acc_change(5)  = "ЗАКРЫТИЕ СЧЕТА ПРИ ИЗМЕНЕНИИ НОМЕРА СЧЕТА";
+
+array ErS;
+
+Gacc="";GKppNP="";GInnNP="";GOGRNNP="";GSSvidGR="";GNSvidGR="";GSSvidNU="";GNSvidNU="";
+GDogovor="";GNameNP="";
+ErrorF=0;
+                                                                                       
+/**************************************************************/
+macro MyD(dlg,cmd,id,key)
+//40702810800000000451                 
+ if(cmd==DLG_INIT)
+ 	Message("~F9~ - продолжить  ~Esc~ - отменить");
+ 	UpdateFields(id);
+ end;
+                      
+
+ dlg.AccNumb	= Gacc;
+ dlg.NameNP	= GNameNP;
+ dlg.KppNP	= GKppNP;	
+ dlg.InnNP	= GInnNP;
+ dlg.OGRNNP	= GOGRNNP;
+ dlg.SSvidGR	= GSSvidGR;
+ dlg.NSvidGR	= GNSvidGR;
+ dlg.SSvidNU	= GSSvidNU;
+ dlg.NSvidNU	= GNSvidNU;
+ dlg.Dogovor	= GDogovor;
+
+ dlg.Er1	= ErS(1);
+ dlg.Er2	= ErS(2);
+ dlg.Er3	= ErS(3);
+ dlg.Er4	= ErS(4);
+ dlg.Er5	= ErS(5);
+ dlg.Er6	= ErS(6);
+
+ dlg.Str1	= "Счет";
+ dlg.Str2	= "Клиент";
+ dlg.Str3	= "ФИО ИП";
+ dlg.Str4	= "СвидГР";
+ dlg.Str5	= "СвидНУ";
+ dlg.Str6	= "ИНН";
+ dlg.Str7	= "КПП";
+ dlg.Str8	= "ОГРН";
+ dlg.Str9	= "N Дог.";
+
+ if(ErrorF == 1)
+     dlg.MsgS = "РЕКВИЗИТЫ ВОЗМОЖНО СОДЕРЖАТ ОШИБКИ";
+ else
+     dlg.MsgS = "ОШИБОК НЕ ОБНАРУЖНЕНО!";
+ end;
+ UpdateFields(dlg);
+
+ if(cmd==DLG_KEY)
+  if(key==F9)
+        ErrorF = 0;
+  end;
+  if(key==ESC)
+        ErrorF = 1;
+  end;
+ end;
+
+ Return 0;
+// Return ErrorF;
+end;
+/**************************************************************/
+
+macro F_CheckFull(Clt, typech, acc)
+ Gacc="";GKppNP="";GInnNP="";GOGRNNP="";GSSvidGR="";GNSvidGR="";GSSvidNU="";GNSvidNU="";
+ GDogovor="";GNameNP="";
+
+ i = 1;
+ while (i < 8)
+   ErS(i) = "Ok!";
+   i = i + 1;
+ end;
+
+    Gacc = acc;
+
+    flag1 = 1;
+    flag2 = 0;
+    flag3 = 0;
+    Account  = acc;
+    Rezident = 0;
+    rewind(clt0);
+    ClearRecord(clt0);
+    clt0.Client = Clt;
+    flag1 = GetEQ (clt0);
+    if(flag1)
+      if(clt0.NotResident == "X")
+        Rezident = 0;
+      else
+        Rezident = 1;
+      end;
+      GNameNP    = clt0.Name_Client;
+      TypeWork   = "";
+      TypeWork   = clt0.szUserType;
+      if(Index(TypeWork,"Ф") > 0)
+      else
+        rewind(cls1);
+        ClearRecord(cls1);
+        cls1.Client = Clt;
+        flag2 = GetEQ(cls1);
+        if(flag2)
+         GKppNP  = cls1.KPP;
+         if(StrLen(Trim(cls1.KPP)) > 0)
+            if(Trim(cls1.KPP)=="0")
+               flag1 = 0;  //значение КПП = "0"
+               ErS(4) = "ERR";
+               ErrorF = 1;
+            end;
+         else
+            flag1 = 0;     //длина поля КПП = "0"
+            ErS(4) = "ERR";
+            ErrorF = 1;
+         end;
+        end;
+        flag2 = 0; //-?
+      end;
+
+      rewind(cls3);
+      ClearRecord(cls3);
+      cls3.Client = Clt;
+      flag2 = (GetEQ(cls3));
+      if(flag2)
+        GInnNP = cls3.InnKey;
+        if(StrLen(Trim(cls3.InnKey)) > 0)
+            if(Trim(cls3.InnKey)=="0")
+               flag1 = 0;  //значение ИНН = "0"
+               ErS(3) = "ERR";
+               ErrorF = 1;
+            end;
+        else
+          flag1 = 0;       //длина поля ИНН = "0"
+          ErS(3) = "ERR";
+          ErrorF = 1;
+        end;
+       end;
+       flag2 = 0;
+    end;
+
+    rewind(cls1);
+    ClearRecord(cls1);
+    cls1.Client = Clt;
+    flag2 = (GetEQ(cls1));
+    if(flag2)
+      if((Index(TypeWork,"И") > 0) Or (Rezident == 0))
+        GOGRNNP = "";
+      else
+        GOGRNNP = Trim(cls1.GosRegNum);
+        if(StrLen(Trim(cls1.GosRegNum)) > 0)
+        else
+              flag2 = 0;	//ОГРН не заполнен
+              ErS(5) = "ERR";
+              ErrorF = 1;
+        end;
+      end;
+      if((Index(TypeWork,"И") > 0) Or (Rezident == 0))
+         GSSvidGR = "";
+         GNSvidGR = "";
+      else
+         GSSvidGR = Trim(cls1.SerSvidReg);
+         if(StrLen(Trim(cls1.SerSvidReg)) > 0)
+         else
+                flag2 = 0;	//Серия свидетельства Гос.Рег. не заполнена 
+                ErS(1) = "ERR";
+                ErrorF = 1;
+         end;
+         GNSvidGR = Trim(cls1.NumSvidReg);
+         if(StrLen(Trim(cls1.NumSvidReg)) > 0)
+         else
+                flag2 = 0;      //Номер свидетельства Гос.Рег. не заполнен 
+                ErS(1) = "ERR";
+                ErrorF = 1;
+         end;
+      end;
+
+      if((typech == 0) Or (typech == 10) Or (typech == 2) Or (typech == 12))
+         GSSvidNU = Trim(cls1.NalogSvSer);
+         if(StrLen(Trim(cls1.NalogSvSer)) > 0)
+         else
+                flag2 = 0;	//Серия свидетельства Постановки на учет не заполнена 
+                ErS(2) = "ERR";
+                ErrorF = 1;
+         end;
+         GNSvidNU = Trim(cls1.NalogSvNum);
+         if(StrLen(Trim(cls1.NalogSvNum)) > 0)
+         else
+                flag2 = 0;      //Номер свидетельства Постановки на учет не заполнен
+                ErS(2) = "ERR";
+                ErrorF = 1;
+         end;
+      end;
+    end;                                                                  
+
+    rewind(acc2);
+    ClearRecord(acc2);
+    acc2.Account = Account;
+    flag1 = (GetEQ(acc2));
+    if(flag2)
+        NumbDog = "";
+        NumbDog = acc2.UserField4;
+        GDogovor = NumbDog;
+        if(StrLen(NumbDog) > 20)
+                flag2 = 0;	//Длинна пля договор более 20 символов
+                ErS(6) = "ERR";
+                ErrorF = 1;
+        end;
+    end;
+ RunDialog(id,"MyD");
+
+ if((ErrorF == 0))
+     return 1;
+ else
+     return 0;
+ end;
+
+end;
+/**************************************************************/
+
+/**************************************************************/
+macro WriteBase_NalOut(acc, clt, typechange, dateoper, operator, AccSm, DateChAcc)
+//macro WriteBase_NalOut(acc, clt, typechange, dateoper, operator)
+	clearrecord(izv);
+	izv.Account = acc;
+	izv.Client  = clt;
+	izv.Type_Change = typechange;
+	izv.Date_Change = dateoper;
+	izv.Code_Currency = SubStr(acc,6,3);
+	izv.Balance = SubStr(acc,1,5);
+	izv.Oper = operator;
+	izv.Flag_Send = 1;                              
+	if((operator == 22) or
+           (operator == 23) or
+           (operator == 24) or
+           (operator == 25) 
+	  )
+	  izv.Departament = 2;
+	elif((operator == 43) or
+             (operator == 44)   
+            )                   
+	  izv.Departament = 3;
+        else
+	  izv.Departament = 1;
+	end;
+	izv.Account_SM = AccSm;
+	izv.Date_Ch_Acc = DateChAcc;
+        Menu_OperT = menu(OperT);
+        if(Menu_OperT == 0)
+           izv.LastNumb = 100;
+        elif(Menu_OperT == 1)
+           izv.LastNumb = 200;
+        elif(Menu_OperT == 2)
+           izv.LastNumb = 300;
+        elif(Menu_OperT == 3)
+           izv.LastNumb = 400;
+        elif(Menu_OperT == 3)
+           izv.LastNumb = 500;
+        end;
+
+	insert(izv);
+	close(izv);
+end;
+/**************************************************************/
+
+/**************************************************************/
+macro main()
+
+ flag_work = 1;
+ while(flag_work)
+  AccountSm = "";
+  Account   = "40802810000000000000";
+  GetString(Account,"Введите номер СЧЕТА для извещения",20);
+  rewind(acc1);
+  ClearRecord(acc1);
+  acc1.Account = Account;
+  flag1 = (GetEQ(acc1));
+  if(flag1)
+     Client=acc1.Client;
+     Menu_change = menu(Open_change);
+     AccSm = "";
+     Menu_Change = menu(Acc_change);
+     if(Menu_change == 0)
+         typechange = 0;		//Открыли 
+         DateOper = acc1.Open_Date;
+         DateChAcc = Date(0,0,0);
+         if(acc1.Open_Close == "З")
+            MsgBox("Cчет закрыт!");
+            flag_work = 0;
+         end;
+     elif(Menu_change == 1)
+         typechange = 10;		//Открыли взамен СТАРОГО СЧЕТА
+         DateChAcc = Date(0,0,0);
+         DateOper = acc1.Open_Date;
+         GetString(AccountSm , "Введите СТАРЫЙ СЧЕТ", 20);
+    	 AccSm = AccountSm;
+    	 DateChAcc = DateOper;
+    	 GetDate(DateChAcc, "Введите ДАТУ ИЗМЕНЕНИЯ СЧЕТА");
+         if(acc1.Open_Close == "З")
+            MsgBox("Cчет закрыт!");
+            flag_work = 0;
+         end;
+     elif(Menu_change == 2)
+         typechange = 2;		//Закрыли
+         DateOper = acc1.Close_Date;
+         DateChAcc = Date(0,0,0);
+         if(acc1.Open_Close != "З")
+            MsgBox("Возможно счет не закрыт!");
+            flag_work = 0;
+         end;
+     elif(Menu_change == 3)
+         typechange = 21;		//Закрыли в одностороннем порядке
+         DateOper = acc1.Close_Date;
+         DateChAcc = Date(0,0,0);
+         if(acc1.Open_Close != "З")
+            MsgBox("Возможно счет не закрыт!");
+            flag_work = 0;
+         end;
+     elif(Menu_change == 4)
+         typechange = 22;		//Закрыли по решению суда
+         DateOper = acc1.Close_Date;
+         DateChAcc = Date(0,0,0);
+         if(acc1.Open_Close != "З")
+            MsgBox("Возможно счет не закрыт!");
+            flag_work = 0;
+         end;
+     elif(Menu_change == 5)
+         typechange = 12;		//Закрыли после открытия НОВОГО СЧЕТА
+         DateOper = acc1.Close_Date;
+         DateChAcc = Date(0,0,0);
+         if(acc1.Open_Close != "З")           
+            MsgBox("Возможно счет не закрыт!");
+            flag_work = 0;
+         else
+  	    GetString(AccountSm , "Введите НОВЫЙ СЧЕТ", 20);
+  	    AccSm = AccountSm;
+    	    DateChAcc = DateOper;
+       	    GetDate(DateChAcc, "Введите ДАТУ ИЗМЕНЕНИЯ СЧЕТА");
+         end;
+     end;
+     Oper = acc1.Oper;
+     CheckFull = 0;
+     CheckFull = F_CheckFull(Client, typechange, Account);
+     if((flag_work == 0) Or (CheckFull == 0))
+     else
+	WriteBase_NalOut(Account, Client, typechange, DateOper, Oper, AccSm, DateChAcc);
+     end;	
+     flag_work = 1;
+  else
+     if(gettrue(TRUE,"СЧЕТ не найден. Продолжить ?")) 
+       flag_work = 1;
+     else
+       flag_work = 0;
+     end;
+  end;
+  flag_work = 1;
+  if(gettrue(TRUE," Продолжить ?")) 
+    flag_work = 1;
+  else
+    flag_work = 0;
+  end;
+ end;
+end;
+/**************************************************************/
+
+main();

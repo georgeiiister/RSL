@@ -1,0 +1,21 @@
+/*
+Библиотечный макрос подготовки сообшений в налоговую 
+по открытым/измененным/закрытым счетам
+developer Polyakov S.George
+v 1.00-26.09.2012
+*/
+
+//конец файла
+macro macIAPrnEndFile()
+  print("===");
+end;
+
+//конец части
+macro macIAPrnEndPart()
+  println("@@@");
+end;
+
+//конец блока
+macro macIAPrnEndBlok()
+  println("###");
+end;

@@ -1,0 +1,649 @@
+/*
+ * Макрос обработки данных по 322П
+ * Заполнение ограничений на совершение операций по лицевому счету по данным журнала регистрации сообщений: таблицы (stop_op.dbt и ac_arest.dbt)
+ * таблицы (limit.dbt и acclimit.dbt) - таблицы ограничений 
+ * таблицы (canc_lim.dbt и acc_clim.dbt) - таблицы отмены ограничений
+ * developer Polyakov S.George 18.01.2011
+ * edit Polyakov S.George 05.04.2011 для сборки 5.50.002.29
+ * edit Polyakov S.George 11.05.2011 для сборки 5.50.002.29
+ * edit Polyakov S.George 16.05.2011 для сборки 5.50.002.29
+ * edit Polyakov S.George 25.08.2011 добавлен подмакрос macDbl() 
+*/
+
+import "..\\mac\\bfsofia\\322elib.mac";
+
+file r_ac_ar1(ac_arest,"bank.def") key 1;
+file r_ac_ar0(ac_arest,"bank.def") key 0;
+file r_acc0(account,"bank.def") key 0;
+file r_accv0("account$","bank.def") key 0;
+file r_stop0(stop_op,"bank.def") key 0;
+file r_stop6(stop_op,"bank.def") key 6;
+file r_limit1(limit,"bank.def") key 1;
+file r_acclim1(acclimit,"bank.def") key 1;
+file r_canc_lim1(canc_lim,"bank.def") key 1;
+
+file w_limit(limit,"bank.def") write;
+file w_limit0(limit,"bank.def") key 0 write;
+file w_acclim(acclimit,"bank.def") write;
+file w_acclim0(acclimit,"bank.def")  key 0 write;
+file w_canc_lim(canc_lim,"bank.def") write;
+file w_acc_clim(acc_clim,"bank.def") write;
+file w_stop(stop_op,"bank.def") write;
+file w_ac_arest0(ac_arest,"bank.def") key 0 write; 
+
+var iA=int(0),sAcc="",iCode_Cur=int(0),iErr=int(0),iMen=int(0),iQ=int(0),iW=int(0);
+
+
+const I_CHAPTER=int(1),
+      S_KINDP="Р",
+      S_KINDO="О",
+      I_VAL=int(810); //константа национальной валюты
+
+array arrMen;
+
+arrMen(0)="ОЧИСТИТЬ ВСЕ ИМЕЮЩИЕСЯ ОГРАНИЧЕНИЯ";
+arrMen(1)="ЗАПОЛНИТЬ ОГРАНИЧЕНИЯ ПО ЖУРНАЛУ ПРИОСТАНОВЛЕНИЙ (ПОЛНЫЙ ОТЧЕТ)";
+arrMen(2)="ЗАПОЛНИТЬ ОГРАНИЧЕНИЯ ПО ЖУРНАЛУ ПРИОСТАНОВЛЕНИЙ (ОТЧЕТ-ТОЛЬКО ДОБАВЛЕННЫЕ)";
+arrMen(3)="ЗАПОЛНИТЬ ОГРАНИЧЕНИЯ ПО ЖУРНАЛУ ПРИОСТАНОВЛЕНИЙ (ОТЧЕТ-ДУБЛИКАТЫ И 1 ОТМЕНА)";
+arrMen(4)="ЗАМЕНИТЬ НУЛЕВОЙ КОД КЛИЕНТА ДЛЯ ЗАПИСЕЙ ОГРАНИЧЕНИЯ ПО СЧЕТУ НА СУЩЕСТВУЮЩИЙ";
+arrMen(5)="УСТАНОВИТЬ В НУЛЕВОЕ ЗНАЧЕНИЕ ВРЕМЯ ЗАГРУЗКИ ВСЕХ ПРИОСТАНОВОК";
+arrMen(6)="УДАЛИТЬ ЗАПИСИ ИЗ ЖУРНАЛА, ДЛЯ КОТОРЫХ ОТСУТСТВУЕТ СВЯЗЬ СО СЧЕТОМ";
+arrMen(7)="ОТРАЗИТЬ ДУБЛИКАТЫ СООБЩЕНИЙ ПО ВСЕМ СЧЕТАМ";
+arrMen(8)="ПРОСТАВИТЬ КОДЫ ВАЛЮТЫ ДЛЯ СЧЕТОВ НЕ "+I_VAL;
+
+//add Polyakov S.George 01.09.2011 - простановка кодов валюты !=I_VAL
+
+macro macCodeC()
+  var iA:integer,
+      iCt:integer;
+  rewind(w_ac_arest0);
+  initprogress(nrecords(w_ac_arest0),"Подсчет","Обработано строк");
+  iA=int(0);
+  iCt=int(0);
+  while(next(w_ac_arest0))
+    if (substr(w_ac_arest0.account,6,3)!=I_VAL)
+      if (w_ac_arest0.code_currency!=substr(w_ac_arest0.account,6,3))
+        w_ac_arest0.code_currency=substr(w_ac_arest0.account,6,3);
+        if (update(w_ac_arest0))
+          iCt=iCt+1; 
+        end;
+      end;
+    end;
+    iA=iA+1;
+    useprogress(iA);
+  end;
+  println("---- Итого замен по журналу "+iCt);
+  //***********
+  iA=int(0);
+  iCt=int(0);
+  rewind(w_acclim);
+  initprogress(nrecords(w_acclim),"Подсчет","Обработано строк");
+  while(next(w_acclim))
+    if (substr(w_acclim.account,6,3)!=I_VAL)
+      if (w_acclim.codecurrency!=substr(w_acclim.account,6,3))
+          w_acclim.codecurrency=substr(w_acclim.account,6,3);
+        if (update(w_acclim))
+          iCt=iCt+1; 
+        end;
+      end;
+    end;
+    iA=iA+1;
+    useprogress(iA);
+  end;
+  println("---- Итого замен по приостановкам "+iCt);
+end;
+
+//add Polyakov S.George 25.08.2011 - поиск дубликатов сообщений
+
+macro macDbl()
+  var bNextA:bool,
+      bNextB:bool,
+      iCt:integer,
+      iCtN:integer,
+      sAcc:string,
+      iCh:integer,
+      iCC:integer;
+  rewind(r_ac_ar1);
+  initprogress(nrecords(r_ac_ar1),"Подсчет","Обработано строк");
+  sAcc="";
+  iCh=int(0);
+  iCC=int(0);
+  iCt=int(0);
+  while(next(r_ac_ar1))
+    if (
+        (sAcc==r_ac_ar1.Account) and
+        (iCh==r_ac_ar1.Chapter) and
+        (iCC==r_ac_ar1.Code_Currency)
+       )
+    else
+      sAcc=r_ac_ar1.Account;
+      iCh=r_ac_ar1.Chapter;
+      iCC=r_ac_ar1.Code_Currency;
+      iCt=int(0);
+    end;
+    iA=iA+1;
+    /*debug*/
+    /*if (r_ac_ar1.Account=="40702840501000000474")*/
+    /* msgbox(iCt);*/
+    /* end;*/
+    /*debug*/
+    useprogress(iA);
+    rewind(r_stop0);
+    r_stop0.Id=r_ac_ar1.Id;
+    if (getEQ(r_stop0)) //нашли это сообщение
+      rewind(r_stop6);
+      r_stop6.StopNumber=r_stop0.StopNumber;
+      r_stop6.StopDate=r_stop0.StopDate;
+      r_stop6.Kind=r_stop0.Kind;
+      if (getEQ(r_stop6))
+        //нашли запись, которая либо дубликат, либо она же
+         bNextA=true;
+         iCtN=int(0);
+         while(bNextA)
+           if (
+                (r_stop6.StopNumber==r_stop0.StopNumber) and
+                (r_stop6.StopDate==r_stop0.StopDate) and
+                (r_stop6.Kind==r_stop0.Kind)
+              )
+              if (r_stop6.ID!=r_stop0.ID)
+                 iCtN=iCtN+1;
+                //те же дата/время, но не то сообщение
+                //теперь проверяем, по тому же счету (!!!) это сообщение
+                //если по тому же - значит дубликат
+                rewind(r_ac_ar0);
+                r_ac_ar0.ID=r_stop6.ID;
+                if (getEQ(r_ac_ar0))
+                  //нашли счета по этому сообщению
+                  bNextB=true;                            
+                  while (bNextB)
+                    if (r_ac_ar0.ID==r_stop6.ID)
+                      if (
+                          (r_ac_ar0.Chapter==r_ac_ar1.Chapter) and
+                          (r_ac_ar0.Code_Currency==r_ac_ar1.Code_Currency) and 
+                          (r_ac_ar0.Account==r_ac_ar1.Account)  
+                         )
+                         //Дубликат
+                         //необходимо учесть, что Code_Currency для одного счета может иметь 0 или код валюты,
+                         //таким образом дубликаты по одному счету, но с разным Code_Currency получаются как не дубликаты
+                         iCt=iCt+1;
+                         //надо сделать проверку, что бы отбирать 
+                         //по одному счету, но разные (!) сообщения
+                         println(r_ac_ar1.Account+", №/Дата: "+r_stop0.StopNumber+"/"+r_stop0.StopDate+" Вид: "+r_stop0.Kind);
+                      end;
+                      bNextB=next(r_ac_ar0);
+                    else
+                      bNextB=false;
+                    end;
+                  end;
+                end;
+              end;
+             bNextA=next(r_stop6);
+           else
+             bNextA=false;
+           end;
+         end;
+      end;
+    end
+  end;
+end;
+
+
+//add Polyakov S.George 16.05.2011
+
+macro macDelOnlJrn()
+  //В связи с переходом на сборку 5.50.002.29
+  //добавляем возможность удаления "пустых" 
+  //записей из журнала приостановок, то есть для которых
+  //никакой информации по счетам не было добавлено
+  //такие записи появляются из-за проблем при загрузке (наример КПП/ИНН не найден, приостановка не найдена, счет закрыт...) или ручном вводе
+  clearrecord(w_stop);
+  initprogress(nrecords(w_stop),"Подсчет","Обработано строк");
+  while(next(w_stop))
+    iA=iA+1;
+    useprogress(iA);
+    rewind(r_ac_ar0);
+    clearrecord(r_ac_ar0);
+    r_ac_ar0.ID=w_stop.ID;
+    if (not (geteq(r_ac_ar0)))
+      if (delete(w_stop))
+        iW=iW+1; //запись без подчиненных
+      end;
+    end;
+  end;
+end; 
+
+//add Polyakov S.George 11.05.2011
+
+macro macSetNullTime()
+  //В связи с переходом на сборку 5.50.002.29
+  //добавляем возможность "обнуления" времени загрузки сообщения о приостановлении
+  rewind(w_limit0);
+  clearrecord(w_limit0);
+   initprogress(nrecords(w_limit0),"Подсчет","Обработано строк");
+   while(next(w_limit0))
+    iA=iA+1;
+    useprogress(iA);
+    if (w_limit0.TimeBegin!=Time(0,0,0))
+      if ((w_limit0.DateEnd==Date(0,0,0)) and (w_limit0.TimeEnd==Time(0,0,0))) //обнуляем только не отмененные приостановки
+        //необходимо обнулить и поле acclimit.timeinclude
+        rewind(r_ac_ar0);
+        clearrecord(r_ac_ar0);
+        r_ac_ar0.ID=w_limit0.idstopop;
+        if (geteq(r_ac_ar0))
+          rewind(r_acclim1);
+          clearrecord(r_acclim1);
+          r_acclim1.idlimit=w_limit0.idlimit;
+          r_acclim1.Chapter=r_ac_ar0.Chapter;
+          r_acclim1.CodeCurrency=r_ac_ar0.Code_Currency;
+          r_acclim1.Account=r_ac_ar0.Account;
+          if (geteq(r_acclim1))
+            w_acclim0.idacclimit=r_acclim1.idacclimit;
+            if (geteq(w_acclim0))
+              //обнуляем w_acclim0.TimeInclude
+              w_acclim0.TimeInclude=Time(0,0,0);
+              if (update(w_acclim0))
+                iW=iW+1;
+              end;
+              //println(w_limit0.TimeBegin);
+            end;
+          end;
+        end;
+        //обнуляем w_limit0.TimeBegin
+        w_limit0.TimeBegin=Time(0,0,0);
+        if (update(w_limit0)) 
+          iQ=iQ+1;
+        end;
+      end;
+    end;
+  end;
+end;
+
+macro macSetClient()
+  //В связи с переходом на сборку 5.50.002.29 для добавленных 
+  //в ручную сообщения при перегрузке не добавлялся код клиента"
+  //данная процедура исправляет эту ситуацию*/
+  rewind(w_limit0);
+  clearrecord(w_limit0);
+  while(next(w_limit0))
+    if (w_limit0.Client==int(0))
+      rewind(r_stop0);                                          
+      clearrecord(r_stop0);
+      r_stop0.ID=w_limit0.IdStopOp;
+      if (getEQ(r_stop0))
+        w_limit0.Client=r_stop0.Client;
+        if (update(w_limit0))
+          println("Код клиента: "+r_stop0.Client+" Номер сообщения: "+r_stop0.StopNumber+" Дата: "+r_stop0.StopDate+" Код сообщения: "+r_stop0.ID);
+          iA=iA+1;
+        else
+          println("Ошибка обновления для клиента: "+r_stop0.Client);    
+        end;
+      end;
+    end;
+  end;
+  println("- - - -");
+  println("Итого добавлено: "+iA);
+end;
+
+macro macDelLim()
+
+/*Очистка canc_lim.dbt, acclimit.dbt,acc_clim.dbt,limit.dbt*/
+
+var iK=int(0),iR=int(0),iE_d=int(0);
+
+array arrDBT;
+
+    arrDBT(0)=w_acc_clim;
+    arrDBT(1)=w_canc_lim;
+    arrDBT(2)=w_acclim;
+    arrDBT(3)=w_limit;
+
+    while(iK+1<=ASize(arrDBT))
+      iR=int(0);
+      rewind(arrDBT(iK));
+      clearrecord(arrDBT(iK));
+      while(next(arrDBT(iK)))
+       if (delete(arrDBT(iK)))
+         iR=iR+1;
+         message("Удалено записей: "+iR+" из таблицы: "+string(arrDBT(iK)));
+       else
+         iE_d=iE_d+1;
+       end;
+      end;
+      iK=ik+1;
+    end;
+    msgbox("Удалено записей: "+iR+" Ошибок удаления: "+iE_d);
+end;
+
+macro maclim(sAccl,iCode)
+
+var bNext=true,
+    bNext1=true,
+    iB=int(0),
+    iC=int(0),
+    iO=int(0),
+    iT=int(0),
+    iI=int(0),
+    iArrID=int(-1);
+
+    array arrID;
+
+  r_ac_ar1.Chapter=I_CHAPTER;
+  r_ac_ar1.Code_Currency=iCode;
+  r_ac_ar1.Account=sAccl;
+  if (getEQ(r_ac_ar1))
+    //работаем с найденным счетом - просматриваем все сообщения
+    while(bNext)
+      if (
+          (r_ac_ar1.Chapter==I_CHAPTER) and 
+          (r_ac_ar1.Code_Currency==iCode) and 
+          (r_ac_ar1.Account==sAccl)
+         )
+        rewind(r_stop0);
+        clearrecord(r_stop0);
+        r_stop0.ID=r_ac_ar1.ID;
+        if (getEQ(r_stop0))
+          iB=iB+1;
+          //найдено необходимое сообщение
+          //если это приостановка, то смотрим записывалась ли она уже в базу
+          if (r_stop0.Kind==S_KINDP)
+             rewind(r_limit1);
+             clearrecord(r_limit1);
+             r_limit1.IdStopOp=r_stop0.ID;
+             if(not getEQ(r_limit1))
+               //msgbox("!");
+               //добавляем ограничение
+               clearrecord(w_limit);
+               w_limit.IdStopOp=r_stop0.ID;
+               w_limit.Number=r_stop0.StopNumber;
+               w_limit.Date=r_stop0.StopDate;
+               w_limit.DateInput=r_stop0.DateFormLoad;
+               w_limit.DateBegin=r_stop0.StopDate; //счетаем, что начало действия == дате решения о приостановке
+               //w_limit.TimeBegin=; Ничего не добавлено специально, так как на данный моменент (04.05.2011) 
+               //в сообщениях от налоговой нет информации о времени, а использовать системное время, 
+               //то есть время загрузки - НЕВЕРНО! add Polyakov S.George 04.05.2011
+               w_limit.DateEnd=Date(00,00,0000);
+               if (r_ac_ar1.SumArest!=Moneyl(0))
+                 w_limit.TypeLimit=int(1); //Тип ограничения: 1-на сумму, 0-на счет
+               else
+                 w_limit.TypeLimit=int(0)
+               end;
+               w_limit.TypeCash=int(0);  //Расходные операции: 0-Запрещены, 1-Разрешены с запросом
+               w_limit.Reason=r_stop0.StopReason;
+               w_limit.Oper=r_stop0.Oper;
+               w_limit.SrcName=r_stop0.CodeNO+" "+r_stop0.NameNO;
+               w_limit.Cond_ExDoc=int(0); //условие 1
+               w_limit.PaymentExDoc_Cond=int(1);
+               w_limit.SysTypeExDoc_Cond=int(1);
+               w_limit.UserTypeExDoc_Cond=int(1);
+               w_limit.Cond_SkipDoc=int(0);
+               w_limit.PaymentSkipDoc_Cond=int(1);
+               w_limit.PaymentSkipDoc_Val="1, 2, 3, 4";
+               w_limit.SysTypeSkipDoc_Cond=int(1);
+               w_limit.UserTypeSkipDoc_Cond=int(1);
+               w_limit.Client=r_stop0.Client; //add Polyakov S.George 04.05.2011
+               insert(w_limit);
+               //
+               clearrecord(w_acclim);
+               w_acclim.IdLimit=w_limit.IdLimit;
+               w_acclim.Chapter=r_ac_ar1.Chapter;
+               w_acclim.CodeCurrency=r_ac_ar1.Code_Currency;
+               w_acclim.Account=r_ac_ar1.Account;
+               w_acclim.Priority=int(0);
+               w_acclim.SumOrigin=r_ac_ar1.SumArest;
+               w_acclim.DateInclude=r_stop0.StopDate; //на это обратить внимание, что за дата ВКЛЮЧЕНИЯ???
+               //w_acclim.TimeInclude=; Так же ничего не добавляется (см. w_limit.TimeBegin) add Polyakov S.George
+               insert(w_acclim);
+               iC=iC+1;
+             end;
+          else
+            if (r_stop0.Kind==S_KINDO)
+              //наполняем массив отмен, что бы обработать отмены когда ВСЕ "Р" загружены
+              iArrID=iArrID+1;
+              arrID(iArrID)=r_stop0.ID;
+            end;
+          end;
+        end;
+      next(r_ac_ar1);
+      else
+        bNext=false; //просмотрели все записи с найденным счетом
+      end;
+    end;
+  /********************* проставляем отмены ******************/
+  if (iArrID>=0)
+    //были отмены по счету
+    while (iArrID>=0)
+      //msgbox(arrID(iArrID));
+      rewind(r_stop0);
+      clearrecord(r_stop0);
+      r_stop0.ID=arrID(iArrID);
+      if (getEQ(r_stop0))
+        //нашли сообщения с отменой
+        if (
+            (strlen(trim(r_stop0.CancStopNumber))!="") and 
+            (r_stop0.CancStopDate!=Date(00,00,0000))
+           )
+          //все поля заполнены
+          rewind(r_stop6);
+          clearrecord(r_stop6);
+          r_stop6.StopNumber=r_stop0.CancStopNumber;
+          r_stop6.Kind=S_KINDP;
+          r_stop6.StopDate=r_stop0.CancStopDate;
+          if (getEQ(r_stop6))
+            //нашли сообщение, которое отменяем
+            //msgbox(r_stop6.StopNumber+"  "+r_stop6.StopDate);
+            //Так как некоторые приостановления заносились вручную, может быть дубляж, для этого проверяем все
+            bNext=true;
+            while (bNext)
+              if (
+                  (r_stop6.StopNumber==r_stop0.CancStopNumber) and 
+                  (r_stop6.Kind==S_KINDP) and 
+                  (r_stop6.StopDate==r_stop0.CancStopDate)
+                 )
+                //**********************************
+                //ищем в limit.dbt записи
+                rewind(r_limit1);
+                clearrecord(r_limit1);
+                r_limit1.IdStopOp=r_stop6.ID;
+                if (getEQ(r_limit1))
+                  //нашли лимит по счету, на который есть отмена
+                  bNext1=true;
+                  while(bNext1) //ключ 1 - DM может дублироваться
+                    if (r_limit1.IdStopOp==r_stop6.ID)
+                      iT=iT+1;
+                      rewind(r_acclim1);
+                      clearrecord(r_acclim1);
+                      r_acclim1.IdLimit=r_limit1.IdLimit;
+                      r_acclim1.Chapter=I_CHAPTER;
+                      r_acclim1.CodeCurrency=iCode;
+                      r_acclim1.Account=sAccl;
+                      if (getEQ(r_acclim1))
+                        rewind(r_canc_lim1);
+                        clearrecord(r_canc_lim1);
+                        r_canc_lim1.IdLimit=r_limit1.IdLimit;
+                        r_canc_lim1.Date=r_stop0.StopDate;
+                        if (not(getEQ(r_canc_lim1)))
+                          clearrecord(w_canc_lim);
+                          w_canc_lim.IdLimit=r_limit1.IdLimit;
+                          w_canc_lim.SrcCnclType=int(0); //источник распоряжения об отмене - НО //
+                          w_canc_lim.SrcCnclName=r_stop0.CodeNO+" "+r_stop0.NameNO;
+                          w_canc_lim.Number=r_stop0.StopNumber;
+                          w_canc_lim.Date=r_stop0.StopDate;
+                          w_canc_lim.IdStopOp=r_stop0.ID;
+                          w_canc_lim.Note="Загружено из файла "+r_stop0.FileName;
+                          // 04.05.2011 add Polyakov S.George
+			     //*********************
+                          if (r_stop0.StopDate==r_limit1.DateBegin) 
+                            w_canc_lim.Time=r_limit1.TimeBegin;
+                          end; 
+	                   //*********************
+                          if (insert(w_canc_lim))
+                            //Добавлено без ошибок
+                            rewind(w_acclim0);
+                            clearrecord(w_acclim0);
+                            w_acclim0.IdAccLimit=r_acclim1.IdAccLimit;
+                            if (getEQ(w_acclim0))
+                              w_acclim0.IdCnclLimit=w_canc_lim.IdCnclLimit;
+                              if (not update(w_acclim0))
+                                return int(13);
+                              end;
+                             end;
+                            //
+                            clearrecord(w_acc_clim);
+                            w_acc_clim.IdAccLimit=w_acclim0.IdAccLimit;
+                            w_acc_clim.IdCnclLimit=w_canc_lim.IdCnclLimit;
+                            w_acc_clim.Sum=r_acclim1.SumOrigin;
+                            if (not insert(w_acc_clim))
+                              return int(13);
+                            end;
+                            //
+                            rewind(w_limit0);
+                            clearrecord(w_limit0);
+                            w_limit0.IdLimit=r_limit1.IdLimit;
+                            if (getEQ(w_limit0))
+                              w_limit0.DateEnd=r_stop0.StopDate;
+                              //add Polyakov S.George 04.05.2011 устанавливаем время конца такое как и время начала
+                              //********************************
+                              if (w_limit0.DateBegin==r_stop0.StopDate)
+                                w_limit0.TimeEnd=w_limit0.TimeBegin;
+                              end;
+                              //********************************
+                              if (not update(w_limit0))
+                                return int(13);
+                              end;
+                            end;
+                            iO=iO+1;  
+                          else
+                            //Ошибка добавления или дублирование уникального ключа (несколько приостановко и 1 отмена)
+                            iI=iI+1;
+                          end;
+                        end;
+                      end;
+                    if (not (next(r_limit1)))
+                      bNext1=false;
+                    end;
+                    else
+                      bNext1=false;
+                    end;
+                  end;
+                end;
+                if (not(next(r_stop6)))
+                  bNext=false;
+                end;
+              else
+                bNext=false;
+              end;
+            end;
+          end;
+        end;
+      end;
+      iArrID=iArrID-1;
+    end;
+  end;
+//***********************************************************
+
+  if (iB>=1)
+    if (((iC>=1) or (iO>=1)) and (iI==0))
+      return int(9)
+    else
+      if (iI>0) 
+        return int(11);
+      else
+        return int(10); //данные для перегрузки не найдены 
+      end;
+    end;
+  else
+    return int(0); 
+  end;
+  else
+    return int(3); //ПО УКАЗАННОМУ СЧЕТУ НЕ БЫЛО АРЕСТОВ/СНЯТИЙ!
+  end;
+end;
+
+/***************** Точка входа в программу*******************/
+
+iMen=menu(arrMen);
+if (iMen>=0)
+  if (iMen==0)
+    //macdellim();
+    msgbox("Данный пункт меню использовать запрещено!");
+  elif (
+        (iMen==1) Or
+        (iMen==2) Or
+        (iMen==3)
+       )
+    while(next(r_acc0))
+      iQ=iQ+1;
+      if (
+           (  
+             (trim(r_acc0.balance)=="40502") or
+             (trim(r_acc0.balance)=="40602") or
+             (trim(r_acc0.balance)=="40702") or
+             (trim(r_acc0.balance)=="40703") or
+             (trim(r_acc0.balance)=="40802")
+           )
+             and
+           (
+             r_acc0.Open_Close!="З"
+           )
+         )
+         sAcc=r_acc0.account;
+         if (substr(sAcc,6,3)==I_VAL)
+           iCode_Cur=r_acc0.Code_Currency;
+         else
+           rewind(r_accv0);
+           r_accv0.account=sAcc;
+           r_accv0.code_currency=substr(sAcc,6,3);
+           if (getEQ(r_accv0))
+             iCode_Cur=r_accv0.code_currency;
+           else
+             iCode_Cur=r_acc0.Code_Currency;
+           end;
+         end;
+         iErr=maclim(sAcc,iCode_Cur);
+         iA=iA+1;
+         if (iErr==9)
+           iW=iW+1; //успешно добавлено
+         end;
+         message("Подождите! Обработано счетов: "+iA);
+         if (iMen==1)
+           println(iA+" "+sAcc+" "+ArrErr(iErr));
+         elif (iMen==2)
+           if (iErr==9)
+             println(sAcc+" "+ArrErr(iErr));  
+           end;
+         elif (iMen==3)
+           if (iErr==11)
+             println(sAcc+" "+ArrErr(iErr));  
+           end;
+         end;
+      end;
+    end;
+  println();
+  println("----- ИТОГО ДОБАВЛЕНО ЗАПИСЕЙ ПО ЧИСЛУ СЧЕТОВ: "+iW+" -----");
+  elif (iMen==4)
+    //MsgBox("!");
+    macSetClient;
+  elif (iMen==5)
+    if (
+        gettrue(false,"ВЫ ДЕЙСТВИТЕЛЬНО ХОТИТЕ УСТАНОВИТЬ В НУЛЕВОЕ ЗНАЧЕНИЕ ВРЕМЯ ЗАГРУЗКИ ДЛЯ ВСЕХ ПРИОСТАНОВОК?")
+       )
+      macSetNullTime;
+      println("ЧИСЛО ИЗМЕНЕНИЙ:");
+      println("ПО ТАБЛИЦЕ: -ОГРАНИЧЕНИЯ ПО СЧЕТУ-  "+iQ);
+      println("ПО ТАБЛИЦЕ: -Л/С ОГРАНИЧЕНИЯ- " +iW);
+    end;
+  elif (iMen==6)
+    if (
+        gettrue(false,"ВЫ ДЕЙСТВИТЕЛЬНО ХОТИТЕ УДАЛИТЬ НЕ СВЯЗАННЫЕ СО СЧЕТОМ ЗАПИСИ ИЗ ЖУРНАЛА?")
+       )
+        macDelOnlJrn;
+        println("УДАЛЕНО: "+iW);
+    end;
+  elif (iMen==7)
+    //msgbox("!");
+    macDbl();
+  elif (iMen==8)
+    macCodeC();
+  end;
+end;
+ 

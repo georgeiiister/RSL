@@ -1,0 +1,115 @@
+/*Макропрограмма для формирования журнала по расходу*/
+/* Developed Polyakov*/ 
+
+file doc(document);
+file arh(arhdoc) sort 0;
+
+var 
+   {curdate},
+   NumSh="20207810901400000006",
+   Label=true,
+   YesNo,
+   FirstDate={curdate},
+   LastDate={curdate},
+   Itog=Money(0),
+   i=0,
+   PaySh,NumDoc,SymOth,SumOth;
+                         
+Const 
+   NumDays=31; /*Запас на разницу между Date_Carry and Date_Value*/
+
+/*********** Процедура формирования журнала **********/
+
+macro Kaslog(PaySh,NumDoc,SymOth,SumOth)
+  println(PaySh:c:21,NumDoc:r:5,SymOth:r:9,SumOth:a:15);
+End;
+
+/**** Процедура выборки из проведённых документов ****/
+
+macro docKasLog
+  rewind(doc);
+  clearrecord(doc);
+   while(next(doc)) 
+      i=i+1;
+      message("Подождите... Обработано записей: "+i);
+      If ((trim(doc.Account_Receiver)==NumSh) and (doc.Result_Carry!=23)) 
+         Itog=Itog+doc.sum;
+         Kaslog(doc.Account_Payer,doc.Numb_Document,doc.Symbol_Cach,doc.sum);
+      End;                      
+    End; 
+End;                                                   	
+
+/**** Процедура выборки из архивных документов ****/
+
+macro arhKasLog
+  rewind(arh);
+  clearrecord(arh);
+  arh.Date_Carry=Firstdate-NumDays;
+  GetGE(arh); 
+  prev(arh); 
+   while(next(arh))
+      i=i+1;
+      message("Подождите... Обработано записей: "+i);
+      If ((arh.Account_Receiver==NumSh) and (arh.Date_Value<=LastDate) and (arh.Date_Value>=FirstDate) and (arh.result_carry!=23))  
+         message ("Дата значения: "+arh.date_value+" Счёт плательщика: "+arh.Account_Payer+"  "+arh.sum);
+         Itog=Itog+arh.sum;
+         Kaslog(arh.Account_Payer,arh.Numb_Document,arh.Symbol_Cach,arh.sum);
+      End;                      
+    End; 
+End;
+
+
+/************* Точка входа в программу *************/
+
+  while(label)
+   GetDate(FirstDate,"Начальная дата:");
+     If (FirstDate>{curdate})
+       If (GetTrue(YesNo,"Некорректная дата! Повторить ввод?"))
+       else
+         exit  
+       end;
+     else
+       label=false; 
+   end;
+ end;
+
+ label=true;
+ 
+ while(label)
+   GetDate(LastDate,"Конечная дата:");
+     If ((LastDate<Firstdate) or (LastDate>{curdate}))
+       If (GetTrue(YesNo,"Некорректная дата! Повторить ввод?"))
+       else
+         exit;
+       end;
+     else
+       label=false;
+     end
+ end;
+
+/****************** Форма журнала *******************/
+
+[КАССОВЫЙ ЖУРНАЛ по расходу с ########## по ##########
+ Операционная касса вне кассового узла N 4
+                             Счёт кассы ####################
+--------------------------------------------------------------
+     Номер счёта         N      Символ     Сумма    Подпись
+                       док-та   отчёта              кассира
+--------------------------------------------------------------]
+(FirstDate,LastDate,NumSh);
+
+  If (FirstDate=={curdate})
+    dockaslog
+      elif (lastDate=={curdate})
+        arhkaslog;
+        dockaslog
+  else
+    arhkaslog
+  end;   
+println("---------------":r:50);
+println("--Итого по расчёту--":c:35,Itog:a:15);  
+println("");
+println("");
+println("Начальник операционной кассы N 4 Митянова Л.С. __________")
+/**************** Конец программы *****************/
+End

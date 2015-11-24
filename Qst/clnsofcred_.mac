@@ -1,0 +1,120 @@
+file cln0 (client) key 0; 
+file crd2(credits) key 2;
+file con1(cln_conn) key 1;
+
+
+Var 
+   l=0, /*Счетчик выгруженных строк*/
+   k=0, /*Счетчик обработанных строк*/
+   j=0, /*Счетчик элементов массива*/
+   strTelFax="",
+   flgYesCon=True, 
+   strLim="#",
+   SName="",
+   NName="",
+   PName="",
+   Cnt=1,
+   lm=0,  
+   strPassNumber="",
+   strPassSeries="";
+
+Rewind(cln0);
+InitProgress(NRecords(cln0),"Подсчет","Обработано строк");
+while (Next(cln0))
+k=k+1;
+UseProgress(k);
+If ((StrSubst(Trim(cln0.PassSeries)," ","")!="") or (StrSubst(Trim(cln0.PassNumber)," ","")!="") and (cln0.ClientType==2) and (cln0.FilialID==2)) 
+   If (StrSubst(Trim(cln0.PassSeries)," ","")=="")
+      If (StrLen(StrSubst(Trim(cln0.PassNumber)," ",""))==10)
+         strPassSeries=SubStr(StrSubst(Trim(cln0.PassNumber)," ",""),1,4);
+         strPassNumber=SubStr(StrSubst(Trim(cln0.PassNumber)," ",""),5);
+      Else
+         strPassNumber=StrSubst(Trim(cln0.PassNumber)," ","");
+      End; 
+   Else
+      If ((StrLen(StrSubst(Trim(cln0.PassSeries)," ",""))==10) and (StrSubst(Trim(cln0.PassNumber)," ","")==""))
+         strPassSeries=SubStr(StrSubst(Trim(cln0.PassSeries)," ",""),1,4);
+         strPassNumber=SubStr(StrSubst(Trim(cln0.PassSeries)," ",""),5);
+      Else
+         strPassSeries=StrSubst(Trim(cln0.PassSeries)," ","");
+         strPassNumber=StrSubst(Trim(cln0.PassNumber)," ","");
+      End;
+   End;
+   /*Формируем строку с телефонами*/ 
+    rewind(con1);
+    ClearRecord(con1);      
+    con1.FilialID=cln0.FilialID;
+    con1.ClientID=cln0.ClientID;   
+    If (GetEQ(con1)) 
+       While(flgYesCon)
+       If ((con1.ClientID==cln0.ClientID) And (con1.FilialID==cln0.FilialID))
+          If (con1.MainConnect==1) 
+             strTelFax=Trim(con1.ConnectName)+" "+Trim(con1.ConnectNumber);
+             flgYesCon=False    
+          End; 
+       If (Not (next(con1))) 
+          flgYesCon=False
+       End; 
+       Else
+          flgYesCon=False
+       End; 
+       End;
+    End;    
+    SName="";
+    NName="";
+    Pname="";
+    lm=0;
+    cnt=1;
+    While(cnt<=StrLen(cln0.ClientName))
+      If (SubStr(cln0.ClientName,cnt,1)==" ")
+         lm=lm+1
+      Else
+         If (lm==0)
+            SName=SName+SubStr(cln0.ClientName,cnt,1);
+         elif (lm==1)
+            NName=NName+SubStr(cln0.ClientName,cnt,1);
+         elif (lm==2)
+            PName=PName+SubStr(cln0.ClientName,cnt,1);   
+         End;   	
+      End;
+    cnt=cnt+1;
+    End;  
+      MsgBox(cln0.ClientID+strLim+Trim(Sname)+strLim+Trim(NName)+strLim+Trim(PName)+strLim+strLim+strLim+strLim+strPassSeries+strLim+strPassNumber+strLim+Trim(String(cln0.PassDate))+strLim+Trim(cln0.PassGiven)+strLim+strLim+Trim(cln0.FactAddress)+strLim+Trim(cln0.Address)+strLim+Trim(cln0.ClientBIK_INN)+strLim+strTelFax);
+    End; 
+End; 
+
+
+/*Точка входа в программу*/
+
+/*
+Var   
+    l=0, /*Счетчик выгруженных строк*/
+    k=0,
+    day=0,
+    mon=0,
+    year=0,
+    mindate,
+    strLim="#",  
+    CodeCln=0,
+    strInfCln="";  
+      
+
+Const                          
+     strPathFile="..\\TXTFILE\\",
+     strFileName="ClnCrd.txt";
+
+SetOutput(strPathFile+strFileName,false); 
+rewind(crd2);
+strInfCln=cln(CodeCln);
+If (strInfCln!="")
+   println(strInfCln+strLim+Trim(String(mindate))+strLim+Trim(String(mindate))+strLim+strLim);
+l=l+1;
+End;
+            
+Close(cln0);
+Close(crd2);
+Close(con1);
+Close(strPathFile+strFileName);
+SetOutput(Null,True); 
+println("Выгружено строк: "+l+" в файл: "+strPathFile+strFileName);
+*/

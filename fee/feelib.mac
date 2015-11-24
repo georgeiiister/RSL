@@ -1,0 +1,934 @@
+/*
+  Библиотечный макрос удержания вознаграждения банка
+
+  author: Polyakov S.George
+
+  ver: 1.00-27.12.2012
+  ver: 1.01-08.01.2013
+  ver: 1.02-09.01.2013
+  	Добавлена разбивка на 2 документа для проводки при недостаточной сумме на счете для комисии
+  ver: 1.03-15.01.2013
+       Добавлена возможность формирования пачек по подразделениям
+  ver: 1.04-22.01.2013
+       Добавлена возможность разных комиссий удержаний по подразделениям
+  ver: 1.05-06.02.2013
+       Добавлена возможность удержания за кассовое обслуживание за послеоперационное время
+  ver: 1.06-28.02.2013
+       Добавлена возможность указания года/месяца удержания ежемесячной комиссии
+  ver: 1.07-04.03.2013
+       Добавлена возможность удержания комиссии за встречные платежи
+  ver: 1.08-28.03.2013
+       Добавлено указание на статус выгрузки документов в отложенные
+  ver: 1.09-05.04.2013
+       Изменены счета для зачисления комиссии, в  связи с ликвидацией ОО "Степной".
+       Доходы переводятся на счета ОО "Балаково"
+  ver: 1.10-17.04.2013
+       Внесены изменения по удержанию по типу счета "J"
+       удерживается комиссия только при наличии движения по данному счету
+  ver: 1.11-05.06.2013
+       Изменена работа вызова модуля под встречные платежи, добавлен ввод даты архивного дня
+  ver: 1.12-21.06.2013
+       В документах на списание комисии смена наименование банка с одной переменной
+       {Name_Bank} на ф-ю GetBankName({MFO_Bank},{CORAC_Bank})
+  ver: 1.13-15.08.2013
+       Внесение изменений для обработки спец. счетов 40821 (удержание с расчетных, а не с них)
+  ver: 1.14-18.09.2013
+       Добавлена обработка счетов Физических лиц
+
+
+*/
+
+import "..\\mac\\bfsofia\\acclib.mac";
+import "..\\mac\\bfsofia\\utllib.mac";
+import "..\\mac\\bfsofia\\clnlib.mac";
+import ClnInter;
+import "param.mac";
+
+//макрос получающий счет и возвращающий размер удержания по типу категории
+//вознаграждения
+macro macFLGetFee(
+                  iTypeFee:integer,
+                  sAcc:string,
+                  bVIP:bool,
+                  iDprt:integer,
+                  bOutTime:bool,
+                  iMon_:integer,
+                  iYear_:integer,
+                  dDate:date
+                 ):money
+  var
+     oTblAcc:object,
+     mRet:money,
+     mSumNotVip:money,
+     iDays:integer,
+     mRestA:money,
+     mDebetA:money,
+     mKreditA:money,
+     bCurDate:bool,
+     mSumVip:money;
+
+  array
+     arrSumVip, 
+     arrSumNotVip;
+
+  if (dDate=={curdate}) //передаваемый день - текущий операционный день?
+    bCurDate=true;
+  end;
+
+  mRet=Money(0);
+  mSumVip=Money(0);
+  mSumNotVip=Money(0);
+  oTblAcc=TBFile("account.dbt","r",0,null,"bank.def");
+  //*******************************************************
+  if (iTypeFee==0) //за ведение счета
+    /*Установка параметров удержания*/
+    arrSumNotVip(1)=Money(500);
+    arrSumNotVip(2)=Money(500);
+    arrSumNotVip(3)=Money(500);
+    arrSumNotVip(4)=Money(500);
+    arrSumNotVip(5)=Money(500);
+    arrSumNotVip(6)=Money(500);
+    mSumNotVip=arrSumNotVip(iDprt);
+    arrSumVip(1)=Money(0);
+    arrSumVip(2)=Money(0);
+    arrSumVip(3)=Money(0);
+    arrSumVip(4)=Money(0);
+    arrSumVip(5)=Money(0);
+    arrSumVip(6)=Money(0);
+    mSumVip=arrSumVip(iDprt);
+    //по нулевому типу, не должен быть пользователем iBank и удерживаем
+    rewind(oTblAcc);
+    oTblAcc.rec.account=sAcc;
+    if (getEQ(oTblAcc))
+      if (
+          (index(oTblAcc.rec.UserTypeAccount,"J")==0) and
+          (not macALCheckFizClnAcc(sAcc)) //исключаем физиков
+         )
+        if (macULYesSumChMon(sAcc,iMon_,iYear_,{curdate}))
+          if (not bVIP)
+            mRet=mSumNotVip; //обслуживание счета
+          else
+            mRet=mSumVip;
+          end;
+        end;
+      end;
+    end;
+  elif (iTypeFee==1) //за отсутствие движения по счету iDays к.д.
+    if (not macALCheckFizClnAcc(sAcc))  //исключаем физиков
+      if (not bVip)
+        rewind(oTblAcc);
+        oTblAcc.rec.account=sAcc;
+        if (getEQ(oTblAcc))
+          iDays=180;
+          mRet=macULMoneyArhOp(sAcc,{curdate}-1,oTblAcc.rec.Final_Date,iDprt,oTblAcc.rec.Open_date,iDays);
+        end;
+    end;
+    end;
+  elif (iTypeFee==2) //информация по телефону
+    /*Установка параметров удержания*/
+    arrSumNotVip(1)=Money(250);
+    arrSumNotVip(2)=Money(250);
+    arrSumNotVip(3)=Money(250);
+    arrSumNotVip(4)=Money(250);
+    arrSumNotVip(5)=Money(250);
+    arrSumNotVip(6)=Money(250);
+    mSumNotVip=arrSumNotVip(iDprt);
+    arrSumVip(1)=Money(250);
+    arrSumVip(2)=Money(250);
+    arrSumVip(3)=Money(250);
+    arrSumVip(4)=Money(250);
+    arrSumVip(5)=Money(250);
+    arrSumVip(6)=Money(250);
+    mSumVip=arrSumVip(iDprt);
+    rewind(oTblAcc);
+    oTblAcc.rec.account=sAcc;
+    if (getEQ(oTblAcc))
+      if (
+          (index(oTblAcc.rec.UserTypeAccount,"Т")>0) and
+          (not macALCheckFizClnAcc(sAcc)) //исключаем физиков
+         )
+        if (not bVIP)
+          mRet=mSumNotVip;
+        else
+          mRet=mSumVip;
+        end;
+      end;
+    end
+  elif (iTypeFee==3) //iBank2
+    /*Установка параметров удержания*/
+    arrSumNotVip(1)=Money(1000);
+    arrSumNotVip(2)=Money(1000);
+    arrSumNotVip(3)=Money(1000);
+    arrSumNotVip(4)=Money(1000);
+    arrSumNotVip(5)=Money(0);
+    arrSumNotVip(6)=Money(0);
+    mSumNotVip=arrSumNotVip(iDprt);
+    arrSumVip(1)=Money(490);
+    arrSumVip(2)=Money(490);
+    arrSumVip(3)=Money(400);
+    arrSumVip(4)=Money(400);
+    arrSumVip(5)=Money(0);
+    arrSumVip(6)=Money(0);
+    mSumVip=arrSumVip(iDprt);
+    rewind(oTblAcc);
+    oTblAcc.rec.account=sAcc;
+    if (getEQ(oTblAcc))
+      if (
+          (index(oTblAcc.rec.UserTypeAccount,"J")>0) and
+          (not macALCheckFizClnAcc(sAcc)) //исключаем физиков
+         )
+        //add Polyakov S.George 17.04.2013
+        if (macULYesSumChMon(sAcc,iMon_,iYear_,{curdate}))
+          if (not bVIP)
+            mRet=mSumNotVip;
+          else
+            mRet=mSumVip; 
+          end;
+        end;
+      end;
+    end
+  elif (iTypeFee==4) //прием наличных для зачисления на счет
+    if (not macALCheckFizClnAcc(sAcc)) //исключаем физиков
+      rewind(oTblAcc);
+      oTblAcc.rec.account=sAcc;
+      if (getEQ(oTblAcc))
+        mRet=macULSumKassIn(
+                            sAcc,
+                            macALGetDprtAcc(sAcc),
+                            bVip,
+                            oTblAcc.rec.UserTypeAccount,
+                            bOutTime,
+                            {curdate}
+                           );
+      end;
+    end;
+  elif (iTypeFee==5) //выдача наличных денежных средств со счета клиента 
+    if (not macALCheckFizClnAcc(sAcc)) //исключаем физиков
+      mRet=macULSumKassOut(sAcc,iDprt,bVip,{curdate},bOutTime);
+    end;
+  elif (iTypeFee==6) //исполнение п/п
+    if (not macALCheckFizClnAcc(sAcc))
+      mRet=macULRasPoru(sAcc,iDprt,bVip);
+    end;
+  elif (iTypeFee==7) //под встречные платежи
+    if (not macALCheckFizClnAcc(sAcc)) //исключаем физиков
+      mRestA=money(0);
+      mRestA=resta(sAcc,dDate-1); //входящий остаток на счете на дату dDate
+      mDebetA=money(0);
+      mKreditA=money(0);
+      mDebetA=debeta(sAcc,dDate); //обороты под дебету за дату dDate
+      mKreditA=kredita(sAcc,dDate); //обороты по кредиту за дату dDate
+      if (dDate=={curdate})
+        mRet=macULAkceptBank(sAcc,iDprt,bVip,bOutTime,dDate,mRestA,mDebetA,mKreditA);
+      else
+        mRet=macULAkceptBankArhDay(sAcc,iDprt,bVip,bOutTime,dDate,mRestA,mDebetA,mKreditA);
+      end;
+    end;
+  elif (iTypeFee==8) //выдача в день поступления в безналичной форме
+    if (not macALCheckFizClnAcc(sAcc)) //исключаем физиков 
+      if (not bVip)
+        mRestA=money(0);
+        mRestA=resta(sAcc,dDate-1); //входящий остаток на счете на дату dDate
+        mDebetA=money(0);
+        mKreditA=money(0);
+        mDebetA=debeta(sAcc,dDate); //обороты под дебету за дату dDate
+        mKreditA=kredita(sAcc,dDate); //обороты по кредиту за дату dDate
+        //только по стандартному тарифу
+        mRet=macULKassInOut(sAcc,iDprt,bVip,bCurDate,bOutTime,dDate,mRestA,mDebetA,mKreditA);
+      end;
+    end;
+  elif (iTypeFee==9)
+    if (macALCheckFizClnAcc(sAcc))
+      //смотрим только физиков
+      rewind(oTblAcc);
+      oTblAcc.rec.account=sAcc;
+      if (getEQ(oTblAcc))
+        if (
+            (index(oTblAcc.rec.UserTypeAccount,"5")==0) //исключаем счета ОБК
+           )    
+          mRet=macULFizRasPoru(sAcc,iDprt,bVip);
+        end;
+      end;
+    end;
+  elif (iTypeFee==10)
+    if (macALCheckFizClnAcc(sAcc))
+      //смотрим только физиков
+      mRet=macULFizSumKassOut(sAcc,iDprt,bVip,{curdate},bOutTime);
+    end;
+  end;
+  //*******************************************************
+  return mRet;
+end; 
+
+//макрос формирования документов в отложенных
+macro macFLCreatePost(
+                      iTypeFee:integer,
+                      sAcc:string,
+                      mSum:money,
+                      iOper:integer,
+                      iNumbDoc:integer,
+                      iClient:integer,
+                      iDprt:integer,
+                      sTypeAcc:string,
+                      bOutTime:bool,
+                      iMon_:integer,
+                      iYear_:integer,
+                      dDate:date
+                     ):bool
+  var
+     iDay:integer,iMon:integer,iYear:integer,
+     sAccReceiver:string,
+     sAccInNote:string,
+     sAccTmp:string,
+     iClnTmp:integer,
+     dDateValue:date,
+     sKindOper:string,
+     sNamePayer:string,
+     sNameReceiver:string,
+     sBankPayer:string,
+     sBankReceiver:string,
+     sNotePay:string,
+     sINNPayer:string,
+     sINNReceiver:string,
+     sSymbolCach:string,
+     iPayment:integer,
+     dPayDate:date,
+     sShifrOper:string,
+     sKppPayer:string,
+     dDateDoc:date,
+     iNumberPack:integer,
+     bRet:bool,
+     bNext:bool,
+     mOstCurDay:money,
+     sUsrTypeDoc:string,
+     i:integer;
+  array 
+     arrAcc,arrSum,arrNumPack;
+
+  sAccInNote=sAcc;
+  sAccTmp="";
+  datesplit({curdate},iDay,iMon,iYear);
+  bRet=false;
+  dDateValue={curdate};
+  dDateDoc={curdate};
+  sKindOper="1";
+  sNamePayer=macCLGetNameCln(iClient);
+  sBankPayer=GetBankName({MFO_Bank},{CORAC_Bank}); //edt Polyakov S.George 21.06.2013
+  //sBankPayer={Name_Bank};
+  sBankReceiver=GetBankName({MFO_Bank},{CORAC_Bank}); //edt Polyakov S.George 21.06.2013
+  //sBankReceiver={Name_Bank};
+  sINNPayer=GetClientInn(iClient);
+  sINNReceiver=ИНН;
+  sSymbolCach="  0";
+  iPayment=6;
+  dPayDate={curdate};
+  sShifrOper="17";
+  sNotePay="Комиссия банка, согласно сборнику тарифов вознаграждений "+macALGetDprtName(iDprt);
+  sKppPayer=macCLGetKPP(iClient);
+  bNext=true;
+  sUsrTypeDoc="";
+  //*******************************************************
+  if (iTypeFee==0) //за ведение счета
+    sNotePay="Комиссия за обслуживание счета "+sAccInNote+" в период c "+macULGetStrDate(Date(1,iMon_,iYear_));
+    sNotePay=sNotePay+" по "+macULGetStrDate(macULGetLastDate(Date(1,iMon_,iYear_)));
+    arrAcc(1)="70601810402002101052"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810502012101052";
+    arrAcc(3)="70601810602022101052";
+    arrAcc(4)="70601810602022101052"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810802042101052";
+    arrAcc(5)="70601810702032101052";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=303;
+    arrNumPack(2)=303;
+    arrNumPack(3)=100;
+    arrNumPack(4)=100;
+    arrNumPack(5)=100;
+    arrNumPack(6)=100;
+    iNumberPack=arrNumPack(iDprt);
+  elif (iTypeFee==1) //за отсутствие движения 180 к.д.
+    sNotePay="Комиссия за обслуживание счета "+sAccInNote;
+    sNotePay=sNotePay+" при отсутствии клиентских операций по нему более";
+    sNotePay=sNotePay+" 180 календарных дней";
+    sUsrTypeDoc="8";
+    arrAcc(1)="70601810602002101056"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810702012101056";
+    arrAcc(3)="70601810802022101056";
+    arrAcc(4)="70601810802022101056"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810002042101056";
+    arrAcc(5)="70601810902032101056";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=888;
+    arrNumPack(2)=88;
+    arrNumPack(3)=8;
+    arrNumPack(4)=8;
+    arrNumPack(5)=100;
+    arrNumPack(6)=100;
+    iNumberPack=arrNumPack(iDprt);
+  elif (iTypeFee==2) //по телефону
+    sNotePay="Комиссия за предоставление услуги телефонного информирования по счету "+sAccInNote;
+    sNotePay=sNotePay+" в период c "+macULGetStrDate(Date(1,iMon_,iYear_));
+    sNotePay=sNotePay+" по "+macULGetStrDate(macULGetLastDate(Date(1,iMon_,iYear_)));
+    arrAcc(1)="70601810002002101054"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810102012101054";
+    arrAcc(3)="70601810202022101054";
+    arrAcc(4)="70601810202022101054"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810402042101054";
+    arrAcc(5)="70601810302032101054";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=304;
+    arrNumPack(2)=304;
+    arrNumPack(3)=111;
+    arrNumPack(4)=111;
+    arrNumPack(5)=111;
+    arrNumPack(6)=111;
+    iNumberPack=arrNumPack(iDprt);
+  elif (iTypeFee==3) //iBank
+    sNotePay="Комиссия за использование системы iBank2 по счету "+sAccInNote;
+    sNotePay=sNotePay+" в период c "+macULGetStrDate(Date(1,iMon_,iYear_));
+    sNotePay=sNotePay+" по "+macULGetStrDate(macULGetLastDate(Date(1,iMon_,iYear_)));
+    arrAcc(1)="70601810702002102120"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810802012102120";
+    arrAcc(3)="70601810902022102120";
+    arrAcc(4)="70601810902022102120"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810102042102120";
+    arrAcc(5)="70601810002032102120";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=305;
+    arrNumPack(2)=305;
+    arrNumPack(3)=404;
+    arrNumPack(4)=404;
+    arrNumPack(5)=404;
+    arrNumPack(6)=404;
+    iNumberPack=arrNumPack(iDprt);
+  elif (iTypeFee==4) //прием наличных денежных средств для зачисления на счет
+    sNotePay="Комиссия за прием наличных денежных средств для зачисления на счет ";
+    sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate({curdate});
+    arrAcc(1)="70601810002002102105"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810102012102105";
+    arrAcc(3)="70601810202022102105";
+    arrAcc(4)="70601810202022102105"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810402042102105";
+    arrAcc(5)="70601810302032102105";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=222;
+    arrNumPack(2)=223;
+    arrNumPack(3)=891;
+    arrNumPack(4)=891;
+    arrNumPack(5)=891;
+    arrNumPack(6)=891;
+    if (bOutTime) //послеоперационное время
+      arrNumPack(1)=222;
+      arrNumPack(2)=223;
+      arrNumPack(3)=892;
+      arrNumPack(4)=891;
+      arrNumPack(5)=891;
+      arrNumPack(6)=891  
+    end;
+    iNumberPack=arrNumPack(iDprt);
+    if (iDprt==3)
+      if (index(sTypeAcc,"J")>0)
+        sTypeAcc=string(iNumberPack);
+        iNumberPack=int(sTypeAcc+SubStr(sTypeAcc,StrLen(sTypeAcc),1));
+      end;
+    end;
+  elif (iTypeFee==5)
+    sNotePay="Комиссия за выдачу наличных денежных средств со счета ";
+    sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate({curdate});
+    arrAcc(1)="70601810002002102105"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810102012102105";
+    arrAcc(3)="70601810202022102105";
+    arrAcc(4)="70601810202022102105"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810402042102105";
+    arrAcc(5)="70601810302032102105";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=222;
+    arrNumPack(2)=223;
+    arrNumPack(3)=891;
+    arrNumPack(4)=891;
+    arrNumPack(5)=891;
+    arrNumPack(6)=891;
+    if (bOutTime) //послеоперационное время
+      arrNumPack(1)=222;
+      arrNumPack(2)=223;
+      arrNumPack(3)=892;
+      arrNumPack(4)=891;
+      arrNumPack(5)=891;
+      arrNumPack(6)=891
+    end;
+    iNumberPack=arrNumPack(iDprt);
+    if (iDprt==3)
+      if (index(sTypeAcc,"J")>0)
+        sTypeAcc=string(iNumberPack);
+        iNumberPack=int(sTypeAcc+SubStr(sTypeAcc,StrLen(sTypeAcc),1));
+      end;
+    end;
+  elif (iTypeFee==6)
+    sNotePay="Комиссия за исполнение платежных поручений Клиента по счету ";
+    sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate({curdate});
+    arrAcc(1)="70601810702002102133"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810802012102133";
+    arrAcc(3)="70601810902022102133";
+    arrAcc(4)="70601810902022102133"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810102042102133";
+    arrAcc(5)="70601810002032102133";
+    arrAcc(6)="70601***2102133";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=333;
+    arrNumPack(2)=334;
+    arrNumPack(3)=684;
+    arrNumPack(4)=684;
+    arrNumPack(5)=684;
+    arrNumPack(6)=684;
+    iNumberPack=arrNumPack(iDprt);
+    if (iDprt==3)
+      if (index(sTypeAcc,"J")>0)
+        sTypeAcc=string(iNumberPack);
+        iNumberPack=int(sTypeAcc+SubStr(sTypeAcc,StrLen(sTypeAcc),1));
+      end;
+    end;
+  elif (iTypeFee==7) //под встречные платежи
+    sNotePay="Комиссия за исполнение п/п Клиента ";
+    sNotePay=sNotePay+" под встречные платежи из других банков по счету ";
+    sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate(dDate);
+    sNotePay=sNotePay+" при условии акцептирования заявки Банком";
+    arrAcc(1)="70601810402002102132"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810502012102132";
+    arrAcc(3)="70601810602022102132";
+    arrAcc(4)="70601810602022102132"; //доходы с 4 на 3 edt Polyakov S.George 05.04.2013
+    //arrAcc(4)="70601810802042102132";
+    arrAcc(5)="70601810702032102132";
+    arrAcc(6)="70601***2102132";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=111;
+    arrNumPack(2)=111;
+    arrNumPack(3)=111;
+    arrNumPack(4)=111;
+    arrNumPack(5)=111;
+    arrNumPack(6)=111;
+    iNumberPack=arrNumPack(iDprt);
+  elif (iTypeFee==8)
+    sNotePay="Комиссия под встречные платежи из других банков при выдачи наличных денежных средств со счета ";
+    sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate({curdate});
+    sNotePay=sNotePay+" в день поступления денежных средств в безналичной форме";
+    arrAcc(1)="70601810002002102105"; //инициализируем счетами для зачисления комиcсии
+    arrAcc(2)="70601810102012102105";
+    arrAcc(3)="70601810202022102105";
+    arrAcc(4)="70601810202022102105"; 
+    arrAcc(5)="70601810302032102105";
+    arrAcc(6)="";
+    sAccReceiver=arrAcc(iDprt);
+    arrNumPack(1)=222;
+    arrNumPack(2)=223;
+    arrNumPack(3)=112;
+    arrNumPack(4)=112;
+    arrNumPack(5)=891;
+    arrNumPack(6)=891;
+    if (bOutTime) //послеоперационное время
+      arrNumPack(1)=222;
+      arrNumPack(2)=223;
+      arrNumPack(3)=112;
+      arrNumPack(4)=112;
+      arrNumPack(5)=891;
+      arrNumPack(6)=891
+    end;
+    iNumberPack=arrNumPack(iDprt);
+    if (iDprt==3)
+      if (index(sTypeAcc,"J")>0)
+        sTypeAcc=string(iNumberPack);
+        iNumberPack=int(sTypeAcc+SubStr(sTypeAcc,StrLen(sTypeAcc),1));
+      end;
+    end;
+    elif (iTypeFee==9) //исполнение п/п по физическим лицам 
+      sNotePay="Комиссия за исполнение платежных поручений Клиента по счету ";
+      sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate({curdate});
+      arrAcc(1)=""; //инициализируем счетами для зачисления комиcсии
+      arrAcc(2)="";
+      arrAcc(3)="70601810002022102130";
+      arrAcc(4)="70601810002022102130"; 
+      arrAcc(5)="";
+      arrAcc(6)="";
+      sAccReceiver=arrAcc(iDprt);
+      arrNumPack(1)=000;
+      arrNumPack(2)=000;
+      arrNumPack(3)=000;
+      arrNumPack(4)=000;
+      arrNumPack(5)=000;
+      arrNumPack(6)=000;
+      if (bOutTime) //послеоперационное время
+        arrNumPack(1)=000;
+        arrNumPack(2)=000;
+        arrNumPack(3)=000;
+        arrNumPack(4)=000;
+        arrNumPack(5)=000;
+        arrNumPack(6)=000;
+      end;
+      iNumberPack=arrNumPack(iDprt);
+    elif (iTypeFee==10) //выдача наличности со счетов физических лиц
+      sNotePay="Комиссия за выдачу наличных денежных средств со счета ";
+      sNotePay=sNotePay+sAccInNote+ " на дату "+macULGetStrDate({curdate});
+      arrAcc(1)=""; //инициализируем счетами для зачисления комиcсии
+      arrAcc(2)="";
+      arrAcc(3)="70601810002022102101";
+      arrAcc(4)="70601810002022102101"; 
+      arrAcc(5)="";
+      arrAcc(6)="";
+      sAccReceiver=arrAcc(iDprt);
+      arrNumPack(1)=000;
+      arrNumPack(2)=000;
+      arrNumPack(3)=000;
+      arrNumPack(4)=000;
+      arrNumPack(5)=000;
+      arrNumPack(6)=000;
+      if (bOutTime) //послеоперационное время
+        arrNumPack(1)=000;
+        arrNumPack(2)=000;
+        arrNumPack(3)=000;
+        arrNumPack(4)=000;
+        arrNumPack(5)=000;
+        arrNumPack(6)=000;
+      end;
+      iNumberPack=arrNumPack(iDprt);
+  else
+    bNext=false; 
+  end;
+  //*******************************************************
+  if (bNext)
+    sAccReceiver=arrAcc(iDprt);
+    sNameReceiver=macULGetOneT(macCLGetNameClnAcc(sAccReceiver,false),true,"^");
+    sNotePay=sNotePay+". НДС не облагается.";
+    if (StrLen(sNameReceiver)==0)
+      bNext=false;
+      println("Неверно указан доходный счет "+sAccReceiver+" для подразделения "+string(iDprt));
+    end;
+  else
+    println("Не сконфигурированы настройки формирования отложенных документов!");
+  end;
+  if (bNext)
+    /*Удерживаем комиссию с этого же счета или со связанного?*/
+    /*Если с другого, то надо сменить платежные реквизиты*/
+    /*sAcc=new, sNamePayer=new, sINNPayer=new, sKppPayer=new*/
+    if (macALCheckSpeAcc(sAcc))
+      //если спец. счет, то надо выполнять удержание со связанного счета
+      sAccTmp=macALGetLinkAcc(sAcc);
+      if (StrLen(sAccTmp)!=0)
+        //удерживаем с другого счета, с sAccTmp
+        sAcc=sAccTmp;
+        iClnTmp=int(macULGetOneT(macCLGetNameClnAcc(sAcc),false,"^"));
+        //переформировываем реквизиты плательщика
+        sNamePayer=macCLGetNameCln(iClnTmp);
+        sINNPayer=GetClientInn(iClnTmp);
+        sKppPayer=macCLGetKPP(iClnTmp);
+      end;
+    end;
+    mOstCurDay=RestA(sAcc,{curdate});
+    if (
+        (mOstCurDay<mSum) 
+                         and 
+        (mOstCurDay>Money(0))
+       )
+       //если остаток меньше комисии, но БОЛЬШЕ 0
+       arrSum(0)=mOstCurDay;
+       arrSum(1)=mSum-mOstCurDay;
+    else
+       arrSum(0)=mSum;
+    end;
+    i=0;
+    while (i<asize(arrSum))
+      bRet=macULInsDocToPost(
+                             sAcc,
+                             sAccReceiver,
+                             arrSum(i),
+                             iNumberPack,
+                             dDateValue,
+                             String(iNumbDoc),
+                             dDateDoc,
+                             sKindOper,
+                             sNamePayer,
+                             sNameReceiver,
+                             sBankPayer,
+                             sBankReceiver,
+                             sNotePay,
+                             sINNPayer,
+                             sINNReceiver,
+                             sSymbolCach,
+                             iPayment,
+                             dPayDate,
+                             iDprt,
+                             sShifrOper,
+                             iOper,
+                             "",
+                             sUsrTypeDoc
+                           );
+      if (not bRet)
+        println("(!) Ошибка формирования документа в отложенные на сумму:"+string(arrSum(i)));
+      else
+        println("       №: "+String(iNumbDoc)+" Сумма: "+string(arrSum(i))+" Пачка: "+string(iNumberPack));
+      end;
+      i=i+1;
+    end;
+  end;
+  return bRet;
+end;  
+
+//процедура удержания
+macro macFLfee(
+               iTypeFee:integer,
+               iDprt:integer,
+               bPost:bool,
+               bSplitOper:bool,
+               bVIP:bool,
+               iMon_:integer,
+               iYear_:integer,
+               dDate:date
+              ):bool
+  var
+     bNext:bool,
+     mSum:money,
+     bNextAcc:bool,
+     i:integer,
+     bRet:bool,
+     mFee:money,
+     bOutTime:bool,
+     oTblAcc:object;
+  i=0;
+  msum=money(0);
+  bRet=false;
+  bOutTime=false;
+  oTblAcc=TBFile("account.dbt","r",0,null,"bank.def");
+  rewind(oTblAcc);
+  oTblAcc.rec.account="40500000000000000000";
+  if (getge(oTblAcc))
+    bRet=true;
+    bNext=true;
+    if (
+        (iTypeFee==5) or
+        (iTypeFee==4) or
+        (iTypeFee==8)
+       )
+       gettrue(bOutTime,"Выполнить обработку для ПОСЛЕОПЕРАЦИОННОГО времени?");
+    end;
+    while(bNext)
+      if (oTblAcc.rec.account<"40900000000000000000")
+        if (
+            (oTblAcc.rec.Department==iDprt) and 
+            (oTblAcc.rec.Open_Close!="З")
+           )
+          message("Идет просмотр счета: "+oTblAcc.rec.account);
+          if ( 
+              (macALCheckAccClnNacVIP(oTblAcc.rec.account,oTblAcc.rec.UserTypeAccount,bVIP)) and
+              (StrLen(GetClientInn(oTblAcc.rec.Client))>0)
+             )
+            mFee=macFLGetFee(
+                             iTypeFee,
+                             oTblAcc.rec.account,
+                             bVIP,
+                             iDprt,
+                             bOutTime,
+                             iMon_,
+                             iYear_,
+                             dDate
+                             );
+            if (mFee!=Money(0))               
+               bNextAcc=true;
+               if (bSplitOper)
+                 if (oTblAcc.rec.oper=={oper})
+                 else
+                   bNextAcc=false; //счет не текущего операциониста
+                 end;
+               end;
+               if (bNextAcc)
+                 i=i+1;
+                 macULRpt(i,oTblAcc.rec.account,mFee);
+                 mSum=mSum+mFee;
+                 if (bPost)
+                   //формируем в отложенные
+                   macFLCreatePost(
+                                   iTypeFee,
+                                   oTblAcc.rec.account,
+                                   mFee,oTblAcc.rec.oper,
+                                   i,
+                                   oTblAcc.rec.client,
+                                   iDprt,
+                                   oTblAcc.rec.UserTypeAccount,
+                                   bOutTime,
+                                   iMon_,
+                                   iYear_,
+                                   dDate 
+                                  );
+                 end;
+               end;
+            end;
+          end;
+        end;
+        bNext=next(oTblAcc);
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+  macULRptItogo(mSum);
+  [
+   Исполнитель: #]
+  (getfiooper({oper}));
+  return bRet;
+end;
+
+//основной макрос - ветвитель по категориям
+macro macFLMain():bool
+  var
+     sCanc:string,
+     iDprt:integer,
+     iNumMenu:integer,
+     bPost:bool,
+     bSplitOper:bool,
+     bVIP:bool,
+     bRet:bool,
+     iMon_:integer,
+     bYes:bool,
+     iYear_:integer,
+     sInf:string,
+     oFeeName:object,
+     sTypeNameFee:string,
+     dDate:date; //потенциальный кандидат на указание даты платежа и управления датой проводки
+
+  array 
+     arrMenu;
+  
+  sCanc="ДЕЙСТВИЕ ОТМЕНЕНО ПОЛЬЗОВАТЕЛЕМ!";
+  iMon_=0;
+  iYear_=0;
+  bYes=true;
+  bRet=false;
+  bPost=false;
+  bSplitOper=false;
+  bVIP=false;
+  sInf="";
+  dDate={curdate};
+  iNumMenu=-1;
+  arrMenu(0)="Обслуживание счетов клиентов в валюте РФ (Кроме пользователей системы iBank2)";
+  arrMenu(1)="Обслуживание счетов клиентов в валюте РФ (Без операций более 180 к.д.)";
+  arrMenu(2)="Предоставление информации клиентам по телефону (тип счета T)";
+  arrMenu(3)="Абонентская плата за использование системы iBank2 (тип счета J)";
+  arrMenu(4)="Прием наличных денежных средств для зачисления на расчетный счет Клиента";
+  arrMenu(5)="Выдача наличных денежных средств со счета клиента";
+  arrMenu(6)="Переводы Клиентов в валюте РФ (Исполнение платежных поручений)";
+  arrMenu(7)="Исполнение платежных поручений под встречные платежи из других банков";
+  arrMenu(8)="Выдача наличных денежных средств со счета в день поступления в безналичной форме";
+  arrMenu(9)="Переводы ФИЗИЧЕСКИХ лиц в валюте РФ (Исполнение платежных поручений)";
+  arrMenu(10)="Выдача наличных денежных средств со счетов ФИЗИЧЕСКИХ лиц";
+  iDprt=macALGetDprt();
+  if (iDprt>=0)
+     iNumMenu=macULRetMenu(arrMenu,"Выбор категории вознаграждения банка","Выбор:");
+     if (iDprt!={operdprt})
+       if (not gettrue(false,"Вы выбрали не свое подразделение! Продолжить?"))
+         iNumMenu=-1;
+       end;
+     end;
+     if (iNumMenu>=0)
+      gettrue(bVIP,"Обработка VIP клиентов? (тип счета Y) НЕТ - обработка только обычных клиентов");
+      gettrue(bPost,"Формировать проводки в отложенные документы?");
+      gettrue(bSplitOper,"Обрабатывать счета только ВАШЕГО операциониста?");
+      if (bPost)
+        if (not bSplitOper)
+          msgbox("Внимание!\n Будут обработаны ВСЕ счета!\n Но проводки сформированы c учетом закрепления счета за операционистом!");
+        end;
+      end;
+      if (
+          (iNumMenu==0) or
+          (iNumMenu==2) or
+          (iNumMenu==3)
+         )
+        iMon_=int(macULGetOneT(macULGetMonMenu({curdate}),true));
+        if (iMon_!=0)
+          iYear_=macULGetYear({curdate});
+          if (iYear_==0)
+            bYes=false;  
+          end;
+        else
+          bYes=false;
+        end;
+      elif (
+            (iNumMenu==7) or 
+            (iNumMenu==8)
+           )
+        //уточняем за какой день будем удерживать вознаграждения
+        if (not (gettrue(true,"Обработать текущий операционный день?")))
+          if (getdate(dDate,"Укажите дату, документы за которую хотите обработать:"))
+            if ( 
+                (dDate>{curdate}) or 
+                (dDate==Date(0,0,0))
+               )
+              dDate={curdate};
+            end;
+          end;
+        end
+      end;
+      if (bYes)
+        if (bPost)
+          sInf="(Проводки будут сформированы)";
+        else
+          sInf="(Без формирования проводок)";
+        end;
+        if (dDate!={curdate})
+          sInf="Будут обработаны документы за дату: "+macULGetStrDate(dDate)+" "+sInf;
+        elif (
+              (iMon_!=0) and 
+              (iYear_!=0)
+             )
+          sInf="Будут обработаны документы за месяц: "+macULSetAddSpace(string(iMon_),2,"0")+"."+string(iYear_)+" года "+sInf;
+        else
+          sInf="Будут обработаны документы текущего операционного дня "+sInf;
+        end;
+        if (gettrue(false,"Запустить обработку?\n"+sInf+"\n"+StrUpr(macALGetDprtName(iDprt))))
+          if (bVip)
+            sTypeNameFee="Премиальный";
+          else
+            sTypeNameFee="Стандартный";
+          end;
+          oFeeName=StrSplit2(arrMenu(iNumMenu),50,50,2);
+          if (
+              (iMon_!=0) and
+              (iYear_!=0)
+             )
+            sInf="Обработаны документы за месяц: "+macULSetAddSpace(string(iMon_),2,"0")+"."+string(iYear_)+" года";
+          else
+            sInf="Обработаны документы за дату: "+macULGetStrDate(dDate)
+          end;
+          [#
+           #
+           #                                                               
+           #
+           #
+           #]
+          (
+           "Организация: "+StrUpr(macALGetDprtName(iDprt)),
+           "Тип комиссии: "+StrUpr(oFeeName(0)),
+           StrUpr(oFeeName(1)),
+           "Дата операционного дня: "+macULGetStrDate({curdate}),
+           sInf,
+           "Тип тарифов: "+StrUpr(sTypeNameFee)
+          );
+          println("------");
+          bRet=macFLfee(iNumMenu,iDprt,bPost,bSplitOper,bVIP,iMon_,iYear_,dDate);
+        else
+          println(sCanc);
+        end;
+      end;
+     end;
+  else
+      if (iDprt==-1)
+        msgbox("Не указано подразделение банка!");
+      else
+        println(sCanc);
+      end;
+  end;
+  return bRet;
+end;
+
+

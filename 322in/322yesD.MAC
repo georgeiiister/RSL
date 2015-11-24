@@ -1,0 +1,25 @@
+/*
+Макрос работы для проверки типа счета - наличие символа "Д"
+developer Polyakov S.George 14.02.2011
+*/
+
+file r_acc0(account,"bank.def") key 0;
+
+var iK=int(0),iD=int(0);
+
+rewind(r_acc0);
+clearrecord(r_acc0);
+
+InitProgress(NRecords(r_acc0,"Просмотр","Обработано строк"));
+
+while (next(r_acc0))
+  iK=iK+1;
+  UseProgress(iK);
+  if (((trim(r_acc0.balance)=="40502") Or (trim(r_acc0.balance)=="40602") Or (trim(r_acc0.balance)=="40702")  Or (trim(r_acc0.balance)=="40703") Or (trim(r_acc0.balance)=="40802")) and (r_acc0.Open_Close!="З"))
+    if (index(r_acc0.Type_Account,"Д")!=0);
+      iD=iD+1;
+      printLn(r_acc0.Account);
+    end;
+  end;
+end;
+

@@ -1,0 +1,233 @@
+/**/
+
+file  izv1 (nal_out,  "sofia.def") key 0;
+file  izv0 (nal_out,  "sofia.def") key 0 write;
+file  num1 (nal_nums, "sofia.def") key 1;
+file  num0 (nal_nums, "sofia.def") key 0 write;
+file  snd1 (nal_izv,  "sofia.def") key 0;
+file  snd0 (nal_izv,  "sofia.def") key 0 write;
+file  acc1 (account,  "sofia.def") key 0;
+file  clt1 (client,   "sofia.def") key 0;
+file  cls1 (clients1, "sofia.def") key 0;
+file  cls3 (clients3, "sofia.def") key 0;
+file  fil1 (nal_file, "sofia.def") key 1;
+file  fil0 (nal_file, "sofia.def") key 0 write;
+
+file t () txt;
+
+INNB  = "7706195570";      //ИНН Банка
+KPPB  = "643902001";       //КПП Банка
+BICB  = "046359826";       //БИК Банка
+REGNB = "2867";            //Регистрационный номер Банка
+OGRNB = "1027739066354";   //ОГРН Банка
+NALB  = "6439";            //Код налоговой Банка
+NAMEB = "Балаковский филиал АКБ СОФИЯ (ЗАО)"; //Наименование Банка
+ADRB  = "413800,64,Саратовский,Балаково,,Титова,37,,";
+IDB   = INNB + "**" + KPPB;
+FIL   = "0001";            //Порядковый номер филиала Банка
+TPB   = "(8453)44-16-71";  //Телефон Банка
+FIO   = "СТРЕКНЕВА,НАДЕЖДА,ЛЬВОВНА";            //Исполнитель
+WORK  = "ГЛАВНЫЙ БУХГАЛТЕР"; //Должность исполнителя
+
+macro main()
+ if ( not selectfile( fname, "*.txt", "ВЫБЕРИТЕ файл с данными " ) )
+   exit( 1 );
+ end;
+ if(not open(t,fname))
+   MsgBox("Файл "+fname+" не открыт!");
+   exit(1);
+ end;
+
+// MsgBox("!");
+
+ rewind(t);
+ SetDelim("|");
+ next(t);
+ CurDate = "";
+ while(next(t))
+   if(t(4)=="открыт")
+    X1 = "0";
+    Type_Change = "0";
+   elif(t(4)=="закрыт")
+    X1 = "2";
+    Type_Change = "2";
+   elif(t(4)=="изменен")
+    X1 = "1";
+    Type_Change = "1x";
+   end;
+   NNNNNN = "";
+   NNNNNN = t(0);
+   while(StrLen(NNNNNN)<6)
+    NNNNNN = "0"+NNNNNN;
+   end;
+
+   MMM = "";
+/*
+   if(Trim(t(6)) == "")
+     MMM = "001"; //т.к. у нас только раз в году это было.
+   else
+     MMM = "002";
+   end;
+*/
+   Client = 0;
+   rewind(acc1);
+   ClearRecord(acc1);
+   acc1.Account = Trim(t(2));
+   flag1 = (GetEQ(acc1));
+   if(flag1)
+      Client = acc1.Client;
+   end;
+
+   MMM = "001"; //т.к. у нас только раз в году это было.
+   File_Name = "";
+   File_Name = File_Name+"SBC"+X1+"1"+SubStr(BICB,3,9)+"_"+NALB+SubStr(t(3),7,4)+SubStr(t(3),4,2)+SubStr(t(3),1,2)+"_"+REGNB+FIL+SubStr(t(3),9,2)+NNNNNN+"_"+MMM+".txt";
+ //  if(Trim(t(6)) == "")     //первый раз в году
+       rewind(izv0);
+       ClearRecord(izv0);
+       izv0.Account = Trim(t(2));
+       izv0.Balance = SubStr(Trim(t(2)),1,5);
+       izv0.Code_Currency = SubStr(Trim(t(2)),6,3);
+       izv0.Date_Change   = Date(Int(SubStr(Trim(t(3)),1,2)),Int(SubStr(Trim(t(3)),4,2)),Int(SubStr(Trim(t(3)),7,4)));
+       izv0.Flag_Send = 1;
+       izv0.Rezult    = 1;
+       izv0.Comment   = "До положения 311П. Через Контур-Экстерн";
+       izv0.Oper      = t(5);
+       izv0.LastNumb  = 1;
+       izv0.File_Name = File_Name;
+       izv0.File_Numb = Int(NNNNNN);
+       insert(izv0);
+
+       rewind(snd0);
+       ClearRecord(snd0);
+       snd0.Account = Trim(t(2));
+       snd0.Balance = SubStr(Trim(t(2)),1,5);
+       snd0.Code_Currency = SubStr(Trim(t(2)),6,3);
+       snd0.Date_Change   = Date(Int(SubStr(Trim(t(3)),1,2)),Int(SubStr(Trim(t(3)),4,2)),Int(SubStr(Trim(t(3)),7,4)));
+       snd0.ID_Account    = izv0.ID;
+//       snd0.Flag_Send = 1;
+       snd0.Rezult     = 1;
+       snd0.Comment    = "До положения 311П. Через Контур-Экстерн";
+       snd0.Oper       = t(5);
+       snd0.Send_Numb  = String(1);
+       snd0.Date_Send  = Date(Int(SubStr(Trim(t(3)),1,2)),Int(SubStr(Trim(t(3)),4,2)),Int(SubStr(Trim(t(3)),7,4)));
+       snd0.File_SName = File_Name;
+       insert(snd0);
+
+       rewind(num1);
+       ClearRecord(num1);
+       num1.Year = Int(SubStr(Trim(t(3)),7,4));
+       flag1     = (GetEQ(num1));
+       ID_Nums   = num1.ID;
+
+       if(flag1)
+          rewind(num0);
+          ClearRecord(num0);
+          num0.ID = ID_Nums;
+          flag1   = (GetEQ(num0));
+          if(flag1)
+            num0.Numb = Int(t(0));
+            update(num0);
+          end;
+       else
+          rewind(num0);
+          ClearRecord(num0);
+          num0.Numb = Int(t(0));
+          num0.Year = Int(SubStr(Trim(t(3)),7,4));
+          insert(num0);
+       end;
+
+       CurDate_0=Date(Int(SubStr(Trim(t(3)),1,2)),Int(SubStr(Trim(t(3)),4,2)),Int(SubStr(Trim(t(3)),7,4)));
+       rewind(fil1);
+       ClearRecord(fil1);
+       fil1.Date_File = CurDate_0;
+       flag1     = (GetEQ(fil1));
+       if(flag1)
+         rewind(fil1);
+         ClearRecord(fil1);
+         fil1.Date_File = Date(Int(SubStr(Trim(t(3)),1,2)),Int(SubStr(Trim(t(3)),4,2)),Int(SubStr(Trim(t(3)),7,4)));
+         flag1     = (GetEQ(fil1));
+         ID_Fil    = fil1.ID;
+         rewind(fil0);
+         ClearRecord(fil0);
+         fil0.ID = ID_Fil;
+         flag1   = (GetEQ(fil0));
+         fil0.File_Numb = fil0.File_Numb + 1;
+         update(fil0);
+       else
+         rewind(fil0);
+         ClearRecord(fil0);
+         fil0.Date_File = Date(Int(SubStr(Trim(t(3)),1,2)),Int(SubStr(Trim(t(3)),4,2)),Int(SubStr(Trim(t(3)),7,4)));
+         fil0.File_Numb = 1;
+         insert(fil0);
+         CurDate = Trim(T(3));
+       end;
+//MsgBox("!");
+if(Trim(t(6)) != "")     //первый раз в году
+   X1 = "1";
+   MMM = "002"; //т.к. у нас только раз в году это было.
+   File_Name = "";
+   File_Name = File_Name+"SBC"+X1+"1"+SubStr(BICB,3,9)+"_"+NALB+SubStr(t(3),7,4)+SubStr(t(3),4,2)+SubStr(t(3),1,2)+"_"+REGNB+FIL+SubStr(t(3),9,2)+NNNNNN+"_"+MMM+".txt";
+   rewind(izv0);
+   ClearRecord(izv0);
+   izv0.Account = Trim(t(2));
+   izv0.Balance = SubStr(Trim(t(2)),1,5);
+   izv0.Code_Currency = SubStr(Trim(t(2)),6,3);
+   izv0.Date_Change   = Date(Int(SubStr(Trim(t(6)),1,2)),Int(SubStr(Trim(t(6)),4,2)),Int(SubStr(Trim(t(6)),7,4)));
+   izv0.Flag_Send = 1;
+   izv0.Rezult    = 1;
+   izv0.Comment   = "До положения 311П. Через Контур-Экстерн";
+   izv0.Oper      = t(5);
+   izv0.LastNumb  = 2;
+   izv0.File_Name = File_Name;
+   izv0.File_Numb = Int(NNNNNN);
+   insert(izv0);
+
+   rewind(snd0);
+   ClearRecord(snd0);
+   snd0.Account = Trim(t(2));
+   snd0.Balance = SubStr(Trim(t(2)),1,5);
+   snd0.Code_Currency = SubStr(Trim(t(2)),6,3);
+   snd0.Date_Change   = Date(Int(SubStr(Trim(t(6)),1,2)),Int(SubStr(Trim(t(6)),4,2)),Int(SubStr(Trim(t(6)),7,4)));
+   snd0.ID_Account    = izv0.ID;
+   snd0.Rezult     = 1;
+   snd0.Comment    = "До положения 311П. Через Контур-Экстерн";
+   snd0.Oper       = t(5);
+   snd0.Send_Numb  = String(2);
+   snd0.Date_Send  = Date(Int(SubStr(Trim(t(6)),1,2)),Int(SubStr(Trim(t(6)),4,2)),Int(SubStr(Trim(t(6)),7,4)));
+   snd0.File_SName = File_Name;
+   insert(snd0);
+
+   CurDate_1=Date(Int(SubStr(Trim(t(6)),1,2)),Int(SubStr(Trim(t(6)),4,2)),Int(SubStr(Trim(t(6)),7,4)));
+   rewind(fil1);
+   ClearRecord(fil1);
+   fil1.Date_File = CurDate_1;
+   flag1     = (GetEQ(fil1));
+
+   if(flag1)
+         rewind(fil1);
+         ClearRecord(fil1);
+         fil1.Date_File = Date(Int(SubStr(Trim(t(6)),1,2)),Int(SubStr(Trim(t(6)),4,2)),Int(SubStr(Trim(t(6)),7,4)));
+         flag1     = (GetEQ(fil1));
+         ID_Fil    = fil1.ID;
+         rewind(fil0);
+         ClearRecord(fil0);
+         fil0.ID = ID_Fil;
+         flag1   = (GetEQ(fil0));
+         fil0.File_Numb = fil0.File_Numb + 1;
+         update(fil0);
+   else
+         rewind(fil0);
+         ClearRecord(fil0);
+         fil0.Date_File = Date(Int(SubStr(Trim(t(6)),1,2)),Int(SubStr(Trim(t(6)),4,2)),Int(SubStr(Trim(t(6)),7,4)));
+         fil0.File_Numb = 1;
+         insert(fil0);
+//         CurDate1 = Trim(T(6));
+   end;
+end;
+ end;
+end;
+
+
+main()
+//t(0)   t(1)                 t(2)             t(3)     t(4)    t(5)     t(6)
+//  24|ЗАО "ДЕКОР"   |40702810300000001471|01.03.2007|открыт|Опер Управ|

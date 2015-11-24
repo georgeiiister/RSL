@@ -1,0 +1,149 @@
+file cln0 (depclnt) key 0; 
+file clus0(depclus) key 0;
+file ci0(ci_code) key 0;
+file acc4(depositr) key 4;
+file cnt2(country) key 2;
+
+macro Oc(Open_Close)
+  If (Open_Close=="З")
+    return 1;
+  else
+    return 0;		
+  end;
+end;
+
+macro cln(CodCln)
+   
+Var
+   j=0, /*Счетчик элементов массива*/
+   strBrtPlace="",  
+   indBrtPlace=0,
+   strTelFax="",
+   indTelFax=0,
+   strLim="#",
+   strCountry="",
+   strPersIDSer="",
+   strPersIDNum="";
+   
+ARRAY arrBrtPlace;
+ARRAY arrTelFax;
+
+/*Заполняем массив места рождения*/
+arrBrtPlace(0)="Место рождения"; 
+
+/*Заполняем массив Телефон/Факс*/
+arrTelFax(0)="Домашний телефон"; 
+arrTelFax(1)="Рабочий телефон";
+arrTelFax(2)="телефон";
+arrTelFax(3)="тел";
+
+Rewind(cln0);
+ClearRecord(cln0);
+
+cln0.CodClient=CodCln;
+If (GetEQ(cln0))
+     Rewind(ci0);
+     ClearRecord(ci0);      
+     /*Формируем строку место рождения*/
+     strBrtPlace="";
+     indBrtPlace=0;
+     While (next(ci0))
+       j=0; /*Обнуляем счетчик массива*/
+       While (j<asize(arrBrtPlace))
+         If (ci0.String==arrBrtPlace(j));
+            indBrtPlace=ci0.AutoKey; 
+            clus0.CodClient=cln0.CodClient;
+            clus0.IndField=indBrtPlace;
+            If (GetEQ(clus0))    
+               /*Будем счетать, что операторы не вводят более одного Места рождения*/
+               strBrtPlace=Trim(clus0.Text); 
+            End;
+         End; 
+         j=j+1;
+       End; 
+     End;
+    /*Формируем строку с телефонами*/ 
+    strTelFax="";
+    rewind(ci0);
+    ClearRecord(ci0);      
+    indTelFax=0;
+    While (next(ci0)) 
+       j=0; /*Обнуляем счетчик массива*/
+       While (j<asize(arrTelFax))
+         If (ci0.String==arrTelFax(j));
+            indTelFax=ci0.AutoKey; 
+            clus0.CodClient=cln0.CodClient;
+            clus0.IndField=indTelFax;
+            If (GetEQ(clus0))
+               strTelFax=Trim(strTelFax+" "+Trim(ci0.String)+" "+Trim(clus0.Text)); 
+            End;
+         End; 
+         j=j+1;
+       End;
+    End;  
+    cnt2.CodLat2=cln0.Country;
+    If (GetEQ(cnt2))
+       strCountry=cnt2.Name
+    End;      
+    /*Если оператором не вводится серия в паспорт РФ, а вводится в номер, то разбираем строку*/     
+    If ((StrSubst(Trim(cln0.PersIDSer)," ","")=="") And (StrLen(StrSubst(Trim(cln0.PersIDNum)," ",""))==10) And (strCountry="РФ"))
+       strPersIDSer=SubStr(StrSubst(Trim(Cln0.PersIDNum)," ",""),1,4); 
+       strPersIDNum=SubStr(StrSubst(Trim(Cln0.PersIDNum)," ",""),5); 
+    Else
+       If (StrSubst(Trim(Cln0.PersIDNum)," ","")=="")
+          If (StrSubst(Trim(cln0.PersIDSer)," ","")=="")
+             Return ""
+          Else
+             /*Если заполнена серия паспорта, но не проставлен номер*/
+             If ((StrLen(StrSubst(Trim(cln0.PersIDSer)," ",""))==10) And (strCountry="РФ"))
+                strPersIDSer=SubStr(StrSubst(Trim(Cln0.PersIDSer)," ",""),1,4); 
+                strPersIDNum=SubStr(StrSubst(Trim(Cln0.PersIDSer)," ",""),5);
+             Else
+                /*Перенесем что заполнено по серии в номер*/
+                strPersIDNum=StrSubst(Trim(Cln0.PersIDSer)," ","");     
+             End; 
+          End;
+       Else
+          strPersIDSer=StrSubst(Trim(Cln0.PersIDSer)," ",""); 
+          strPersIDNum=StrSubst(Trim(Cln0.PersIDNum)," ","");
+       End;
+    End;
+    Return cln0.CodClient+strLim+Trim(cln0.Sname)+strLim+Trim(cln0.Name)+strLim+Trim(cln0.PName)+strLim+Trim(String(cln0.Borndate))+strLim+strBrtPlace+strLim+Trim(strCountry)+strLim+strPersIDSer+strLim+strPersIDNum+strLim+strLim+Trim(cln0.PersIDExtra)+strLim+strLim+Trim(cln0.Adress2)+strLim+Trim(cln0.Adress)+strLim+Trim(cln0.INN)+strLim+strTelFax;
+ Else 
+   Return "" 
+ End;
+End; 
+
+/*Точка входа в программу*/
+
+Var   
+    l=0, /*Счетчик выгруженных строк*/
+    k=0,
+    strInfCln="";
+Const                          
+     strLim="#",
+     strPathFile="..\\TXTFILE\\",
+     strFileName="ClnRet.txt";
+
+SetOutput(strPathFile+strFileName,false); 
+rewind(acc4);
+ClearRecord(acc4);
+
+InitProgress(NRecords(acc4),"Подсчет","Обработано строк");
+While (next(acc4))
+    k=k+1; 
+    UseProgress(k);
+    strInfCln=cln(acc4.CodClient);
+    If (strInfCln!="")
+      println(strInfCln+strLim+String(acc4.Open_Date)+strLim+Trim(acc4.Account)+strLim+Oc(acc4.Open_Close)+strLim+String(acc4.Open_Date)+strLim+strLim);
+      l=l+1;
+    End;
+End;    
+               
+Close(cln0);
+Close(clus0);
+Close(ci0);
+Close(acc4);
+Close(strPathFile+strFileName);
+SetOutput(Null,True); 
+println("Выгружено строк: "+l+" в файл: "+strPathFile+strFileName)

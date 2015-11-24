@@ -1,0 +1,66 @@
+/*
+  Библиотечный макрос для контроля сумм на счетах физических лиц и 
+  и счетах физических лиц БАНКОВСКИХ карт
+
+  author: Polyakov S.George
+
+  ver: 1.00-19.09.2013
+
+*/
+
+import "..\\mac\\bfsofia\\acclib.mac";
+import "..\\mac\\bfsofia\\utllib.mac";
+import vrslplat;
+
+//макрос поиска по счетам
+macro macAccPlFiz(dDate:date,iDprt:integer)
+  var 
+     oTbl:object,
+     mObk:money,
+     mOther:money,
+     bNext:bool;
+
+  mObk=money(0);
+  mOther=money(0);
+  oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.account="40817000000000000000";
+  if (getge(oTbl))
+    bNext=true;
+    while (bNext)
+      if (macALCheckFizClnAcc(oTbl.rec.account))
+        message("Идет просмотр счета: "+oTbl.rec.account);
+        if (oTbl.rec.department==iDprt)
+          if (index(oTbl.rec.account,"5")!=0)
+            mObk=mObk+restA(oTbl.rec.account,dDate);
+            //println(oTbl.rec.account+"  "+restA(oTbl.rec.account,dDate));
+          else
+            mOther=mOther+restA(oTbl.rec.account,dDate);
+          end;
+        end;
+        bNext=next(oTbl);
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+  macALAccPlFizRpt(mObk,mOther,macULGetStrDate(dDate));
+end;
+
+//основной макрос
+macro macAccPlFizMain
+  var
+     dDate:date,
+     iDprt:integer;
+     dDate={curdate};
+  if (getdate(dDate,"Укажите дату, на которую необходимо сформировать остаток"))
+    iDprt=macALGetDprt();
+    if (iDprt>=0)
+      macAccPlFiz(dDate,iDprt);
+    else
+      exit(1);
+    end;
+  else
+    exit(1);
+  end;
+end;

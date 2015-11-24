@@ -1,0 +1,96 @@
+/*Create Polyakov 11.09.2006*/
+/* Модуль формирования Реестра по определённому рейсу */                                                    
+
+file post (document);
+file Extgnd (extgnd) key 0; 
+
+var Kol,Summa,sess,gr,INN_Receiver,INN_Payer,kod="6359826000";
+
+array ArrGr;
+sess=0;
+
+/*Процедура вычисления последенего номера рейса*/
+
+macro GetSessionNumba (sess)
+      file docs (document); 
+      rewind(docs);
+      while (next(docs))
+        Message ("Поиск последенего номера рейса: "+docs.UserField3);
+        if (int(docs.UserField3)>sess)
+           sess=int(docs.UserField3); 
+        end;
+      end;
+     return sess;
+end;
+
+  
+rewind (post);
+kol=0;       
+Summa=0; 
+sess=GetSessionNumba(sess);
+GetInt(sess,"Введите номер рейса",3);
+[
+Балаковский Филиал АКБ"СОФИЯ"
+#         ,#
+
+Код формы документа по ОКУД № 01407
+                                        РЕЕСТР НАЧАЛЬНЫХ ПРОВЕДЕННЫХ В РКЦ/ГРКЦ
+                                ЭЛЕКТРОННЫХ ПЛАТЕЖНЫХ ДОКУМЕНТОВ КРЕДИТНОЙ ОРГАНИЗАЦИИ
+                                                 ЗА #
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+| № |Порядк.|   Дата   | Уник.ид  |  №   |    Дата   |    |       Лицевой      | БИК банка |     Корсчет КО     |    Лицевой счёт    |Оч.|     Сумма   |
+|пос| номер |   сост.  | сост.ЭД  | док. |    док.   | ВО |        счёт        |  получа-  |     получателя     |     получателя     |пл.|             |
+|   |  ЭД   |    ЭД    |          |      |           |    |     плательщика    |   теля    |                    |                    |   |             |
+-------------------------------------------------------------------------------------------------------------------------------------------------------]
+(date:l,time:l,date:l);
+
+while (next(post))
+   if ((trim(post.MFO_Receiver)!="") and (post.UserField3==string(Sess))) 
+      message("Документ на выгрузку N ",post.Numb_document);
+      kol=kol+1;
+      if (post.OKPO_Receiver!="")
+         INN_Receiver=Trim(post.OKPO_Receiver)+" "+Trim(post.Receiver)
+      else
+         INN_Receiver=Trim(post.Receiver)
+      end;
+      
+      if (post.OKPO_Payer!="")
+         INN_Payer=Trim(post.OKPO_Payer)+" "+Trim(post.Payer)
+      else
+         INN_Payer=Trim(post.Payer)
+      end;
+      
+      Extgnd.AppKind=post.iApplicationKind;
+      Extgnd.AppKey=post.ApplicationKey;
+      if (GetEq(Extgnd))
+         gr=Extgnd.ExtendedGround;
+      else
+         gr=""      
+      end;
+              
+      StrSplit(Trim(post.Ground+gr),ArrGr,131,0,4);
+         
+
+[|#  |      #|#         |#         |     #|#          |   #|#                   |          #|#                   |#                   |  #|            #|
+|Плательщик ИНН #
+|Получатель ИНН #
+|Назначение платежа #
+|#
+|# 
+]   
+      (sess:l,kol:r,date:l,kod:l,post.Numb_document:r,post.Date_Document:l,post.Shifr_Oper:r,post.Account_Payer:l,post.MFO_Receiver:r,post.CorAcc_Receiver:l,post.Account_Receiver:l,post.Payment:r,post.Sum:r,
+      INN_Payer,
+      INN_Receiver,
+      ArrGr(1),ArrGr(2),ArrGr(3));  
+      Summa=Summa+post.Sum; 
+    end;
+end;    
+println();
+println("-------------------------------------------------------------------------------------------------------------------------------------------------------");
+[ Итого по реестру:                                                                    Кол-во документов:    #,               Сумма:                   #]
+(kol:r,Summa:r);
+println();
+println();
+println("                                    Подпись бухгалтерского работника _________________________")                                     
+

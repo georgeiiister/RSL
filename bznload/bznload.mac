@@ -1,0 +1,15 @@
+/*
+   макрос загрузки документов по APS BiZone
+   author: Polyakov S.George
+   ver: 1.00-18.06.2013
+*/
+
+import "..\\mac\\bfsofia\\bznloadlib.mac";
+
+macBLMain();
+
+exit(0);
+
+
+
+ 

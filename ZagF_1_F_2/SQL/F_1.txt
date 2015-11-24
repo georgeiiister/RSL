@@ -1,0 +1,48 @@
+SELECT 
+/*Запрос для формирования отчета в БФ АКБ "София" (f_1) Developer Polyakov S. George*/
+           N51.N51ACNC AS B51ACNC,
+           N51.N51VALD  AS B51VALD,
+           ( N51.N51CRTR/100) AS B51CRTR, /*Кредит по счету (зачисления)*/
+           (N51.N51DTRV/100) AS B51DTRV, /*Дебет по счету (расход)*/
+           (N51.N51ACSL/100) AS B51ACSL, /*Входящий остаток на дату N51VALD*/
+           '' AS B51SANM,
+           N51.N51ACNC AS IDCLT
+FROM N51  INNER JOIN (
+                                        SELECT 
+                                                    N51.N51ACNC AS B51ACNC,
+                                                    MAX(N51.N51VALD) AS  B51VALD
+                                        FROM N51 INNER JOIN (
+                                                                                SELECT 
+                                                                                            N67.N67ACNC
+                                                                                FROM N67
+                                                                                WHERE N67.N67ACGN IN(
+                                                                                                                          SELECT 
+                                                                                                                                      N66.N66ACGN
+                                                                                                                          FROM N66
+                                                                                                                          WHERE N66.N66DSAG='Основной счёт договора' AND N66.N66MBST=(
+                                                                                                                                                                                                                                                SELECT  
+                                                                                                                                                                                                                                                            T80.T80CNMK 
+                                                                                                                                                                                                                                                FROM T80 
+                                                                                                                                                                                                                                                WHERE T80CLDS='Клиентский договор' AND T80.T80CTYP=6 
+                                                                                                                                                                                                                                                )
+                                                                                                                          )
+                                                                                AND N67.N67STCD IS NOT NULL 
+                                                                                AND N67.N67ACST IN (
+                                                                                                                     SELECT 
+                                                                                                                                 T80.T80CNMK 
+                                                                                                                     FROM T80
+                                                                                                                     WHERE T80.T80CLDS IN (
+                                                                                                                                                                'заведенный счет','открытый счет','заблокированный счет' 
+                                                                                                                                                              )
+                                                                                                                     AND T80.T80CTYP=10                                             
+                                                                                                                     )
+                                                                                AND N67.N67MBST IN ( 
+                                                                                                                      SELECT  
+                                                                                                                                  T80.T80CNMK 
+                                                                                                                      FROM T80 
+                                                                                                                      WHERE T80CLDS='Клиентский договор' AND T80.T80CTYP=6
+                                                                                                                     )
+                                                                                ) N671 ON N671.N67ACNC=N51.N51ACNC
+                                          GROUP BY N51.N51ACNC
+                                          ) N511 ON N51.N51ACNC=N511.B51ACNC AND N51.N51VALD=N511.B51VALD
+ORDER BY N51.N51ACNC

@@ -1,0 +1,3583 @@
+/*                             
+  Библиотечный макрос вспомогательных утилит для работы с RS-Bank
+  developer Polyakov S.George
+  v. 1.00-06.09.2012
+
+  v. 1.01-17.01.2013
+  	Изменена функция macULSumKassOut(),
+  	сделано удержание не с каждой проводки, а с итоговой 
+  	суммы с учетом назначения
+  v. 1.02-22.01.2013
+	Добавлена для всех комиссий возможность настраивать процент удержания
+	по подразделениям
+  v. 1.03-19.04.2013
+       Изменен алгоритм проверки движения по счету за передаваемый 
+       месяц и год, функция macULYesSumChMon()
+  v. 1.04-31.04.2013
+       Доработан алгоритм макроса macULAkceptBank()
+  v. 1.05-17.06.2013
+       Добавлен простой конвертор из Win в DOS кодировку и обратно
+       macULDosWin()
+  v. 1.06-28.06.2013
+       Добавлена функция macULGetDprtTown(iDrtp), для получения города по
+       подразделению
+*/
+
+//макрос-счетчик (counter or identity(1,1)) для индексации массивов
+//возврат -2, если переданное значение для увеличения - <0
+macro macULGetNextInd(iAsize:integer):integer
+  var
+     iRet:integer;
+  iRet=0;
+  if (iAsize>=0)
+    if (iAsize!=0)
+     iRet=iRet+1;
+    end;
+  else
+    iRet=-2;
+  end;
+  return iRet;  
+end;
+
+//макрос получения строки до sDelim и после
+macro macULGetOneT(sPam:string,bDo:bool,sDelim:string):string
+//bDo-true строка до sDelim
+//bDo-false строка после sDelim
+  var
+    iT:integer;
+  iT=0;
+  if (ValType(sDelim)==V_UNDEF)
+    sDelim="/";
+  end;
+  iT=index(sPam,sDelim);
+  if (iT!=0)
+    if (bDo)
+      sPam=trim(SubStr(sPam,1,iT-1));  
+    else
+      sPam=trim(SubStr(sPam,iT+1));
+    end;
+  end;
+  return sPam
+end;
+
+//название месяца в родительном падеже
+macro macULGetMonR(iM:integer):string
+  var
+    sR:string;
+  array aM;
+  sR="";
+  aM(0)="января";
+  aM(1)="февраля";
+  aM(2)="марта";
+  aM(3)="апреля";
+  aM(4)="мая";
+  aM(5)="июня";
+  aM(6)="июля";
+  aM(7)="августа";
+  aM(8)="сентября";
+  aM(9)="октября";
+  aM(10)="ноября";
+  aM(11)="декабря";
+  if ((iM>=1) and (iM<=12))
+    sR=aM(iM-1);
+  end;
+  return sR;
+end;
+
+//возврат значения Фамилия И.О. (Иванов Иван Иванович -> Иванов И.И.)
+macro macULGetFamIO(sFIO:string):string
+  var
+    sR:string,
+    iC:integer,
+    iK:integer;
+  sR=sFIO;
+  iC=Index(sFIO," ");
+  if (iC!=0)
+    iK=Index(SubStr(sFIO,iC+1)," ");
+    if (iK!=0)
+      sR=SubStr(sFIO,1,iC-1);
+      sR=StrUpr(SubStr(sR,1,1))+StrLwr(SubStr(sR,2));
+      sR=sR+" "+StrUpr(SubStr(sFIO,iC+1,1));
+      sR=sR+". "+StrUpr(SubStr(SubStr(sFIO,iC+1),iK+1,1))+".";
+    end;
+  end;
+  return sR;
+end;
+
+//макрос проверки возможности формирования даты  
+macro macULIsDate(iDay,iMon,iYear):bool
+  var
+     bRet:bool,
+     iDayMax:integer,
+     dDate:date;
+  bRet=false;
+  iDayMax=0;
+  if (
+      (iDay>=28) or 
+      (iDay<=31) 
+     )
+     if (iMon==12)
+       iMon=1;
+       iYear=iYear+1;
+     else
+       iMon=iMon+1;
+     end;
+     dDate=Date(1,iMon,iYear)-1;
+     DateSplit(dDate,iDayMax,null,null);
+     if (iDayMax!=0)
+        if (iDay<=iDayMax)
+        bRet=true;
+        end;
+     end;
+  else
+    bRet=true;
+  end;
+  return bRet
+end;
+
+//макрос возвращающий дату из строки
+//при ошибке возвращается Date(0,0,0)
+macro macULGetDateStr(sIn:string):date
+  var
+     dRet:date,
+     iDay:integer,
+     iMon:integer,
+     iYear:integer,
+     i:integer;
+  dRet=Date(0,0,0);
+  i=index(sIn,".");
+  if (i!=0)
+    iDay=Int(SubStr(sIn,1,i-1));
+    if (
+        (iDay<=31) and 
+        (iDay>0)
+       )
+       sIn=SubStr(sIn,i+1);
+       i=index(sIn,".");
+       if (i!=0)
+          iMon=Int(SubStr(sIn,1,i-1));
+          if (
+              (iMon>0) and 
+              (iMon<=12)
+             )
+             sIn=SubStr(sIn,i+1);
+             iYear=Int(sIn);
+             if (iYear>0)
+               //проверяем возможность сформировать дату
+               if (macULIsDate(iDay,iMon,iYear)) 
+                 dRet=Date(iDay,iMon,iYear);
+               end;
+             end;
+          end;   
+       end;
+    end; 
+  end;
+  return dRet;
+end;
+
+//макрос возвращающий строку в формате dd.mm.yyyy на 
+//переданную дату
+macro macULGetStrDate(dIn:date,bDot:bool):string
+  var 
+     iDay:integer,
+     iMon:integer,
+     iYear:integer,
+     sDot:string,
+     sRet:string;
+
+  iDay=0;
+  iMon=0;
+  iYear=0;
+  sRet=string(dIn);
+  DateSplit(dIn,iDay,iMon,iYear);
+  sRet=string(iDay);
+  sDot=".";
+  if (ValType(bDot)!=V_UNDEF)
+   if (not bDot)
+     sDot="";  
+   end;
+  end;
+  if (iDay<=9)
+    sRet="0"+string(iDay);
+  end;
+  sRet=sRet+sDot;
+  if (iMon<=9)
+    sRet=sRet+"0"+string(iMon);
+  else
+    sRet=sRet+string(iMon);
+  end;
+  sRet=sRet+sDot+string(iYear);
+  return sRet;
+end;
+
+//макрос возвращающий строку в формате hh.nn.ss на 
+//переданное время
+macro macULTimeToStr(tIn:time,bDot:bool):string
+  var 
+     iH:integer,
+     iN:integer,
+     iS:integer,
+     sDot:string,
+     sRet:string;
+
+  iH=0;
+  iN=0;
+  iS=0;
+  sRet=string(tIn);
+  TimeSplit(tIn,iH,iN,iS);
+  sRet=string(iH);
+  sDot=".";
+  if (ValType(bDot)!=V_UNDEF)
+   if (not bDot)
+     sDot="";  
+   end;
+  end;
+  if (iH<=9)
+    sRet="0"+string(iH);
+  end;
+  sRet=sRet+sDot;
+  if (iN<=9)
+    sRet=sRet+"0"+string(iN);
+  else
+    sRet=sRet+string(iN);
+  end;
+  if (iS<=9)
+    sRet=sRet+sDot+"0"+string(iS);
+  else
+    sRet=sRet+sDot+string(iS);  
+  end;
+  return sRet;
+end;
+
+//макрос выравниваюший первые буквы Фамилии Имени Отчества
+macro macULSetFirstSymUpFIO(sIn:string):string
+  var
+    sR:string,
+    iC:integer,
+    iK:integer;
+  sR=sIn;
+  iC=Index(sIn," ");
+  if (iC!=0)
+    iK=Index(SubStr(sIn,iC+1)," ");
+    if (iK!=0)
+      sR=SubStr(sIn,1,iC-1);
+      sR=StrUpr(SubStr(sR,1,1))+StrLwr(SubStr(sR,2));
+      sR=sR+" "+StrUpr(SubStr(sIn,iC+1,1))+StrLwr(SubStr(sIn,iC+2,iK-2));
+      sR=sR+" "+StrUpr(SubStr(sIn,iK+iC+1,1))+StrLwr(SubStr(sIn,iK+iC+2));
+    end;
+  end;
+  return sR;
+end;
+
+//если передаваемое поле =="", то возвращается константа "Нет"
+macro macULGetCBnz(sIn:string):string
+  if(strLen(trim(sIn))==int(0))
+    return "Нет";
+  else
+    return trim(sIn);
+  end;
+end;
+
+//iso код валюты
+macro macULGetIsoCur(sCur:string,iTypeRet:integer):string
+//iTypeRet==undef: IsoCode
+//iTypeRet==1:NameCode
+  var
+     TblC:object,
+     sRet:string;
+     sRet="";
+     TblC=TBFile("isocur.dbt","r",1,"isocur.dbt","bank.def");
+     rewind(TblC);
+     TblC.item("NumberCode")=sCur;
+     if (getEq(TblC))
+       if (
+           (ValType(iTypeRet)==V_UNDEF) or
+           (iTypeRet==0)
+          )
+         sRet=trim(TblC.item("ISOCode"));
+       elif (iTypeRet==1)
+         sRet=trim(TblC.item("NameCurr"));
+       end;
+     end;
+     close(TblC);
+     return sRet;
+end;	
+
+//макрос дополнения длины до необходимой символами 
+macro macULSetAddSpace(sIn:string,iLen:integer,sSpace:string):string
+  var sRet:string,
+      i:integer;
+  sRet=sIn;
+  i=int(0);
+  if (strLen(sSpace)>0)
+    while (i<iLen-strlen(sIn))
+      sRet=sSpace+sRet;
+      i=i+1;
+    end;
+  end;
+  return sRet;
+end;
+
+//макрос проверяющий определенное число вхождений символа в строку
+macro macULCheckSymInStr(sString:string,sSym:string,iNumIter:integer):bool
+//sString - где ищем
+//sSym - какой символ ищем
+//iNumIter - сколько должно быть вхождений? "<" или ">" - return false 
+  var
+    bRet:bool,
+    i:integer,
+    iNext:integer;
+  bRet=false; //return false - неудача
+  iNext=-1;
+  i=0;
+  while ((iNext!=0) and (i<=iNumIter))
+    if (iNext==-1)
+      iNext=Index(sString,sSym);
+    else
+      iNext=Index(sString,sSym,iNext+1);
+    end;
+    if (iNext!=0)
+      i=i+1;
+    end;
+  end;
+  if (i==iNumIter)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос обработки ФИО с форматом - 2 запятые
+macro macIAFormatFio(sFIO:string):string
+  var
+    sRet:string,
+    i:integer,
+    nPos:integer;
+  sRet=sFIO;
+  //если 1 пробел
+  if (macULCheckSymInStr(sFIO," ",1))
+    //если один пробел в ФИО
+    //так может быть, если нет отчества
+    //например Махмут Санзебай
+    //или ошибка
+    //например Иванов ИванИванович
+    sRet=StrSubst(sFIO," ",",")+",";
+  elif (macULCheckSymInStr(sFIO," ",3))
+    //если пробелов 3
+    //или ошибка или характерно для ВОСТОЧНЫХ фамилия
+    //махмут санезбай давид оглы  Формат ВЫВОДА - махмут,санезбай,давид оглы
+    i=1;
+    nPos=-1;
+    while ((i<=3) and (nPos!=0))
+      if (i==1)
+         nPos=index(sFIO," ");
+      else
+         nPos=index(sFIO," ",nPos+1);
+      end;
+      if ((nPos!=0) and (i==3))
+        sRet=StrSubst(SubStr(sFIO,1,nPos-1)," ",",")+SubStr(sFIO,nPos);
+      end;
+      i=i+1;
+    end;
+  elif (macULCheckSymInStr(sFIO," ",2))
+    sRet=StrSubst(sFIO," ",",");
+  end;
+  return sRet;
+end;
+     
+//макрос проверки, что в передаваемой строке - ВСЕ числа
+macro macULIsNum(sIn:string):bool
+ 
+ var 
+    i:integer,
+    j:integer,
+    bNum:bool,
+  bRet:bool;
+  bRet=false;
+  if (StrLen(sIn)!=0)
+    bRet=true;
+  end;
+  i=int(0);
+  while (
+          (i!=StrLen(sIn)) and bRet
+        )
+    i=i+1;
+    j=int(0);
+    bNum=false;
+    while (j<=9)
+      if (SubStr(sIn,i,1)==string(j))
+        bNum=true;
+      end;
+      j=j+1;
+    end;
+    if (not bNum)
+      bRet=false;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос проверки корректности ИНН
+macro macULCheckINN(sInn:string):bool
+  var
+     bRet:bool,
+     iCheck:integer,
+     iContNum:integer;
+  bRet=false;
+  if (macULIsNum(sInn))
+    if (StrLen(trim(sInn))==10)
+      //проверка ИНН для ЮЛ
+      iCheck=2*int(SubStr(sInn,1,1))+
+             4*int(SubStr(sInn,2,1))+
+             10*int(SubStr(sInn,3,1))+
+             3*int(SubStr(sInn,4,1))+
+             5*int(SubStr(sInn,5,1))+
+             9*int(SubStr(sInn,6,1))+
+             4*int(SubStr(sInn,7,1))+
+             6*int(SubStr(sInn,8,1))+
+             8*int(SubStr(sInn,9,1)); 
+
+      iContNum=iCheck-iCheck/11*11;
+    
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+    
+      if (int(SubStr(sInn,10,1))==iContNum)
+         bRet=true;   
+      end;
+
+    elif (StrLen(trim(sInn))==12)
+      //проверка ИНН для ФЛ
+      iCheck=7*int(SubStr(sInn,1,1))+
+             2*int(SubStr(sInn,2,1))+
+             4*int(SubStr(sInn,3,1))+
+             10*int(SubStr(sInn,4,1))+
+             3*int(SubStr(sInn,5,1))+
+             5*int(SubStr(sInn,6,1))+
+             9*int(SubStr(sInn,7,1))+
+             4*int(SubStr(sInn,8,1))+
+             6*int(SubStr(sInn,9,1))+
+             8*int(SubStr(sInn,10,1));
+
+      iContNum=iCheck-iCheck/11*11;
+    
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+
+      if (SubStr(sInn,11,1)==iContNum)
+        iCheck=3*int(SubStr(sInn,1,1))+
+               7*int(SubStr(sInn,2,1))+
+               2*int(SubStr(sInn,3,1))+
+               4*int(SubStr(sInn,4,1))+
+              10*int(SubStr(sInn,5,1))+
+               3*int(SubStr(sInn,6,1))+
+               5*int(SubStr(sInn,7,1))+
+               9*int(SubStr(sInn,8,1))+
+               4*int(SubStr(sInn,9,1))+
+               6*int(SubStr(sInn,10,1))+
+               8*int(SubStr(sInn,11,1));
+
+        iContNum=iCheck-iCheck/11*11;
+
+        if (iContNum>9) iContNum=mod(iContNum,10) end;
+
+        if (SubStr(sInn,12,1)==iContNum)
+          bRet=true;
+        end;
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос проверки корректности ОГРН
+macro macULCheckOGRN(sOGRN:string):bool
+  var
+    bRet:bool,
+    nContNum:numeric,
+    sContNum:string,
+    iContNum:integer;
+  bRet=false;
+  if (macULIsNum(sOGRN))
+    if (strlen(trim(sOGRN))==13)
+      nContNum=numeric(SubStr(sOGRN,1,12))/11;
+      sContNum=String(nContNum);
+      sContNum=SubStr(sContNum,1,index(sContNum,".")-1);
+      nContNum=numeric(sContNum);
+      iContNum=int(numeric(SubStr(sOGRN,1,12))-nContNum*11);
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+      if (iContNum==int(SubStr(sOGRN,13,1)))
+        bRet=true; 
+      end;
+    elif (strlen(trim(sOGRN))==15)
+      nContNum=numeric(SubStr(sOGRN,1,14))/13;
+      sContNum=String(nContNum);
+      sContNum=SubStr(sContNum,1,index(sContNum,".")-1);
+      nContNum=numeric(sContNum);
+      iContNum=int(numeric(SubStr(sOGRN,1,14))-nContNum*13);
+
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+      if (iContNum==int(SubStr(sOGRN,15,1)))
+        bRet=true; 
+      end
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос проверки контрольного числа банковской карты
+macro macULCheckCardNum(sIn:string):bool
+  var
+     bRet:bool,
+     bA:bool,
+     iI:integer,
+     iNum:integer,
+     iContNum:integer,
+     iN:integer,
+     iK:integer;
+ 
+  bRet=false;
+  iI=strlen(sIn);
+  iNum=0;
+  if (macULIsNum(sIn))
+    iContNum=int(SubStr(sIn,iI,1));
+    iI=iI-1;
+    iK=2;
+  else
+   iI=0; //что бы просто не выполнялся цикл 
+  end;
+  while (iI>0)
+    bA=true;
+    iN=int(SubStr(sIn,iI,1));
+    if (mod(iK,2)==0) 
+      iN=2*iN;
+      if (iN>9)
+        bA=false;
+        iNum=iNum+int(SubStr(string(iN),1,1))+int(SubStr(string(iN),2,1));
+      end;
+    end;
+    if (bA)
+      iNum=iNum+iN;
+    end;
+    iK=iK+1;
+    iI=iI-1;
+  end;
+  if(iNum>0)
+    if (mod(iNum+iContNum,10)==0)
+      bRet=true;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос для задания диапазона дат 
+//return Date1/Date2 - если  
+//даты !=0 и первая <=второй
+macro  macULSetDate1to2():string
+  var 
+     sRet:string,
+     sMsgD1:string,
+     sMsgD2:string,
+     dDate1:date,
+     dDate2:date,
+     sMsgNext:string,
+     bNext:bool;
+  bNext=true;
+  sRet="";
+  sMsgD1="Начальная дата";
+  sMsgD2="Конечная дата";
+  sMsgNext=" некорректна! Повторить ввод?";
+  dDate1=date(0,0,0);
+  dDate2=date(0,0,0);
+  while (bNext)
+    bNext=getdate(dDate1,sMsgD1);
+    if ( 
+        (bNext) and
+        (dDate1==Date(0,0,0))
+       )
+       if (not (gettrue(false,sMsgD1+sMsgNext)))
+         bNext=false;
+       end;
+    else
+       while(bNext)
+         dDate2=dDate1;
+         bNext=getdate(dDate2,sMsgD2);
+         if ( 
+             (bNext) and
+               (
+                 (dDate2==Date(0,0,0)) or
+                 (dDate2<dDate1)
+               )
+            )
+            if (not (gettrue(false,sMsgD2+sMsgNext)))
+              bNext=false;
+            end;
+         else
+           if (bNext)
+             bNext=false;
+             sRet=macULGetStrDate(dDate1)+"/"+macULGetStrDate(dDate2);
+           end;
+         end;
+       end;
+    end;
+  end;
+  return sRet;
+end;
+
+//сортировка пузырьком 
+macro macULBublSortASC(aArray:ArrayRef):ArrayRef
+  var
+     i:integer,
+     bNext:bool,
+     iT:integer;
+  bNext=true;
+  message("Сортировка данных для вывода");
+  while (bNext)
+    i=0;
+    while (i<asize(aArray)-1)
+      if (aArray(i)>aArray(i+1))
+        bNext=false;
+        iT=aArray(i);
+        aArray(i)=aArray(i+1);
+        aArray(i+1)=iT;
+      end;
+      i=i+1;
+    end;
+    if (bNext)
+       bNext=false;
+    else
+       bNext=true;
+    end;
+  end;
+  message();
+  return aArray;
+end;
+
+//массив в строку с разделителем
+macro macULRetArrToStr(arArr:ArrayRef,sSplit:string):string
+  var
+     i:integer,
+     sRet:string;
+  i=0;
+  sRet="";
+  if (ValType(sSplit)==V_UNDEF)
+    sSplit=" ";
+  end;
+  while(i<asize(arArr)-1)
+    if (i>0)
+      sRet=sRet+sSplit;
+    end;
+    sRet=sRet+String(arArr(i));
+    i=i+1;
+  end;
+  return sRet;
+end;
+
+//макрос возвращающий true, если передаваемая строка есть
+//в передаваемом массиве
+macro macULIsAccInArr(sIn:string,arArr:ArrayRef):bool
+  var i:integer,
+      bRet:bool;
+  i=0;
+  bRet=false;
+  while ((i<aSize(arArr)) and (not bRet))
+    if (arArr(i)==sIn)
+      bRet=true;
+    end;
+    i=i+1;
+  end;
+  return bRet;
+end;
+
+//макрос возвращающий индекс, если передаваемая строка есть
+//в передаваемом массиве
+macro macULIndStrInArr(sIn:string,arArr:ArrayRef):integer
+  var i:integer,
+      iRet:integer;
+  i=0;
+  iRet=-1;
+  while ((i<aSize(arArr)) and (iRet==-1))
+    if (arArr(i)==sIn)
+      iRet=i;
+    end;
+    i=i+1;
+  end;
+  return iRet;
+end;
+
+//редактируемый макрос возврата true
+//если передаваемый день - ПРАЗДНИЧНЫЙ 
+macro macULHappyDay(dDate:date,iDprt:integer):bool
+  var
+     bRet:bool,
+     sDate:string;
+
+  array
+       arrDate;
+
+  //Вводим праздники
+
+  arrDate(0)="12.06.2013";
+  arrDate(1)="04.11.2013";
+
+  bRet=false;
+  sDate=macULGetStrDate(dDate);
+  bRet=macULIsAccInArr(sDate,arrDate);
+  return bRet
+end;
+
+//макрос возвращающий расшифровку символа/тип
+macro macULGetSymCash(sSym:string):string
+  var
+     oTbl:object,
+     sRet:string;
+  oTbl=TBFile("listsymb.dbt","r",0,"listsymb.dbt","bank.def");
+  sRet="";
+  rewind(oTbl);
+  if (StrLen(sSym)==1)
+    sSym=macULSetAddSpace(sSym,2,"0");
+    sSym=macULSetAddSpace(sSym,3," ");
+  elif
+    (StrLen(sSym)==2)
+    sSym=macULSetAddSpace(sSym,3," ");
+  end;
+  oTbl.rec.Symb_Cash=sSym;
+  if (getEQ(oTbl))
+    sRet=trim(oTbl.rec.Name)+"^"+String(otbl.rec.Type_Symbol);
+  end;
+  return sRet;
+end;
+
+//макрос возвращающий первый и последний элемент массива
+macro macULGetUDArr(aArr:ArrayRef):string
+  var
+     sRet:string;
+  sRet="";
+  sRet=string(aArr(0))+"/"+string(aArr(asize(aArr)-1));
+  return sRet;
+end;
+
+//формирование меню
+macro macULRetMenu(arrMen:arrayref,sDown:string,sTop:string):integer
+  var
+     iK:integer;
+     iK=-1;
+  iK=menu(arrMen,sDown,sTop);
+  return iK;
+end;
+
+//формирование доверенности
+macro macULDov(iK:integer,bR:bool):string
+  var
+     sR:string;
+ array
+     arrDov;
+  sR="";
+  if (ValType(bR)==V_UNDEF)
+    bR=false;
+  end;
+  if (not bR)
+    //формируем списки доверенности для руководителей, по коду macULSign в Именительном падеже
+    arrDov(0)="доверенность № 187/7+02.08.2012";
+    arrDov(1)="доверенность № 187/7+02.08.2012";
+    arrDov(2)="доверенность № 00+00.00.00";
+    arrDov(3)="доверенность+14.11.2012";
+    arrDov(4)="доверенность 217-7+06.09.2012";
+    arrDov(5)="доверенность (зарегистрированно в реестре за № 7д-3485)+21.08.2013";
+    sR=arrDov(iK);
+  else
+    //в родительном
+    arrDov(0)="доверенности № 187/7+02.08.2012";
+    arrDov(1)="доверенности № 187/7+02.08.2012";
+    arrDov(2)="доверенности № 00+00.00.00";
+    arrDov(3)="доверенности+14.11.2012";
+    arrDov(4)="доверенности 217-7+06.09.2012";
+    arrDov(5)="доверенности (зарегистрированно в реестре за № 7д-3485)+21.08.2013";
+    sR=arrDov(iK);
+  end;
+  return sR;
+end;
+
+//формирование подписи
+macro macULSign(iDprt:integer):string
+  var
+     iK:integer,
+     sR:string;
+ array
+     arrMenu2;
+  sR="";
+  //формируем меню для пользователей
+  arrMenu2(0)="И.О. управляющего ОО 'Балаково'+Садовова Лидия Андреевна";
+  arrMenu2(1)="Заместитель управляющего ОО 'Балаково'+Садовова Лидия Андреевна";
+  arrMenu2(2)="Начальник ОО 'Степной'+Волничева Любовь Cергеевна";
+  arrMenu2(3)="Заместитель управляющего филиалом 'Поволжский' ЗАО 'ИШБАНК'+Гончарова Елена Викторовна";
+  arrMenu2(4)="Управляющий ОО 'Саратов'+Рыжова Татьяна Евгеньевна";
+  arrMenu2(5)="Управляющий ОО 'Балаково'+Гамидов Тарлан";
+  iK=-1;
+  if (ValType(iDprt)==V_UNDEF)
+    iK=macULRetMenu(arrMenu2,"Выбор","Подпись за банк");
+  else
+    if (iDprt>0)
+      iK=iDprt;
+    end;
+  end;
+  if (iK>=0)
+    sR=arrMenu2(iK)+"+"+macULDov(iK);
+    arrMenu2(0)="И.О. управляющего ОО 'Балаково'+Садововой Лидии Андреевны";
+    arrMenu2(1)="Заместитель Управляющего ОО 'Балаково'+Садововой Лидии Андреевны";
+    arrMenu2(2)="Начальника ОО 'Степной'+Волничевой Любовь Cергеевны";
+    arrMenu2(3)="Заместителя управляющего филиалом 'Поволжский' ЗАО 'ИШБАНК'+Гончаровой Елены Викторовны";
+    arrMenu2(4)="Управляющего ОО 'Саратов'+Рыжовой Татьяны Евгеньевны";
+    arrMenu2(5)="Управляющего ОО 'Балаково'+Гамидова Тарлана";
+    sR=sR+"+"+arrMenu2(iK)+"+"+macULDov(iK,true);
+  end;
+  return sR;
+end;
+
+//телефоны техподдержки по iBank
+macro macULGetTeliBnk(iDep:integer):string
+  var
+     sRet:string;
+  sRet="";
+  if (iDep==1)
+    sRet="(846) 279-54-91";
+  elif 
+      (
+       (iDep==3) or
+       (iDep==4)
+      )  
+    sRet="(8453) 35-80-47";  
+  end;   
+  return sRet;   
+end;
+
+//города подразделений
+macro macULGetDprtTown(iDep:integer):string
+  var
+     sRet:string;
+  sRet="";
+  if (
+      (iDep==1) or
+      (iDep==2)
+     )
+    sRet="Самара";
+  elif 
+      (
+       (iDep==3) or
+       (iDep==4)
+      )  
+    sRet="Балаково";
+  elif
+      (
+       (iDep==5) or
+       (iDep==6)
+      )
+    sRet="Саратов";
+  end;   
+  return sRet;   
+end;
+
+
+//макрос формирования пути (сетевого или локального (на терминале))
+macro macULServTempl(sIn:string):string
+
+  var 
+     sRet:string;
+   sRet="";
+   sIn="BFSOFIA";
+  if (IsStandAlone)
+    sRet="\\\\10.10.60.24\\RSBank.Samara\\TEMPLS\\"+sIn+"\\";
+  else
+    sRet="..\\TEMPLS\\"+sIn+"\\";
+  end;
+  return sRet;
+end;
+
+//макрос формирования документа в отложенных
+macro macULInsDocToPost(
+                           sAccPayer:string,
+                           sAccReceiver:string,
+                           mSum:money,
+                           iNumberPack:integer,
+                           dDateValue:date,
+                           sNumbDoc:string,
+                           dDateDoc:date,
+                           sKindOper:string,
+                           sNamePayer:string,
+                           sNameReceiver:string,
+                           sBankPayer:string,
+                           sBankReceiver:string,
+                           sNotePay:string,
+                           sINNPayer:string,
+                           sINNReceiver:string,
+                           sSymbolCach:string,
+                           iPayment:integer,
+                           dPayDate:date,
+                           iDep:integer,
+                           sShifrOper:string,
+                           iOper:integer,
+                           sKppPayer:string,
+                           sUsrTypeDoc:string,
+                           sKPPReceiver:string,
+                           iResultCarry:integer,
+                           sComposerStatus:string,
+                           sOkato:string,
+                           sBICPayer:string,
+                           sBICReceiver:string,
+                           sRealAccPayer:string,
+                           sRealAccReceiver:string,
+                           sCorAccPayer:string,
+                           sCorAccReceiver:string,
+                           sBudjClCode:string,
+                           sTaxGround:string,
+                           sTaxPeriod:string,
+                           sTaxNumber:string,
+                           sTaxDate:string,
+                           sTaxPaymentType:string,
+                           sSymbNotBal:string
+                       ):bool
+  var
+     bRet:bool,
+     bInDoc:bool, 
+     oTblPost:object;
+
+  bRet=false;
+  bInDoc=false; //тип проводки: true - внутрибанковская false - межбанковская
+
+  oTblPost=TBFile("postdoc.dbt","w",0,null,"bank.def");
+
+  clearrecord(oTblPost);
+
+  oTblPost.rec.Account_Payer=sAccPayer;
+  oTblPost.rec.Account_Receiver=sAccReceiver;
+
+  //платеж внутрибанковский:
+  //если не указан ни БИК плательщика, ни БИК получателя
+  //если указана пустая строка в БИКе плательщика и БИКе получателя 
+  if (
+      (ValType(sBICPayer)==V_UNDEF) and 
+      (ValType(sBICReceiver)==V_UNDEF)
+     )
+    bInDoc=true
+  elif
+      (
+       (StrLen(sBICPayer)==0) and
+       (StrLen(sBICReceiver)==0)
+      )
+    bInDoc=true;
+  end;
+
+  if (bInDoc)
+    oTblPost.rec.Real_Payer=sAccPayer;
+    oTblPost.rec.Real_Receiver=sAccReceiver;
+  else
+    //межбанковский платеж
+    //хотя бы один из БИКов не пустой и не null
+    //обрабатываем эту ситуацию
+    /*
+      может стоит доработать функцию, что бы в случае межбанковского платежа
+      автоматически проставлялся:
+      Account_Payer=Real_Payer=указанному счету НАШЕГО клиента
+      CorAcc_Payer=null
+      Account_Receiver="Счету получателя в другом банке"
+      Real_Receiver={MFO_Bank} (Нашему корр. счету)
+      CorAcc_Receiver="Корреспонденскому счету другого банка"
+    */
+    if (sBicPayer!=V_UNDEF)
+      if (StrLen(sBICPayer)!=0)
+        oTblPost.rec.MFO_Payer=sBicPayer;
+      end;
+    end;
+    if (sBICReceiver!=V_UNDEF)
+      if (StrLen(sBICReceiver)!=0)
+        oTblPost.rec.MFO_Receiver=sBicReceiver;
+      end;
+    end;
+    //выставляем real и кор. счета.
+    if (sRealAccPayer!=V_UNDEF)
+      if (StrLen(sRealAccPayer)!=0)
+        oTblPost.rec.Real_Payer=sRealAccPayer;  
+      end;
+    end;
+    if (sRealAccReceiver!=V_UNDEF)
+      if (StrLen(sRealAccReceiver)!=0)
+        oTblPost.rec.Real_Receiver=sRealAccReceiver;  
+      end;
+    end;
+    if (sCorAccPayer!=V_UNDEF)
+      if (StrLen(sCorAccPayer)!=0)
+        oTblPost.rec.CorAcc_Payer=sCorAccPayer;  
+      end;
+    end;
+    if (sCorAccReceiver!=V_UNDEF)
+      if (StrLen(sCorAccReceiver)!=0)
+        oTblPost.rec.CorAcc_Receiver=sCorAccReceiver;  
+      end;
+    end;
+  end;
+  oTblPost.rec.Sum=mSum;
+  oTblPost.rec.Number_Pack=iNumberPack;
+  oTblPost.rec.Date_Value=dDateValue;
+  oTblPost.rec.Numb_Document=sNumbDoc;
+  oTblPost.rec.Date_Document=dDateDoc;
+  oTblPost.rec.Kind_Oper=sKindOper;
+  oTblPost.rec.Payer=sNamePayer;
+  oTblPost.rec.Receiver=sNameReceiver;
+  oTblPost.rec.Bank_Payer=sBankPayer; //указываем наименование банков, в случе внутренних проводок
+  oTblPost.rec.Bank_Receiver=sBankReceiver; //указываем наименование банков, в случе внутренних проводок
+  oTblPost.rec.Ground=sNotePay;
+  oTblPost.rec.okpo_payer=sINNPayer;
+  oTblPost.rec.okpo_receiver=sINNReceiver;
+  oTblPost.rec.symbol_Cach=sSymbolCach;
+  oTblPost.rec.Payment=iPayment;
+  oTblPost.rec.Pay_Date=dPayDate;
+  oTblPost.rec.Department=iDep;
+  oTblPost.rec.shifr_oper=sShifrOper;
+  oTblPost.rec.oper=iOper;
+  if (ValType(sKppPayer)!=V_UNDEF)
+    if (StrLen(sKppPayer)!=0)
+      oTblPost.rec.KPP_Payer=sKppPayer;
+    end;
+  end;
+  if (ValType(sUsrTypeDoc)!=V_UNDEF)
+    if (StrLen(sUsrTypeDoc)!=0)
+      oTblPost.rec.UserTypeDocument=sUsrTypeDoc;
+    end;
+  end;
+  //add Polyakov S.George 20.06.2013
+  if (ValType(sKppReceiver)!=V_UNDEF)
+    if (StrLen(sKppReceiver)!=0)
+      oTblPost.rec.KPP_Receiver=sKppReceiver;
+    end;
+  end;
+  //add Polyakov S.George 20.06.2013
+  if (ValType(iResultCarry)!=V_UNDEF)
+    oTblPost.rec.Result_Carry=iResultCarry;
+  end;
+  //add Polyakov S.George 20.06.2013
+  if (ValType(sComposerStatus)!=V_UNDEF)
+    if (StrLen(sComposerStatus)!=0)
+      oTblPost.rec.ComposerStatus=sComposerStatus;
+    end;
+  end;
+  if (ValType(sOkato)!=V_UNDEF)
+    if (StrLen(sOkato)!=0)
+      oTblPost.rec.OKATO=sOkato;
+    end;
+  end;
+  if (ValType(sBudjClCode)!=V_UNDEF)
+    if (StrLen(sBudjClCode)!=0)
+      oTblPost.rec.BudjClassifCode=sBudjClCode;
+    end;
+  end;
+  if (ValType(sTaxGround)!=V_UNDEF)
+    if (StrLen(sTaxGround)!=0)
+      oTblPost.rec.TaxGround=sTaxGround;
+    end;
+  end;
+  if (ValType(sTaxPeriod)!=V_UNDEF)
+    if (StrLen(sTaxPeriod)!=0)
+      oTblPost.rec.TaxPeriod=sTaxPeriod;
+    end;
+  end;
+  if (ValType(sTaxNumber)!=V_UNDEF)
+    if (StrLen(sTaxNumber)!=0)
+      oTblPost.rec.TaxNumber=sTaxNumber;
+    end;
+  end;
+  if (ValType(sTaxDate)!=V_UNDEF)
+    if (StrLen(sTaxDate)!=0)
+      oTblPost.rec.TaxDate=sTaxDate;
+    end;
+  end;
+  if (ValType(sTaxPaymentType)!=V_UNDEF)
+    if (StrLen(sTaxPaymentType)!=0)
+      oTblPost.rec.TaxPaymentType=sTaxPaymentType;
+    end;
+  end;
+  if (ValType(sSymbNotBal)!=V_UNDEF)
+    if (StrLen(sSymbNotBal)!=0)
+      oTblPost.rec.SymbNotBal=sSymbNotBal;
+    end;
+  end;
+  bRet=insert(oTblPost);
+  close(oTblPost);
+  return bRet;
+end;
+
+//макрос возвращающий последний день месяца
+//в месяце передаваемой даты
+macro macULGetLastDate(dDate:date):date
+  var
+    dRet:date,
+    iMon:integer,
+    iYear:integer;
+  dRet=Date(0,0,0);
+  DateSplit(dDate,null,iMon,iYear);
+  if (iMon==12)
+    iMon=1;
+    iYear=iYear+1;
+  else
+    iMon=iMon+1;
+  end;
+  dRet=Date(1,iMon,iYear)-1;
+  return dRet;  
+end;
+
+//макрос формирования строки Номер, счет, сумма
+macro macULRpt(iNum:integer,sAcc:string,mSum:money)
+  [###### #################### ############]
+  (macULSetAddSpace(string(iNum),6,"0"):r,sAcc:r,mSum:r); 
+end;
+
+//макрос формирования итогового значения
+macro macULRptItogo(mSum:money)
+  println("------");
+  println("Итого к удержанию: "+string(mSum));
+end;
+
+//исключаем доходные счета
+macro macULNotD(sAcc:string,sMfo:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if ((SubStr(sAcc,1,5)=="70601") or (SubStr(sAcc,1,5)=="47422"))
+    if (StrLen(trim(sMfo))!=0)
+      bRet=true;
+    end;
+  else
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//Внутренний счет для кредитных операций?
+macro macULInAccCred(sAcc:string,sMfo:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (StrLen(trim(sMfo))==0)
+    if (
+        (SubStr(sAcc,1,3)=="454") or 
+        (SubStr(sAcc,1,3)=="452") or
+        (SubStr(sAcc,1,3)=="455") or
+        (SubStr(sAcc,1,3)=="446") or
+        (SubStr(sAcc,1,5)=="47427")
+       )
+      bRet=true;
+    end;
+  end;
+  return bRet;
+end;
+
+//внутренний счет на доходы будущих периодов?
+//Внутренний счет для кредитных операций?
+macro macULInAccFutu(sAcc:string,sMfo:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (StrLen(trim(sMfo))==0)
+    if (
+        (SubStr(sAcc,1,3)=="613")  
+       )
+      bRet=true;
+    end;
+  end;
+  return bRet;
+end;
+
+
+//помещали ли в картотеку 1 проводку с oTbl.rec.UserTypeDocument=="8" 
+macro macULGetK1AccFee(sAccPayer:string,dDatePay:date,iDays:integer):bool
+  var 
+     bNext:bool,
+     oTbl:object,
+     bRet:bool;
+  bRet=false;
+  oTbl=TBFile("index1.dbt","r",6,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Account_Payer=sAccPayer;
+  oTbl.rec.Date_Carry=date(0,0,0);
+  oTbl.rec.I1_Status="";
+  oTbl.rec.oper=0;
+  if (getGE(oTbl))
+    bNext=true;
+    while(bNext)
+      if (oTbl.rec.Account_Payer==sAccPayer)
+        if (
+            (oTbl.rec.Date_Document>dDatePay-iDays) and
+            (oTbl.rec.Date_Document<=dDatePay+iDays)
+           )
+           if (index(oTbl.rec.UserTypeDocument,"8")>0) //проверка на существование проводки удержания
+             bNext=false;
+             bRet=true;
+           end;
+           if (bNext)
+             bNext=next(oTbl);
+           end;
+        else
+          bNext=next(oTbl);
+        end;
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//помещали ли в картотеку 2 проводку с oTbl.rec.UserTypeDocument=="8" 
+macro macULGetK2AccFee(sAccPayer:string,dDatePay:date,iDays:integer):bool
+  var 
+     bNext:bool,
+     oTbl:object,
+     bRet:bool;
+  bRet=false;
+  oTbl=TBFile("index2.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Account_Payer=sAccPayer;
+  oTbl.rec.Date_Place=dDatePay-iDays;
+  if (getGE(oTbl))
+    bNext=true;
+    while(bNext)
+      if (oTbl.rec.Account_Payer==sAccPayer)
+        if (
+            (oTbl.rec.Date_place>dDatePay-iDays) and
+            (oTbl.rec.Date_place<=dDatePay+iDays)
+           )
+           if (index(oTbl.rec.UserTypeDocument,"8")>0) //проверка на существование проводки удержания
+             bNext=false;
+             bRet=true;
+           end;
+           if (bNext)
+             bNext=next(oTbl);
+           end;
+        else
+          bNext=next(oTbl);
+        end;
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос просмотра операций клиента в 
+//архивных документах и взятие комисии 
+//при отсутствии движения более iDays дней
+macro macULMoneyArhOp(sAcc:string,dDateCur:date,dDateLastProv:date,iDprt:integer,dOpen:date,iDays:integer):money
+  var
+     mRet:money, 
+     oTblP:object,
+     dFirstDate:date,
+     dLastDate:date,
+     bNext:bool,
+     bNo:bool;
+
+  const
+     I_DAYS:integer=iDays,
+     M_FIX_SUM:money=Money(1500);
+
+  mRet=Money(0);
+  bNo=false;
+
+  /*
+   Проверяем на вчерашний день (текущий оп.день-1)
+   Смотрим именно тот диапазон, что на ЗАВЕРШЕННЫЙ ОПЕРАЦИОННЫЙ ДЕНЬ-iDays 
+   и ЗАВЕРШЕННЫЙ ОПЕРАЦИОННЫЙ ДЕНЬ  
+   не существует проводок кроме комисиий
+   Если разница между датой последней проводки и вчерашнего оп.дня >iDays
+   то формируем удержание
+  */
+  
+  if ((dDateCur-dDateLastProv)>I_DAYS)
+    //самый простой случай
+    //не было НИКАКИХ проводок по счету, более iDays дней
+    //не было в том числе и комисий и простых проводок
+    mRet=M_FIX_SUM;
+  else
+    if ((dDateCur-dDateLastProv)>0) //просто > что бы отсеить проведенные
+      //если были какие-то проводки менее iDays дней назад
+      oTblP=TBFile("arhdoc.dbt","r",1,null,"bank.def");
+      dFirstDate=dDateCur-I_DAYS;
+      rewind(oTblP);
+      oTblP.rec.Real_Payer=sAcc;
+      oTblP.rec.Date_Carry=dFirstDate;
+      oTblP.rec.Sum=Money(0);
+      bNext=true;
+      if (getge(oTblP))
+        //что-то есть
+        while (bNext)
+          if (oTblP.rec.Real_Payer==sAcc)
+            //исключаем доходные счета
+            if (
+                (oTblP.rec.Date_Carry>=dFirstDate) and
+                (oTblP.rec.Date_Carry<=dDateCur)
+               )
+              if (
+                  not (macULNotD(trim(oTblP.rec.Real_Receiver),trim(oTblP.rec.MFO_Receiver))) 
+                 )
+                 bNo=true;
+              else
+                bNext=false;
+                bNo=false;
+              end;
+            end;
+            if (bNo) //все проводки - комиссии
+              //удерживали ли эту комиссию???
+              //её удерживают в течении следующих iDays дней
+              if ( 
+                  (oTblP.rec.Date_Carry>dDateCur-I_DAYS) and
+                  (oTblP.rec.Date_Carry<=dDateCur+I_DAYS)
+                 )
+                if (index(oTblP.rec.UserTypeDocument,"8")>0) //проверка на существование проводки удержания
+                  bNext=false;
+                  bNo=false;
+                end;
+              end;
+            end;
+            if (bNext)
+              bNext=next(oTblP);
+            end;
+          else
+            bNext=false;
+          end;
+        end;
+      else
+        bNo=true;
+      end;
+    else
+      //значит уже проводили или date(0,0,0)
+      if (dDateLastProv==date(0,0,0))
+        //совсем не было проводок
+        if (dOpen<dDateCur-I_DAYS) //счет открыли, но по нему ничего не проводили более I_DAYS
+          mRet=M_FIX_SUM;
+        end;
+      end;
+    end;
+  end;
+  if (bNo)
+    bNo=false;
+    //исходящих платежей по счету не было
+    //проверяем на входящие ЛЮБЫЕ
+    oTblP=TBFile("arhdoc.dbt","r",2,null,"bank.def");
+    dFirstDate=dDateCur-I_DAYS;
+    rewind(oTblP);
+    oTblP.rec.Real_Receiver=sAcc;
+    oTblP.rec.Date_Carry=dFirstDate;
+    oTblP.rec.Sum=Money(0);
+    if (getge(oTblP))
+      //что-то есть
+      if (oTblP.rec.Real_Receiver!=sAcc)
+        bNo=true;
+      end;
+    else
+      bNo=true;
+    end;
+    if (bNo)
+      mRet=M_FIX_SUM;
+    end;
+  end;
+  if (mRet!=money(0))
+    //проверяем по картотеке 2
+    if (macULGetK2AccFee(sAcc,dDateCur,iDays))
+      mRet=money(0);
+    else
+      //по картотеке 1
+      if (macULGetK1AccFee(sAcc,dDateCur,iDays))
+        mRet=money(0);
+      end;
+    end;
+  end;
+  return mRet;
+end;
+
+
+//исключение бюджетных проводок
+macro macULNotBud(sBic:string,sAcc:string,sCor:string,sAccP:string):bool
+  var
+     sBalNoRKC:string,
+     sCorNoRKC:string,
+     sBalNoBank:string,
+     sbalNoAcc:string,
+     sBikI:string,
+     sCorI:string,
+     sAccI:string,
+     bRet:bool;
+
+  bRet=true;
+
+  sBalNoBank=",40101,40102,40105,40106,40107,40108,40110,40201,40202,"
+             +"40203,40204,40206,40301,40302,40303,40304,40306,40309,"
+             +"40401,40102,40403,40404,40405,40406,40407,40408,40409,40410,";
+
+ //println(sAcc);
+ if (Index(sBalNoBank,SubStr(sAcc,1,5))!=0)    
+   bRet=false;
+ end;
+ return bRet;
+end;
+
+//макрос исключения счетов, для которых не взымается комиссия
+macro macULAccNotFee(sAcc:string):bool
+  var
+    i:integer,
+    bRet:bool;
+    
+  array
+    aAcc;
+
+  bRet=false;
+  i=int(0);
+  
+  //указываем счета исключения для комиссий
+  aAcc(0)="40802810102020000264";
+  
+  while (
+         (i<asize(aAcc)) and 
+         (not bRet)
+        )
+    if (aAcc(i)==sAcc)
+      bRet=true;
+    end;
+    i=i+1;  
+  end;
+  return bRet;
+end;
+
+//макрос итоговых сум
+//операции - выдача наличных денежных средств в 
+//день поступления в безналичной форме
+macro macULKassInOut(
+                     sAcc:string,
+                     iDprt:integer,
+                     bVip:bool,
+                     bCurDate:bool,
+                     bOutTime:bool,
+                     dDate:date,
+                     mRestA:money,
+                     mDebetA:money,
+                     mKreditA:money
+                    ):money
+  var
+     mRet:money,
+     iTbl:integer,
+     iCnt:integer,
+     iInd:integer,
+     bNot23:bool,
+     bNext:bool,
+     bBN:bool,
+     mMoney:money,
+     oTbl:object;
+
+  array
+     arrTbl,arrAccKass,arrPrc;
+  
+  const
+     I_DEBCRED:integer=2;
+
+  arrPrc(0)=double(0.2);  
+  arrPrc(1)=double(0.2);  
+  arrPrc(2)=double(0.2);    
+  arrPrc(3)=double(0.2);  
+  arrPrc(4)=double(0.2);    
+  arrPrc(5)=double(0.2);
+
+  arrAccKass(1)="20202810002000000001";
+  arrAccKass(2)="20202810002000000001"; 
+  arrAccKass(3)="20202810502020000002";
+  arrAccKass(4)="20202810502020000002"; 
+  arrAccKass(5)="20202810302030000001";
+  arrAccKass(6)="";
+
+  if (bOutTime) //счета для послеоперационного времени
+    arrAccKass(1)="";
+    arrAccKass(2)="";
+    arrAccKass(3)="20202810102020000004";
+    arrAccKass(4)="";
+    arrAccKass(5)="20202810602030000002";
+    arrAccKass(6)=""  
+  end;
+  
+  mMoney=money(0);
+  mRet=money(0);
+  iCnt=0; //счетчик цикла:поиск sAcc как плательщика или как получателя (дебет или кредет)
+  iTbl=1; //document.dbt
+  iInd=0;
+  bBN=false; //проинициализировали флаг безналичных поступлений
+
+  arrTbl(0)="arhdoc.dbt";
+  arrTbl(1)="document.dbt";
+
+  if (not bCurDate)
+     iTbl=0;
+  end;
+  
+  while(iCnt<I_DEBCRED)
+    if (iTbl==0) //arhdoc
+      iInd=1;
+      if (iCnt==0)
+        iInd=2;
+      end
+    else
+      iInd=3;
+      if (iCnt==0)
+        iInd=4;
+      end;
+    end;
+    oTbl=TBFILE(arrTbl(iTbl),"r",iInd,null,"bank.def");
+    rewind(oTbl);
+    oTbl.rec.Sum=money(0);
+    if (
+        (iInd==2) or (iInd==4)) //получатель
+      oTbl.rec.Real_Receiver=sAcc;
+      if (iTbl==0)
+        oTbl.rec.Date_Carry=dDate;
+      end;
+    else
+      oTbl.rec.Real_Payer=sAcc; //плательщик
+      if (iTbl==0)
+        oTbl.rec.Date_Carry=dDate;
+      end;
+    end;
+    if (getge(oTbl))
+      bNext=true;
+      while (bNext)
+        if ((iInd==2) or (iInd==4))
+          if (oTbl.rec.Account_Receiver!=sAcc)
+            bNext=false;
+          end;
+        else
+          if (oTbl.rec.Account_Payer!=sAcc)
+            bNext=false;
+          end;
+        end;
+        if (bNext) //работаем с обрабатываемым счетом
+          if (iTbl==0)
+            if (oTbl.rec.date_carry!=dDate)
+              bNext=false;
+            end;
+          end;
+        end;
+        if (bNext) //можно анализировать
+           if (iCnt==0)
+             if (StrLen(trim(oTbl.rec.MFO_Payer))!=0)
+               bBN=true;
+             end;
+             if (bBN)
+               if (iTbl==1)
+                 if (oTbl.rec.Result_Carry==23)
+                   bBN=false;
+                 end;
+               end;
+             end;
+             if (bBN) //были зачисления в безналичной форме
+               bNext=false;
+             end;
+           else
+             //sAcc как плательщик, смотрим куда он платит
+             if (
+                 (oTbl.rec.account_receiver==arrAccKass(iDprt)) and
+                 (strlen(trim(oTbl.rec.MFO_receiver))==0)
+                )
+                //были выплаты на указанный счет кассы
+                if (
+                    (mDebetA>money(0)) and 	//были обороты по дебету
+                    (mKreditA>money(0)) and      //были обороты по кредиту
+                    (mRestA<mDebetA) and   	//если входяший остаток меньше оборотов по дебету за переданное число
+                    (not macULAccNotFee(oTbl.rec.account_payer))
+                   )
+                  bNot23=true;
+                  if (iTbl==1)
+                    //проводка в текущем операционном дне
+                    if (oTbl.rec.Result_Carry==23)
+                      bNot23=false;
+                    end;
+                  end;
+                  if (bNot23)
+                    mMoney=mMoney+oTbl.rec.sum;
+                  end;
+                end;
+             end;
+           end;
+        end;
+        if (bNext)
+          bNext=next(oTbl);
+        end;
+      end;
+    end;
+    iCnt=iCnt+1;  
+  end;
+  if (bBN)
+    //были зачисления в безналичной форме на переданную дату указанного счета
+    if (mMoney>money(0))
+      //println(mRestA);
+      mMoney=mMoney-mRestA;
+      if (mMoney>money(0))
+        //удерживаем процент с указанной суммы - ИТОГО
+        mRet=round(mMoney*arrPrc(iDprt)/100,2);
+      end;
+    end;
+  end;
+  return mRet;
+end;
+
+//макрос исключения удержания комисии с проводок по приему наличных денежных средств
+macro macULNotSumKassIn(sAccReceiver:string,iDprt:integer,bVip:bool,dDatePay:date,mSumPay:money):bool
+  var
+     bRet:bool;
+  const
+     D_END1:date=date(03,02,2014),
+     M_SUM1:money=money(1000),
+     S_ACC1:string="40702810002000001072";
+
+  bRet=true; //удерживается
+
+  if (sAccReceiver==S_ACC1)
+    if (mSumPay>=M_SUM1)
+      if (dDatePay<=D_END1)
+        bRet=false; //не удерживаем
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос итоговых сумм 
+//операция - прием наличных
+macro macULSumKassIn(sAccReceiver:string,iDprt:integer,bVip:bool,sTypeAcc:string,bOutTime:bool,dDatePay:date):money
+
+  //dDatePay - дата удержания комисии - чаще всего дата текущего ОД
+
+  var
+     bNext:bool,
+     mRet:money,
+     oTbl:object,
+     mSumM:money,
+     mSumL:money,
+     mSum:money,
+     mPrc:money;
+  
+  const
+        M_FIX_SUM:money=money(50),
+        DB_FIX_PRC:double=double(0.2),
+        DB_FIX_PRC1:double=double(0.05),
+        DB_FIX_PRC015:double=double(0.15),
+        DB_FIX_PRC2:double=double(0.1);
+  array
+       arrAccKass; //счета касс по подразделениям
+
+  arrAccKass(1)="20202810002000000001";
+  //arrAccKass(2)="20202810702010000003"; //add Polyakov S.George 14.02.2013  (2 (Самара Доп.) - закрыт)
+  arrAccKass(2)="20202810002000000001"; 
+  arrAccKass(3)="20202810502020000002";
+  //arrAccKass(4)="20202810002040000003"; //add Polyakov S.George 14.02.2013  (4 (Степной) - закрыт)
+  arrAccKass(4)="20202810502020000002"; 
+  arrAccKass(5)="20202810302030000001";
+  arrAccKass(6)="";
+
+  if (bOutTime) //счета для послеоперационного времени
+    arrAccKass(1)="";
+    arrAccKass(2)="";
+    arrAccKass(3)="20202810102020000004";
+    arrAccKass(4)="";
+    arrAccKass(5)="20202810602030000002";
+    arrAccKass(6)="";  
+  end;
+
+  mRet=Money(0);
+  mPrc=Money(0);
+  mSumM=money(0);
+  mSumL=money(0);
+  mSum=money(0);
+  oTbl=TBFile("document.dbt","r",4,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Real_Receiver=sAccReceiver;
+  oTbl.rec.Sum=Money(0);
+  if(getge(oTbl))
+    bNext=true;
+    while (bNext)
+      if (oTbl.rec.Real_Receiver==sAccReceiver)
+         if (arrAccKass(iDprt)==oTbl.rec.Account_Payer)
+           if (index(trim(sTypeAcc),"M")>0)
+             mSumM=mSumM+oTbl.rec.Sum;
+           elif (index(trim(sTypeAcc),"L")>0)
+             mSumL=mSumL+oTbl.rec.Sum;
+           else
+             mSum=mSum+oTbl.rec.Sum;
+           end;
+         end;
+         bNext=next(oTbl);
+      else
+         bNext=false;
+      end;
+    end;
+  end;
+  if (macULNotSumKassIn(
+                        sAccReceiver,
+                        iDprt,
+                        bVip,
+                        dDatePay,
+                        mSum+mSumL+mSumM
+                       )
+     )
+    if (not bVip)
+      mPrc=round(mSum*DB_FIX_PRC/100,2);
+      if (mPrc>money(0))
+        if (mPrc<M_FIX_SUM)
+          mPrc=M_FIX_SUM;
+        end;
+      end;
+      mRet=mRet+mPrc;
+    else
+      if (
+          (iDprt==3) or 
+          (iDprt==4)
+         )
+         mRet=mRet+round(mSumM*DB_FIX_PRC2/100,2);
+         mRet=mRet+round(mSumL*DB_FIX_PRC1/100,2);
+         mRet=mRet+round(mSum*DB_FIX_PRC/100,2);
+      elif (
+            (iDprt==1) or
+            (iDprt==2)
+           )
+         mSum=mSum+mSumL+mSumM;
+         if (mSum>money(1000))
+           mPrc=round(mSum*DB_FIX_PRC015/100,2);
+           if (mPrc>money(0))
+             if (mPrc<M_FIX_SUM)
+               mPrc=M_FIX_SUM;
+             end;
+           end;
+           mRet=mRet+mPrc;
+         end;
+      end;
+    end;
+  end;
+  return mRet;
+end;
+
+//макрос возврата НАКОПИТЕЛЬНО суммы за передаваемый месяц, год, счет
+//по архивным документам
+macro macULSumArhDoc(sAccPayer:string,sAccReceiver:string,iMon:integer,iYear:integer,iDprt:integer):money
+  var
+     oTbl:object,
+     bNext:bool,
+     dFirstDate:date,
+     dLastDate:date,
+     mRet:money;
+  mRet=money(0);
+  oTbl=TBFile("arhdoc.dbt","r",1,null,"bank.def");
+  dFirstDate=Date(1,iMon,iYear);
+  dLastDate=macULGetLastDate(dFirstDate);
+  rewind(oTbl);
+  oTbl.rec.Real_Payer=sAccPayer;
+  oTbl.rec.Date_Carry=dFirstDate;
+  oTbl.rec.Sum=Money(0);
+  bNext=true;
+  if (getge(oTbl))
+     while(bNext)
+       if (
+           (oTbl.rec.Real_Payer==sAccPayer) and
+           (oTbl.rec.Date_Carry>=dFirstDate) and
+           (oTbl.rec.Date_Carry<=dLastDate)
+          )
+          message("Просмотр счета "+oTbl.rec.Real_Payer+" в архивном дне за дату "+oTbl.rec.Date_Carry);
+          if (
+              (oTbl.rec.Account_Receiver==sAccReceiver) and
+              (oTbl.rec.Department==iDprt)
+             )
+             if (
+                 (trim(oTbl.rec.symbol_Cach)!="40") or
+                 (trim(oTbl.rec.symbol_Cach)!="50") 
+                )
+               mRet=mRet+oTbl.rec.Sum;
+             end;
+          end;
+          bNext=next(oTbl);
+       else
+          bNext=false;
+       end;
+     end;
+  end;
+  return mRet
+end;
+
+//макрос возврата необходимой суммы удержания
+//для VIP клиентов по выдачи наличности через кассу (Новая версия)
+macro macULSumPrcKasOutVIPNew(mInm:money,mArhDoc:money,bZ:bool):money
+  var
+     mRet:money,
+     i:integer,
+     mArhDocPlus:money;
+
+  const
+        DB_PRC1_ADD:double=double(1.0);
+
+  array 
+        arrPrc, 
+        arrFixSum;
+
+  arrPrc(0)=double(1.0);  
+  arrPrc(1)=double(2.0);  
+  arrPrc(2)=double(6.0);    
+
+  arrFixSum(0)=Money(1000000);
+  arrFixSum(1)=Money(3000000);
+
+  mRet=money(0);
+  i=int(0);
+
+  if (not bZ)
+     while (i<aSize(arrPrc))
+       arrPrc(i)=arrPrc(i)+DB_PRC1_ADD;
+       i=i+1;
+     end;
+  end;
+
+  /*
+   println("");
+   println("Выдано: "+mInm+" Архивные суммы "+mArhDoc+" С заявкой? "+string(bZ));
+  */
+
+  mArhDocPlus=mArhDoc+mInm;
+
+  //разбираем
+  if (mArhDocPlus<=arrFixSum(0))
+    mRet=round(mInm*arrPrc(0)/100,2);
+  elif (
+        (mArhDocPlus>arrFixSum(0)) and
+        (marhDocPlus<=arrFixSum(1))
+       )
+    if (mArhDoc<arrFixSum(0))
+      mRet=round((arrFixSum(0)-mArhDoc)*arrPrc(0)/100,2);
+      mRet=mRet+round((mInm-(arrFixSum(0)-mArhDoc))*arrPrc(1)/100,2);
+    else
+      mRet=round(mInm*arrPrc(1)/100,2);
+    end;
+  elif (mArhDocPlus>arrFixSum(1))
+    if (mArhDoc<arrFixSum(0))
+      mRet=round((arrFixSum(0)-mArhDoc)*arrPrc(0)/100,2);
+      mRet=mRet+round((arrFixSum(1)-arrFixSum(0))*arrPrc(1)/100,2);
+      mRet=mRet+round((mInm-((arrFixsum(0)-mArhDoc)+(arrFixSum(1)-arrFixSum(0))))*arrPrc(2)/100,2);
+    elif (mArhDoc<arrFixSum(1))
+      mRet=round((arrFixSum(1)-mArhDoc)*arrPrc(1)/100,2);
+      mRet=mRet+round((mInm-(arrFixSum(1)-mArhDoc))*arrPrc(2)/100,2);
+    else
+      mRet=round(mInm*arrPrc(2)/100,2);
+    end;
+  end;
+  return mRet;
+end;
+
+
+//макрос возврата необходимой суммы удержания
+//для клиентов (VIP или не VIP) по выдачи наличности через кассу (Новая версия)
+macro macULSumPrcKasOutNew(mInm:money,mArhDoc:money,bZ:bool,iDprt:integer,bVip:bool):money
+   var
+       mRet:money,
+       mPrc:money,
+       mTmp:money,
+       mArhDocPlus:money,
+       i:integer;
+
+   const
+        DB_PRC06:double=double(0.6);
+
+   array 
+        arrPrc, 
+        arrFixSum;
+
+    mRet=Money(0);
+    i=int(0);
+
+   arrPrc(0)=double(0.5);  
+   arrPrc(1)=double(1.2);  
+   arrPrc(2)=double(2);    
+   arrPrc(3)=double(2.5);  
+   arrPrc(4)=double(3);    
+   arrPrc(5)=double(5);
+
+   arrFixSum(0)=Money(500000);
+   arrFixSum(1)=Money(2000000);
+   arrFixSum(2)=Money(4000000);
+   arrFixSum(3)=Money(6000000);
+   arrFixSum(4)=Money(10000000);
+
+   if (not bZ)
+     while (i<aSize(arrPrc))
+       arrPrc(i)=arrPrc(i)+DB_PRC06;
+       i=i+1;
+     end;
+   end;
+
+   mArhDocPlus=mArhDoc+mInm;
+
+   if (mArhDocPlus<=arrFixSum(0))
+     mRet=round(mInm*arrPrc(0)/100,2);
+     if (
+          (iDprt==3) or
+          (iDprt==4)
+        )
+       if (mRet<Money(150))
+         mRet=Money(150);
+       end;
+     elif (
+           (iDprt==1) or
+           (iDprt==2)
+          )
+       if (bVip)
+         if (mRet<Money(100))
+           mRet=Money(100);
+         end;
+       else
+         if (mRet<Money(150))
+           mRet=Money(150);
+         end
+       end;
+     end;
+   elif (
+         (mArhDocPlus>arrFixSum(0)) and
+         (mArhDocPlus<=arrFixSum(1))
+        )
+	 if(mArhDoc<arrFixSum(0))
+	    mRet=round((arrFixSum(0)-mArhDoc)*arrPrc(0)/100,2);
+	    mRet=mRet+round((mInm-(arrFixSum(0)-mArhDoc))*arrPrc(1)/100,2);
+	 else
+           mRet=round(mInm*arrPrc(1)/100,2);
+	 end;         
+   elif (
+         (mArhDocPlus>arrFixSum(1)) and
+         (mArhDocPlus<=arrFixSum(2))
+        )
+        if (mArhDoc<arrFixSum(0))
+          mRet=round((arrFixSum(0)-mArhDoc)*arrPrc(0)/100,2);
+          mRet=mRet+round((arrFixSum(1)-arrFixSum(0))*arrPrc(1)/100,2);
+          mRet=mRet+round((mInm-(arrFixSum(0)-mArhDoc)-(arrFixSum(1)-arrFixSum(0)))*arrPrc(2)/100,2);
+        elif (mArhDoc<arrFixSum(1))
+          mRet=round((arrFixSum(1)-mArhDoc)*arrPrc(1)/100,2);
+          mRet=mRet+round((mInm-(arrFixSum(1)-mArhDoc))*arrPrc(2)/100,2);
+        else
+          mRet=round(mInm*arrPrc(2)/100,2);
+        end;
+   elif (
+         (mArhDocPlus>arrFixSum(2)) and
+         (mArhDocPlus<=arrFixSum(3))
+        )
+        if (mArhDoc<arrFixSum(0))
+          mRet=round((arrFixSum(0)-mArhDoc)*arrPrc(0)/100,2);
+          mRet=mRet+round((arrFixSum(1)-arrFixSum(0))*arrPrc(1)/100,2);
+          mRet=mRet+round((arrFixSum(2)-arrFixSum(1))*arrPrc(2)/100,2);
+          mTmp=(arrFixSum(0)-mArhDoc)+(arrFixSum(1)-arrFixSum(0))+(arrFixSum(2)-arrFixSum(1));
+          mRet=mRet+round((mInm-mTmp)*arrPrc(3)/100,2);
+        elif (mArhDoc<arrFixSum(1))
+          mRet=round((arrFixSum(1)-mArhDoc)*arrPrc(1)/100,2);
+          mRet=mRet+round((arrFixSum(2)-arrFixSum(1))*arrPrc(2)/100,2);
+          mTmp=(arrFixSum(1)-mArhDoc)+(arrFixSum(2)-arrFixSum(1));
+          mRet=mRet+round((mInm-mTmp)*arrPrc(3)/100,2);
+        elif (mArhDoc<arrFixSum(2))
+          mRet=round((arrFixSum(2)-mArhDoc)*arrPrc(2)/100,2);
+          mRet=mRet+round((mInm-(arrFixSum(2)-mArhDoc))*arrPrc(3)/100,2);
+        else
+          mRet=round(mInm*arrPrc(3)/100,2);
+        end;
+  elif (
+        (mArhDocPlus>arrFixSum(3)) and
+        (mArhDocPlus<=arrFixSum(4))
+       )
+       if (mArhDoc<arrFixSum(0))
+         mRet=round((arrFixSum(0)-mArhDoc)*arrPrc(0)/100,2);
+         mRet=mRet+round((arrFixSum(1)-arrFixSum(0))*arrPrc(1)/100,2);
+         mRet=mRet+round((arrFixSum(2)-arrFixSum(1))*arrPrc(2)/100,2);
+         mRet=mRet+round((arrFixSum(3)-arrFixSum(2))*arrPrc(3)/100,2);
+         mTmp=arrFixSum(0)-mArhDoc;
+         mTmp=mTmp+(arrFixSum(1)-arrFixSum(0));
+         mTmp=mTmp+(arrFixSum(2)-arrFixSum(1));
+         mTmp=mTmp+(arrFixSum(3)-arrFixSum(2));
+         mRet=mRet+round((mInm-mTmp)*arrPrc(4)/100,2);
+       elif (mArhDoc<arrFixSum(1))
+         mRet=round((arrFixSum(1)-mArhDoc)*arrPrc(1)/100,2);
+         mRet=mRet+round((arrFixSum(2)-arrFixSum(1))*arrPrc(2)/100,2);
+         mRet=mRet+round((arrFixSum(3)-arrFixSum(2))*arrPrc(3)/100,2);
+         mTmp=arrFixSum(1)-mArhDoc;
+         mTmp=mTmp+(arrFixSum(2)-arrFixSum(1));
+         mTmp=mTmp+(arrFixSum(3)-arrFixSum(2));
+         mRet=mRet+round((mInm-mTmp)*arrPrc(4)/100,2);
+       elif (mArhDoc<arrFixSum(2))
+         mRet=round((arrFixSum(2)-mArhDoc)*arrPrc(2)/100,2);
+         mRet=mRet+round((arrFixSum(3)-arrFixSum(2))*arrPrc(3)/100,2);
+         mTmp=arrFixSum(2)-mArhDoc;
+         mTmp=mTmp+(arrFixSum(3)-arrFixSum(2));
+         mRet=mRet+round((mInm-mTmp)*arrPrc(4)/100,2);
+       elif (mArhDoc<arrFixSum(3))
+         mRet=round((arrFixSum(3)-mArhDoc)*arrPrc(3)/100,2);
+         mTmp=arrFixSum(3)-mArhDoc;
+         mRet=mRet+round((mInm-mTmp)*arrPrc(4)/100,2);
+       else
+         mRet=round(mInm*arrPrc(4)/100,2);
+       end;
+  elif (mArhDocPlus>arrFixSum(4))
+     /*Дописать*/
+  end;
+   return mRet;
+end;
+
+//макрос проверки работы функции macULSumPrcKasOutNew и macULSumPrcKasOutVIPNew
+macro macCheckSumPrcKasOutNew()
+  var
+    m1:money,
+    bZ:bool,
+    m2:money,
+    bVip:bool,
+    bNext:bool;
+
+  bNext=true;
+  m1=money(0);
+  m2=money(0);
+  bZ=true;
+  bVip=false;
+  while(bNext)
+    if (getmoney(m1,"Укажите выдаваемую сумму"))
+       if (m1>money(0))
+         if (getmoney(m2,"Укажите сумму архивных документов"))
+           gettrue(bZ,"С заявкой?");
+           gettrue(bVip,"VIP ?");
+           if (bVip)
+             msgbox(macULSumPrcKasOutVIPNew(m1,m2,bZ));
+           else
+             msgbox(macULSumPrcKasOutNew(m1,m2,bZ));
+           end;
+           bNext=false;
+         end;
+       end;
+    end;
+    gettrue(bNext,"Повторить?");
+  end;
+end; 
+
+//макрос итоговых сумм 
+//операция - выдача наличных
+macro macULSumKassOut(sAccPayer:string,iDprt:integer,bVip:bool,dCurDate:date,bOutTime:bool):money
+  var
+     iFirst:bool,
+     bNext:bool,
+     mRet:money,
+     oTbl:object,
+     mArhDoc:money,
+     iMon:integer,
+     mPrc:money,
+     iYear:integer,
+     dbPrc:double,
+     m4050nz:money,
+     m4050z:money,
+     mNz:money,
+     mZ:money,
+     bZ:bool;
+  
+  const
+        M_FIX_SUM1:money=money(3000),
+        DB_FIX_PRC1:double=double(0.2),
+        M_FIX_SUM2:money=money(150),
+        DB_FIX_PRC2:double=double(0.5),
+        DB_FIX_PRC3:double=double(1.2),
+        DB_FIX_PRC4:double=double(2),
+        DB_FIX_PRC5:double=double(2.5);
+  array
+       arrAccKass, //счета касс по подразделениям
+       arrPrc4050;
+
+  arrAccKass(1)="20202810002000000001";
+  //arrAccKass(2)="20202810702010000003"; //add Polyakov S.Georgy 14.02.2013  (2 (Самара Доп.) - закрыт) 
+  arrAccKass(2)="20202810002000000001"; 
+  arrAccKass(3)="20202810502020000002";
+  //arrAccKass(4)="20202810002040000003"; //add Polyakov S.George 01.04.2013 (4 (Степной) - закрыт)
+  arrAccKass(4)="20202810502020000002"; 
+  arrAccKass(5)="20202810302030000001";
+  arrAccKass(6)="";
+
+  if (bOutTime) //счета для послеоперационного времени
+    arrAccKass(1)="";
+    arrAccKass(2)="";
+    arrAccKass(3)="20202810102020000004";
+    arrAccKass(4)="";
+    arrAccKass(5)="20202810602030000002";
+    arrAccKass(6)=""  
+  end;
+
+  mRet=Money(0);
+  mArhDoc=Money(0);
+  mPrc=money(0);
+  m4050nz=money(0);
+  m4050z=money(0);
+  mNz=money(0);
+  mZ=money(0);
+
+  oTbl=TBFile("document.dbt","r",3,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Real_Payer=sAccPayer;
+  oTbl.rec.Sum=Money(0);
+  iFirst=true;
+  if(getge(oTbl))
+    bNext=true;
+    DateSplit(dCurDate,null,iMon,iYear);
+    while (bNext)
+      bZ=false; //bZ=true - по заявке
+      if (oTbl.rec.Real_Payer==sAccPayer)
+         if (arrAccKass(iDprt)==oTbl.rec.Account_Receiver)
+           if (index(oTbl.rec.UserTypeDocument,"З")==0)
+             bZ=true;
+           end;
+           if (iFirst)
+                //узнаем накопительно
+                mArhDoc=macULSumArhDoc(sAccPayer,arrAccKass(iDprt),iMon,iYear,iDprt);
+                iFirst=false;
+              end;
+           if (
+               (trim(oTbl.rec.symbol_Cach)=="40") or
+               (trim(oTbl.rec.symbol_Cach)=="50") 
+              )
+              if (bZ)
+                 m4050z=m4050z+oTbl.rec.Sum;
+              else
+                 m4050nz=m4050nz+oTbl.rec.Sum;
+              end;
+           else
+              if (bZ)
+                mZ=mZ+oTbl.rec.Sum;
+              else
+                mNz=mNz+oTbl.rec.Sum;
+              end;
+           end;
+         end;
+         bNext=next(oTbl);
+      else
+         bNext=false;
+      end;
+    end;
+  end;
+  //подводим итоги накопления
+  if (bVip)
+    arrPrc4050(1)=double(0.1);
+    arrPrc4050(2)=double(0.1);
+    arrPrc4050(3)=double(0.2);
+    arrPrc4050(4)=double(0.2);
+    arrPrc4050(5)=double(0);
+    arrPrc4050(6)=double(0);
+    dbPrc=arrPrc4050(iDprt);
+    mPrc=round(((m4050z)*dbPrc)/100,2);
+    //без заявки
+    if (
+        (iDprt==3) or
+        (iDprt==4)
+       )
+      mPrc=mPrc+round(((m4050nz)*(dbPrc+double(1.0)))/100,2);
+    elif (
+          (iDprt==1) or
+          (iDprt==2)
+         )
+      if (mPrc>Money(0))
+        if (mPrc<Money(30))
+          mPrc=Money(30);
+        end;
+      end;
+    end;
+    mRet=mRet+mPrc;
+    //если были проводки по этому счету не 40 и 50
+    if (mZ>money(0))
+      if (
+          (iDprt==1) or
+          (iDprt==2)
+         )
+         mRet=mRet+macULSumPrcKasOutNew(mZ,mArhDoc,true,iDprt,bVip)
+      elif (
+            (iDprt==3) or
+            (iDprt==4)
+           )
+         mRet=mRet+macULSumPrcKasOutVIPNew(mZ,mArhDoc,true);
+      end;
+      mArhDoc=mArhDoc+mZ;
+    end;
+    if (mNz>money(0))
+      if (
+          (iDprt==1) or
+          (iDprt==2)
+         )
+         mRet=mRet+macULSumPrcKasOutNew(mNz,mArhDoc,false,iDprt,bVip)
+         
+      elif (
+            (iDprt==3) or
+            (iDprt==4)
+           )
+         mRet=mRet+macULSumPrcKasOutVIPNew(mNz,mArhDoc,false);
+      end;
+      mArhDoc=mArhDoc+mNz;
+    end;
+  else
+    dbPrc=double(0.2);
+    // на з/п и тому подобное
+    mPrc=round(((m4050z)*dbPrc)/100,2);
+    //сложили по не випам по 40 и 50 заявку и без заявки
+    mPrc=mPrc+round(((m4050nz)*(dbPrc+double(0.6)))/100,2);
+    if (mPrc>Money(3000))
+      mPrc=Money(3000);  
+    end;
+    mRet=mRet+mPrc; 
+    //если были проводки по этому счету не 40 и 50
+    if (mZ>money(0))
+      mRet=mRet+macULSumPrcKasOutNew(mZ,mArhDoc,true,iDprt,bVip);
+      mArhDoc=mArhDoc+mZ;
+    end;
+    if (mNz>money(0))
+      mRet=mRet+macULSumPrcKasOutNew(mNz,mArhDoc,false,iDprt,bVip);
+      mArhDoc=mArhDoc+mNz;
+    end;
+  end;
+  return mRet;
+end;
+
+//макрос итоговых сумм
+//операция выдача наличных ФЛ
+macro macULFizSumKassOut(sAccPayer:string,iDprt:integer,bVip:bool,dCurDate:date,bOutTime:bool):money
+  var
+     mRet:money;
+  mRet=money(0);
+  return mRet;
+end;
+
+//макрос проверки допустимых шифров на удержание комиссии
+macro macULYesShifr(sShifr:string,sAccReceiver:string):bool
+  var
+     bRet:bool;
+
+  bRet=false;
+  if (sShifr=="17")
+    if (SubStr(sAccReceiver,1,5)=="30301")
+      bRet=true;
+    end;
+  elif (
+        (sShifr!="04") and
+        (sShifr!="03")
+       )   
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//итоговая сумма за исполнение платежных поручений
+//по счетам физических лиц
+macro macULFizRasPoru(sAccPayer:string,iDprt:integer,bVip):money
+  var
+    mRet:money,
+    bNext:bool,
+    mTmp:money,
+    oTbl:object;
+
+ array
+   arrVipOutMAX,
+   arrVipOutMIN,
+   arrVipInMIN,
+   arrVipInMAX,
+   arrOutMAX,
+   arrOutMIN,
+   arrInMIN,
+   arrInMAX,
+   arrVipOutPrc, //процент удержания для внешнего платежа по випам
+   arrVipInPrc,
+   arrInPrc,
+   arrOutPrc;
+
+  //вип верхний нижний предел и процент для ВНЕШНИХ платежей
+  arrVipOutMAX(1)=money(1000);
+  arrVipOutMAX(2)=money(1000);
+  arrVipOutMAX(3)=money(1000);
+  arrVipOutMAX(4)=money(1000);
+  arrVipOutMAX(5)=money(1000);
+  arrVipOutMAX(6)=money(1000);
+
+  arrVipOutMIN(1)=money(10);
+  arrVipOutMIN(2)=money(10);
+  arrVipOutMIN(3)=money(10);
+  arrVipOutMIN(4)=money(10);
+  arrVipOutMIN(5)=money(10);
+  arrVipOutMIN(6)=money(10);
+
+  arrVipOutPrc(1)=double(0.1);
+  arrVipOutPrc(2)=double(0.1);
+  arrVipOutPrc(3)=double(0.1);
+  arrVipOutPrc(4)=double(0.1);
+  arrVipOutPrc(5)=double(0.1);
+  arrVipOutPrc(6)=double(0.1);
+
+  //вип верхний и нижний предел и процент для ВНУТРЕННИХ платежей
+  arrVipInMAX(1)=money(10);
+  arrVipInMAX(2)=money(10);
+  arrVipInMAX(3)=money(10);
+  arrVipInMAX(4)=money(10);
+  arrVipInMAX(5)=money(10);
+  arrVipInMAX(6)=money(10);
+
+  arrVipInMIN(1)=money(10);
+  arrVipInMIN(2)=money(10);
+  arrVipInMIN(3)=money(10);
+  arrVipInMIN(4)=money(10);
+  arrVipInMIN(5)=money(10);
+  arrVipInMIN(6)=money(10);
+
+  arrVipInPrc(1)=double(0);
+  arrVipInPrc(2)=double(0);
+  arrVipInPrc(3)=double(0);
+  arrVipInPrc(4)=double(0);
+  arrVipInPrc(5)=double(0);
+  arrVipInPrc(6)=double(0);
+
+  //не вип верхний и нижний предел для ВНЕШНИХ платежей
+  arrOutMAX(1)=money(3000);
+  arrOutMAX(2)=money(3000);
+  arrOutMAX(3)=money(3000);
+  arrOutMAX(4)=money(3000);
+  arrOutMAX(5)=money(3000);
+  arrOutMAX(6)=money(3000);
+
+  arrOutMIN(1)=money(25);
+  arrOutMIN(2)=money(25);
+  arrOutMIN(3)=money(25);
+  arrOutMIN(4)=money(25);
+  arrOutMIN(5)=money(25);
+  arrOutMIN(6)=money(25);
+
+  arrOutPrc(1)=double(1);
+  arrOutPrc(2)=double(1);
+  arrOutPrc(3)=double(1);
+  arrOutPrc(4)=double(1);
+  arrOutPrc(5)=double(1);
+  arrOutPrc(6)=double(1);
+
+  //не вип верхний и нижний предел для ВНУТРЕННИХ платежей
+  arrInMAX(1)=money(2000);
+  arrInMAX(2)=money(2000);
+  arrInMAX(3)=money(2000);
+  arrInMAX(4)=money(2000);
+  arrInMAX(5)=money(2000);
+  arrInMAX(6)=money(2000);
+
+  arrInMIN(1)=money(25);
+  arrInMIN(2)=money(25);
+  arrInMIN(3)=money(25);
+  arrInMIN(4)=money(25);
+  arrInMIN(5)=money(25);
+  arrInMIN(6)=money(25);
+
+  arrInPrc(1)=double(0.3);
+  arrInPrc(2)=double(0.3);
+  arrInPrc(3)=double(0.3);
+  arrInPrc(4)=double(0.3);
+  arrInPrc(5)=double(0.3);
+  arrInPrc(6)=double(0.3);
+
+  mRet=money(0);
+  oTbl=TBFile("document.dbt","r",3,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Real_Payer=sAccPayer;
+  oTbl.rec.Sum=Money(0);
+  //msgbox(sAccPayer+" "+string(bVip));
+  if(getge(oTbl))
+    bNext=true;
+    while (bNext)
+      if (oTbl.rec.Real_Payer==sAccPayer)
+        //msgbox(oTbl.rec.Real_Payer+" "+oTbl.rec.Real_Receiver);
+        //msgbox(oTbl.rec.result_carry);
+        //msgbox(macULNotD(oTbl.rec.Account_Receiver,oTbl.rec.MFO_Receiver));
+        //msgbox(oTbl.rec.result_carry);
+        if (
+            //исключаем проводку в архиве
+            (oTbl.rec.result_carry!=23) and  
+            (macULNotBud(
+                         oTbl.rec.MFO_Receiver,
+                         oTbl.rec.Account_Receiver,
+                         oTbl.rec.CorAcc_Receiver,
+                         oTbl.rec.Account_Payer
+                        )
+            ) and
+            macULYesShifr(oTbl.rec.Shifr_Oper,oTbl.rec.Account_Receiver) and 
+            (macULNotD(oTbl.rec.Account_Receiver,oTbl.rec.MFO_Receiver))
+           )
+          //обрабатываем текущую проводку
+          //эта проводка не в бюджет, не на доходные счета, не в архиве
+          //msgbox("!");
+          mTmp=money(0);
+          if (StrLen(trim(oTbl.rec.MFO_Receiver))!=0)
+            //внешний платеж 
+            if (bVip)
+              mTmp=(oTbl.rec.Sum*arrVipOutPrc(iDprt))/100;
+              if (mTmp>arrVipOutMAX(iDprt))
+                mTmp=arrVipOutMAX(iDprt);
+              elif (mTmp<arrVipOutMIN(iDprt))
+                mTmp=arrVipOutMIN(iDprt);
+              end;
+              mRet=mRet+mTmp;
+            else
+              //внешний платеж не vip
+              mTmp=(oTbl.rec.Sum*arrOutPrc(iDprt))/100;
+              if (mTmp>arrOutMAX(iDprt))
+                mTmp=arrOutMAX(iDprt);
+              elif (mTmp<arrOutMIN(iDprt))
+                mTmp=arrOutMIN(iDprt);
+              end;
+              mRet=mRet+mTmp;
+            end;
+          else
+            //внутренний платеж
+            //msgbox("!");
+            if (bVip)
+             mTmp=(oTbl.rec.Sum*arrVipInPrc(iDprt))/100;
+              //msgbox(mTmp);
+              //msgbox(mTmp<arrVipInMIN(iDprt));
+              if (mTmp>arrVipInMAX(iDprt))
+                mTmp=arrVipInMAX(iDprt);
+              elif (mTmp<arrVipInMIN(iDprt))
+                mTmp=arrVipInMIN(iDprt);
+              end;
+              mRet=mRet+mTmp;
+            else
+              //внутренний платеж не vip
+              mTmp=(oTbl.rec.Sum*arrInPrc(iDprt))/100;
+              if (mTmp>arrInMAX(iDprt))
+                mTmp=arrInMAX(iDprt);
+              elif (mTmp<arrInMIN(iDprt))
+                mTmp=arrInMIN(iDprt);
+              end;
+              mRet=mRet+mTmp;
+            end;
+          end;
+        end;
+        bNext=next(oTbl);
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+  return mRet;
+end;
+
+//итоговая сумма за исполнение платежных поручений
+macro macULRasPoru(sAccPayer:string,iDprt:integer,bVip:bool):money
+  var
+     bNext:bool,
+     mRet:money,
+     oTbl:object,
+     bP:bool,
+     mPrc:money;
+  
+  const
+        M_FIX_SUM:money=money(50),  
+        DB_FIX_PRC:double=double(1.0);
+  array
+       arrBnkVIPIn,
+       arrBnkIn,
+       arrBnkVIPOut,
+       arrBnkOut,
+       arrBiVIPIn,
+       arrBiVIPOut,
+       arrBiIn,
+       arrBiOut,
+       arrVIPIn,
+       arrVIPOut,
+       arrIn, 
+       arrOut;
+
+ /*Удержание по подразделениям по iBnk2 на счета клиентов других банков и своих*/
+
+ arrBnkVIPIn(1)=money(0);
+ arrBnkVIPIn(2)=money(0);
+ arrBnkVIPIn(3)=money(10);
+ arrBnkVIPIn(4)=money(10);
+ arrBnkVIPIn(5)=money(0);
+ arrBnkVIPIn(6)=money(0);
+
+ arrBnkIn(1)=money(0);
+ arrBnkIn(2)=money(0);
+ arrBnkIn(3)=money(20);
+ arrBnkIn(4)=money(20);
+ arrBnkIn(5)=money(0);
+ arrBnkIn(6)=money(0);
+
+ arrBnkVIPOut(1)=money(19);
+ arrBnkVIPOut(2)=money(19);
+ arrBnkVIPOut(3)=money(20);
+ arrBnkVIPOut(4)=money(20);
+ arrBnkVIPOut(5)=money(0);
+ arrBnkVIPOut(6)=money(0);
+
+ arrBnkOut(1)=money(30);
+ arrBnkOut(2)=money(30);
+ arrBnkOut(3)=money(30);
+ arrBnkOut(4)=money(30);
+ arrBnkOut(5)=money(0);
+ arrBnkOut(6)=money(0);
+
+ /*Удержание за biprint*/
+
+ arrBiVIPIn(1)=money(0);
+ arrBiVIPIn(2)=money(0);
+ arrBiVIPIn(3)=money(10);
+ arrBiVIPIn(4)=money(10);
+ arrBiVIPIn(5)=money(0);
+ arrBiVIPIn(6)=money(0);
+
+ arrBiVIPOut(1)=money(25);
+ arrBiVIPOut(2)=money(25);
+ arrBiVIPOut(3)=money(20);
+ arrBiVIPOut(4)=money(20);
+ arrBiVIPOut(5)=money(0);
+ arrBiVIPOut(6)=money(0);
+
+ arrBiIn(1)=money(0);
+ arrBiIn(2)=money(0);
+ arrBiIn(3)=money(25);
+ arrBiIn(4)=money(25);
+ arrBiIn(5)=money(0);
+ arrBiIn(6)=money(0);
+
+ arrBiOut(1)=money(30);
+ arrBiOut(2)=money(30);
+ arrBiOut(3)=money(30);
+ arrBiOut(4)=money(30);
+ arrBiOut(5)=money(0);
+ arrBiOut(6)=money(0);
+
+ /*На бумажном носителе*/
+
+ arrVIPIn(1)=money(0);
+ arrVIPIn(2)=money(0);
+ arrVIPIn(3)=money(15);
+ arrVIPIn(4)=money(15);
+ arrVIPIn(5)=money(0);
+ arrVIPIn(6)=money(0);
+
+ arrVIPOut(1)=money(50);
+ arrVIPOut(2)=money(50);
+ arrVIPOut(3)=money(35);
+ arrVIPOut(4)=money(35);
+ arrVIPOut(5)=money(0);
+ arrVIPOut(6)=money(0);
+
+ arrIn(1)=money(0);
+ arrIn(2)=money(0);
+ arrIn(3)=money(50);
+ arrIn(4)=money(50);
+ arrIn(5)=money(0);
+ arrIn(6)=money(0);
+
+ arrOut(1)=money(70);
+ arrOut(2)=money(70);
+ arrOut(3)=money(70);
+ arrOut(4)=money(70);
+ arrOut(5)=money(0);
+ arrOut(6)=money(0);
+
+
+  mRet=Money(0);
+  mPrc=Money(0);
+  //можно использовать 3 индекс, так как 
+  //мы смотрим только проводки своих клиентов куда-то
+  //в этом случае Real_Payer==Account_Payer
+  oTbl=TBFile("document.dbt","r",3,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Real_Payer=sAccPayer;
+  oTbl.rec.Sum=Money(0);
+  if(getge(oTbl))
+    bNext=true;
+    while (bNext)
+      if (oTbl.rec.Real_Payer==sAccPayer)
+        if (
+            //исключаем проводку в архиве
+            (oTbl.rec.result_carry!=23) and  
+            (macULNotBud(
+                         oTbl.rec.MFO_Receiver,
+                         oTbl.rec.Account_Receiver,
+                         oTbl.rec.CorAcc_Receiver,
+                         oTbl.rec.Account_Payer
+                        )
+            ) and
+            macULYesShifr(oTbl.rec.Shifr_Oper,oTbl.rec.Account_Receiver) and 
+            (macULNotD(oTbl.rec.Account_Receiver,oTbl.rec.MFO_Receiver))
+           )
+          bP=false;
+          if (
+              (index(oTbl.rec.UserTypeDocument,"Р")>0) and
+              (not bVip)
+             )
+            bP=true;
+          end;
+          if (bP)
+            mPrc=round((oTbl.rec.Sum*DB_FIX_PRC)/100,2);
+            if (mPrc<M_FIX_SUM)
+              mPrc=M_FIX_SUM;
+            end;
+            mRet=mRet+mPrc;
+          else
+            if (oTbl.rec.result_carry==1207) //iBank2
+              if (StrLen(trim(oTbl.rec.MFO_Receiver))!=0)
+                if (bVip)
+                  mRet=mRet+arrBnkVIPOut(iDprt); 
+                else
+                  mRet=mRet+arrBnkOut(iDprt); 
+                end;
+              else
+                if (bVip)
+                  mRet=mRet+arrBnkVIPIn(iDprt); 
+                else
+                  mRet=mRet+arrBnkIn(iDprt); 
+                end;
+              end;
+            elif (oTbl.rec.result_carry==113) //BiPrint
+              if (StrLen(trim(oTbl.rec.MFO_Receiver))!=0)
+                if (bVip)
+                  mRet=mRet+arrBiVipOut(iDprt);   
+                else
+                  mRet=mRet+arrBiOut(iDprt); 
+                end;
+              else
+                if (bVip)
+                  mRet=mRet+arrBiVipIn(iDprt);   
+                else
+                  mRet=mRet+arrBiIn(iDprt); 
+                end;
+              end;
+            else
+              //все остальное 
+              if (StrLen(trim(oTbl.rec.MFO_Receiver))!=0)
+                if (bVip)
+                  mRet=mRet+arrVIPOut(iDprt); 
+                else
+                  mRet=mRet+arrOut(iDprt); 
+                end;
+              else
+                if (bVip)
+                  mRet=mRet+arrVIPIn(iDprt); 
+                else
+                  mRet=mRet+arrIn(iDprt); 
+                end;
+              end;
+            end;
+          end;
+        end;
+        bNext=next(oTbl);
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+  return mRet;
+end;
+
+//вспомогательный макрос проверки == real_payer и account_payer в document.mac
+//операции НАШИХ клиентов
+macro macULDocRealAccPayer()
+  var
+     oTbl:object;
+   oTbl=TBFile("document.dbt","r",1,null,"bank.def");
+   rewind(oTbl);
+   while(next(oTbl))
+    if (oTbl.rec.Real_Payer!=oTbl.rec.Account_Payer)
+      println("Real_Payer="+oTbl.rec.Real_Payer+" Account_Payer="+oTbl.rec.Account_Payer);
+    end;
+   end;
+end;
+
+//поиск файла по передаваемому пути sPth
+//если sPth не передается, то ищется в DBFILE 
+macro macULFindFl(sTbl:string,sPth:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (
+      (ValType(sPth)==V_UNDEF) or
+      (trim(sPth)=="")
+     )
+    sPth="..\\dbfile\\";
+  end;
+  if (strlen(FindPath(sTbl,sPth))!=0)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//проверка на удержания macULMoneyArhOp
+//если по найденному счету удерживалось
+//раньше dDate-iDays (тестовый вариант, на 20.02.2013 не задействована)
+macro macULFeeAccUpd(sAcc:string,dDateCur:date,iDays,bIns:bool):bool
+  var
+     oTbl:object,
+     sTblName:string,
+     sDefName:string,
+     bRet:bool;
+  bRet=false;
+  sTblName="FeeAcc.dbt";
+  sDefName="bfsofia1.def";
+  if (macULFindFL(sTblName))
+    oTbl=TBFile(sTblName,"w",0,null,sDefName);
+    rewind(oTbl);
+    oTbl.rec.account=sAcc;
+    if (geteq(oTbl))
+      if (oTbl.rec.DateFee<dDateCur-iDays)
+        if (bIns)
+          oTbl.rec.DateFee=dDateCur;
+          bRet=update(oTbl);
+        else
+          bRet=true;
+        end;
+      end;
+    else
+      if (bIns)
+        oTbl.rec.account=sAcc;
+        oTbl.rec.DateFee=dDateCur;
+        bRet=insert(oTbl);
+      else
+        bRet=true;
+      end;
+    end;
+  else
+    println("Таблица для фиксирования даты удержания "+ sTblName+ " не найдена!");
+  end;
+  return bRet;
+end;
+
+//макрос возврата <месяц>/<номер месяца>
+macro macULGetMonMenu(dDateDef:date):string
+  var
+     sRet:string,
+     iMon:integer;
+
+  array
+     arrMon;
+
+  sRet="";
+  //зайдействовать в перспективе
+  datesplit(dDateDef,null,iMon,null);
+  iMon=iMon-1;
+
+  arrMon(0)="январь";
+  arrMon(1)="февраль";
+  arrMon(2)="март";
+  arrMon(3)="апрель";
+  arrMon(4)="май";
+  arrMon(5)="июнь";
+  arrMon(6)="июль";
+  arrMon(7)="август";
+  arrMon(8)="сентябрь";
+  arrMon(9)="октябрь";
+  arrMon(10)="ноябрь";
+  arrMon(11)="декабрь";
+
+  iMon=macULRetMenu(arrMon,"Укажите требуемый месяц","М:");
+  if (iMon!=-2)
+    sRet=string(iMon+1)+"/"+arrMon(iMon);
+  else
+    sRet=string(0)+"/"+"Не указан";
+  end;
+  return sRet;
+end;
+
+//макрос возврата номера года
+macro macULGetYear(dDate:date):integer
+  var
+    iRet:integer;
+  iRet=0;
+  datesplit(dDate,null,null,iRet);
+  if (getint(iRet,"Укажите год"))
+    if (iRet<=0)
+      iRet=0;
+    end;
+  else
+    iRet=0;
+  end;
+  return iRet;
+end;
+
+//макрос проверки было ли движение по счету за передаваемый месяц
+macro macULYesSumChMon(sAcc:string,iMon:integer,iYear:integer,dCurDate:date):bool
+  var
+     oTbl:object,
+     iMon_:integer,
+     iYear_:integer,
+     bNext:bool,
+     bRet:bool;
+  bRet=false;
+  oTbl=TBFile("arhdoc.dbt","r",1,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Real_Payer=sAcc;
+  oTbl.rec.Date_Carry=date(1,iMon,iYear);
+  oTbl.rec.Sum=Money(0);
+  //проверяем было ли вообще движение по кредиту
+  //в случае, если платежи "ВНЕШНИЕ", то есть, в другие банки, то в поле
+  //oTbl.rec.Real_Payer указывается кор. счет банка корреспондента
+  //в данном случае, мы обрабатываем СВОИХ клиентов и даже, если 
+  //они ПЛАТЕЛЬЩИКИ и платят в ДРУГОЙ Банк, то в Real_Payer дублируется счет
+  //плательщика - нашего клиента, то есть Real_Payer=Account_Payer=sAcc
+  //то есть использовать 1 индекс можно
+  if (getge(oTbl))
+     if (oTbl.rec.Real_Payer==sAcc)
+       datesplit(oTbl.rec.Date_Carry,null,iMon_,iYear_);
+        if (
+            (iMon==iMon_) and
+            (iYear==iYear_)
+           )
+          bRet=true;
+        end
+     end;
+  end;
+  //детально просматриваем проводки по дебету, 
+  //смотрим было ли движение кроме комиссий
+  //add Polyakov S.George 19.04.2013
+  if (bRet)
+    //если что-то найдено, то есть было движение по дебету
+    bNext=true;
+    while(bNext)
+      datesplit(oTbl.rec.Date_Carry,null,iMon_,iYear_);
+      if (
+          (oTbl.rec.Real_Payer==sAcc) and
+          (iMon==iMon_) and
+          (iYear==iYear_)
+         )
+        if (
+            macULNotD(oTbl.rec.Account_Receiver,oTbl.rec.MFO_Receiver)
+           )
+          bRet=false;
+          bNext=false;
+        else
+          bNext=next(oTbl);
+        end;
+      else
+        bNext=false;
+      end;
+    end;
+    if (not bRet)
+      //значит был досрочный выход из цикла и есть проводки кроме комиссиий
+      bRet=true; //дальше проверять нет смысла, поэтому устанавливаем true
+    else
+      //все просмотренные проводки - были комиссионными, значит смотрим дальше
+      bRet=false;
+    end;
+  end;
+  if (not bRet)
+    oTbl=TBFile("arhdoc.dbt","r",2,null,"bank.def");
+    rewind(oTbl);
+    oTbl.rec.Real_Receiver=sAcc;
+    oTbl.rec.Date_Carry=date(1,iMon,iYear);
+    oTbl.rec.Sum=Money(0);
+    if (getge(oTbl))
+      if (oTbl.rec.Real_Receiver==sAcc)
+       datesplit(oTbl.rec.Date_Carry,null,iMon_,iYear_);
+        if (
+            (iMon==iMon_) and
+            (iYear==iYear_)
+           )
+          bRet=true;
+        end
+     end;  
+    end;
+  end;
+  if (not bRet)
+    datesplit(dCurDate,iMon_,iYear_);
+    //если месяц удержания == месяцу текущего операционного дня
+    if (
+        (iMon==iMon_) and
+        (iYear==iYear_)
+       )
+      oTbl=TBFile("document.dbt","r",3,null,"bank.def");
+      rewind(oTbl);
+      oTbl.rec.Real_Payer=sAcc;
+      oTbl.rec.Sum=Money(0);
+      if (getge(oTbl))
+        if (oTbl.rec.Real_Payer==sAcc)
+          bRet=true;
+        end;  
+      end;
+      if (not bRet)
+        oTbl=TBFile("document.dbt","r",4,null,"bank.def");
+        rewind(oTbl);
+        oTbl.rec.Real_Receiver=sAcc;
+        oTbl.rec.Sum=Money(0);
+        if (getge(oTbl))
+          if (oTbl.rec.Real_Receiver==sAcc)
+            bRet=true;
+          end;  
+        end  
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос для проверки сумм для исключения из удержания по 
+//функции macULAkceptBank
+macro macULCheckAkceptSum(sAcc:string,bRecv:bool,sMfo:string):integer
+//bRecv==true  sAcc-получатель
+//bRecv==false sAcc-плательщик
+//2 - фиксируем сумму
+  var
+     bal3:string,
+     bal5:string,
+     iRet:integer,
+     iLenMfo:integer;
+  iRet=0;
+  bal5=SubStr(sAcc,1,5);
+  iLenMfo=StrLen(trim(sMfo));
+  if (bRecv)
+    if (
+        (macULNotD(sAcc,sMfo)) and //убрали комисии
+        (not macULInAccCred(sAcc,sMfo))  and //убрали кредиты
+        (not macULInAccFutu(sAcc,sMfo))  //убрали счета доходов будущих периодов
+       )
+      if (bal5=="20202")
+        iRet=4;
+      else
+        iRet=2;
+      end;
+    end;   
+  else
+    if (bal5=="20202")
+       iRet=1; //зачисления наличными
+    else
+      if (iLenMfo==0) //внутренний оборот
+        iRet=2;
+      else
+        iRet=3; //внешние поступления
+      end;
+    end;
+  end;
+  return iRet;
+end;
+
+
+
+macro macGetSumPrcAkceptBank(iDprt:integer,bVip:bool,bOutTime:bool):string
+  var
+     mFixSum:money,
+     dFixPrc:double,
+     sRet:string;
+
+  array
+    arrFixSum, 
+    arrFixPrc,
+    arrFixSumVip,
+    arrFixPrcVip;
+
+  arrFixSum(1)=money(100);
+  arrFixSum(2)=money(100);
+  arrFixSum(3)=money(100);
+  arrFixSum(4)=money(100);
+  arrFixSum(5)=money(100);
+  arrFixSum(6)=money(100);
+
+  arrFixSumVip(1)=money(50);
+  arrFixSumVip(2)=money(50);
+  arrFixSumVip(3)=money(50);
+  arrFixSumVip(4)=money(50);
+  arrFixSumVip(5)=money(50);
+  arrFixSumVip(6)=money(50);
+
+  arrFixPrc(1)=double(0.15);
+  arrFixPrc(2)=double(0.15);
+  arrFixPrc(3)=double(0.15);
+  arrFixPrc(4)=double(0.15);
+  arrFixPrc(5)=double(0.15);
+  arrFixPrc(6)=double(0.15);
+
+  arrFixPrcVip(1)=double(0.1);
+  arrFixPrcVip(2)=double(0.1);
+  arrFixPrcVip(3)=double(0.1);
+  arrFixPrcVip(4)=double(0.1);
+  arrFixPrcVip(5)=double(0.1);
+  arrFixPrcVip(6)=double(0.1);
+
+  if (bVip)
+    mFixSum=arrFixSumVip(iDprt);
+    dFixPrc=arrFixPrcVip(iDprt);
+  else
+    mFixSum=arrFixSum(iDprt);
+    dFixPrc=arrFixPrc(iDprt);
+  end;
+
+  sRet=string(mFixSum)+"/"+string(dFixPrc);
+  return sRet;
+end;
+
+//макрос формирования удержания под встречные платежи из других банков
+//при условии акцептирования заявки банком
+//по АРХИВНОМУ ДНЮ
+macro macULAkceptBankArhDay(
+                            sAcc:string,
+                            iDprt:integer,
+                            bVip:bool,
+                            bOutTime:bool,
+                            dDate:date,
+                            mRestA:money,
+                            mDebetA:money,
+                            mKreditA:money
+                           ):money
+  array
+        arrKasSum;
+  var
+     oTbl:object,
+     bNext:bool,
+     bKas:bool,
+     iTypeFee:integer,
+     mRet:money,
+     mFixSum:money,
+     dFixPrc:double,
+     sFixSumPrc:string,
+     mMoney2:money,
+     mMoney1:money,
+     mMoney3:money,
+     mInOst:money;
+
+  mRet=money(0);
+  mMoney2=money(0);
+  mMoney1=money(0);
+  mMoney3=money(0);
+  bKas=false;
+
+  if (
+      (mDebetA>money(0)) and 
+      (mKreditA>money(0))
+     )
+    mInOst=mRestA;
+    if (mInOst<mDebetA)
+      //println("Входящий остаток:"+mInOst);
+      //обороты по дебету превышают входящий остаток
+      //убираем счета исключения
+      if (not (macULAccNotFee(sAcc)))
+        //устанавливаем параметры удержания
+        sFixSumPrc=macGetSumPrcAkceptBank(iDprt,bVip,bOutTime);
+        mFixSum=money(macULGetOneT(sFixSumPrc,true));
+        dFixPrc=double(macULGetOneT(sFixSumPrc,false));
+        //смотрим по архивным документам обороты по дебету
+        oTbl=TBFile("arhdoc.dbt","r",1,null,"bank.def");
+        oTbl.rec.Real_Payer=sAcc;
+        oTbl.rec.Date_Carry=dDate;
+        oTbl.rec.Sum=Money(0);
+        if (getGE(oTbl))
+          bNext=true;
+          iTypeFee=0;
+           while (bNext)
+             if (
+                 (oTbl.rec.Real_payer==sAcc) and
+                 (oTbl.rec.Date_Carry==dDate)
+                )
+               iTypeFee=macULCheckAkceptSum(
+                                            oTbl.rec.Account_receiver,
+                                            true,
+                                            oTbl.rec.MFO_Receiver
+                                           );
+               if (iTypeFee!=0) //ничего не фиксируем  (исключаем комисии и кредиты)
+                 if (
+                     (iTypeFee==2) or
+                     (iTypeFee==4)
+                    )
+                    if (iTypeFee==4)  	//выдача денег через кассу
+                      bKas=true; 		//помечаем, что была такая проводка по дебету
+                    end;
+                   mMoney2=mMoney2+oTbl.rec.sum;
+                 end;
+               end;
+               bNext=next(oTbl);
+             else
+               bNext=false;
+             end;
+           end;
+        end;
+        //смотрим по архивным документам обороты по кредиту
+        oTbl=TBFile("arhdoc.dbt","r",2,null,"bank.def");
+        oTbl.rec.Real_Receiver=sAcc;
+        oTbl.rec.Date_Carry=dDate;
+        oTbl.rec.Sum=Money(0);
+        if (getGE(oTbl))
+          bNext=true;
+          iTypeFee=0;
+           while (bNext)
+             if (
+                 (oTbl.rec.Real_Receiver==sAcc) and
+                 (oTbl.rec.Date_Carry==dDate)
+                )
+               iTypeFee=macULCheckAkceptSum(
+                                            oTbl.rec.Account_Payer,
+                                            false,
+                                            oTbl.rec.MFO_Payer
+                                           );
+               if (iTypeFee!=0)
+                 if (iTypeFee==2)
+                   //убираем внутренние платежи
+                   mMoney2=mMoney2-oTbl.rec.sum;
+                 elif (iTypeFee==1) //был приход из кассы (зачисление наличных, оборот по кредиту)
+                   mMoney1=mMoney1+oTbl.rec.sum;
+                 elif (iTypeFee==3)
+                   mMoney3=mMoney3+oTbl.rec.Sum;
+                 end;
+               end;
+               bNext=next(oTbl);
+             else
+               bNext=false;
+             end;
+           end;
+        end;
+      end;
+    end;
+  end;
+  if (
+      (mMoney2>Money(0)) 
+     )
+    mRet=mMoney2-mInOst;
+    if (mRet>0)
+      //дополнительная проверка
+      if (not bVip)
+        if (mMoney1>money(0)) //зачисления из кассы
+          if (mMoney1>mMoney3) //больше чем внешние зачисления
+            //если не вип и был подкрепление по кассе больше чем приход внешний безналом
+            //обсчитываем по vip тарифу
+            mFixSum=money(macULGetOneT(macGetSumPrcAkceptBank(iDprt,true,false),true));
+          end;
+        end;
+      end;
+      mRet=round(mRet*dFixPrc/100,2);
+      if (mRet<mFixSum)
+        mRet=mFixSum;
+      end;
+    else
+      mRet=money(0);
+    end;
+  end;
+  return mRet;
+end;
+
+//макрос формирования удержания под встречные платежи из других банков
+//при условии акцептирования заявки банком
+macro macULAkceptBank(
+                      sAcc:string,
+                      iDprt:integer,
+                      bVip:bool,
+                      bOutTime:bool,
+                      dDate:date,
+                      mRestA:money,
+                      mDebetA:money,
+                      mKreditA:money
+                     ):money
+  var
+     bNext:bool,
+     mInOst:money,
+     oTbl:object,
+     iTypeFee:integer,
+     mMoney1:money,
+     mMoney2:money,
+     mMoney3:money,
+     mD0:money,
+     mFixSum:money,
+     dFixPrc:double,
+     sFixSumPrc:string,
+     mRet:money;
+
+
+  mRet=money(0);
+  oTbl=null;
+  mInOst=money(0);
+  mMoney1=money(0);
+  mMoney2=money(0);
+  mMoney3=money(0);
+  mD0=money(0);
+
+  sFixSumPrc=macGetSumPrcAkceptBank(iDprt,bVip,bOutTime);
+
+  mFixSum=money(macULGetOneT(sFixSumPrc,true));
+  dFixPrc=double(macULGetOneT(sFixSumPrc,false));
+
+  //убираем счета исключения
+  if (macULAccNotFee(sAcc))
+    sAcc="";
+  end;
+   
+  oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.account=sAcc;
+  if (geteq(oTbl))
+     //определяем входящий остаток на текущий ОД
+     //для этого остаток на счете складываем с расходом и вычитаем приход
+     //<остаток на счете входящий>=<остаток на счете текущий>+<общий расход за день>-<приход>
+     //то есть вычитаем обороты по кредиту и прибавляем обороты по дебету
+     if (
+         (oTbl.rec.D0!=Money(0)) and
+         (oTbl.rec.K0!=Money(0))
+        )
+       //если были обороты
+       mInOst=oTbl.rec.R0+oTbl.rec.D0-oTbl.rec.K0;
+       if (mInOst<oTbl.rec.D0)
+         //то есть расход (обороты по дебету) превышает входящий остаток
+         //наш клиент
+         //фиксируем его общий расход
+         mD0=oTbl.rec.D0; //сохранили полный оборот по дебету (все без исключения проводки)
+         oTbl=TBFile("document.dbt","r",3,null,"bank.def");
+         oTbl.rec.Real_Payer=sAcc;
+         oTbl.rec.Sum=Money(0);
+         if (getGE(oTbl))
+           bNext=true;
+           iTypeFee=0;
+           //println(sAcc);
+           while (bNext)
+             //обороты по дебету
+             if (
+                 (oTbl.rec.Real_payer==sAcc) and
+                 (oTbl.rec.Result_Carry!=23)
+                )
+               iTypeFee=macULCheckAkceptSum(
+                                            oTbl.rec.Account_receiver,
+                                            true,
+                                            oTbl.rec.MFO_Receiver
+                                           );
+               if (iTypeFee!=0) //ничего не фиксируем  (исключаем комисии и кредиты)
+                 if (iTypeFee==2)
+                   //println(oTbl.rec.sum);
+                   mMoney2=mMoney2+oTbl.rec.sum;
+                 end;
+               end;
+               bNext=next(oTbl);
+             else
+               bNext=false;
+             end;
+           end;
+         end;
+         oTbl=TBFile("document.dbt","r",4,null,"bank.def");
+         oTbl.rec.Real_Receiver=sAcc;
+         oTbl.rec.Sum=Money(0);
+         if (getGE(oTbl))
+           bNext=true;
+           iTypeFee=0;
+           while(bNext)
+             if (
+                 (oTbl.rec.Real_Receiver==sAcc) and
+                 (oTbl.rec.Result_Carry!=23)
+                )
+               iTypeFee=macULCheckAkceptSum(
+                                            oTbl.rec.Account_Payer,
+                                            false,
+                                            oTbl.rec.MFO_Payer
+                                           );
+               if (iTypeFee!=0)
+                 if (iTypeFee==2)
+                   //убираем внутренние платежи
+                   mMoney2=mMoney2-oTbl.rec.sum;
+                 elif (iTypeFee==1)
+                   mMoney1=mMoney1+oTbl.rec.sum;
+                 elif (iTypeFee==3)
+                   mMoney3=mMoney3+oTbl.rec.Sum;
+                 end;
+               end;
+               bNext=next(oTbl);
+             else
+               bNext=false;
+             end;
+           end;                 
+         end;
+       end;
+     end;
+  end;
+  if (
+      (mMoney2>Money(0)) 
+     )
+    mRet=mMoney2-mInOst;
+    if (mRet>0)
+      //дополнительная проверка
+      if (not bVip)
+        if (mMoney1>money(0)) //зачисления из кассы
+          if (mMoney1>mMoney3) //больше чем внешние зачисления
+            //если не вип и был подкрепление по кассе больше чем приход внешний безналом
+            mFixSum=money(macULGetOneT(macGetSumPrcAkceptBank(iDprt,true,false),true));
+          end;
+        end;
+      end;
+      mRet=round(mRet*dFixPrc/100,2);
+      if (mRet<mFixSum)
+        mRet=mFixSum;
+      end;
+    else
+      mRet=money(0);
+    end;
+  end;
+  return mRet;
+end;
+
+//Конвертор строковой константы из Win в DOS и обратно
+//простенький вариант, надо все же его потом проверить
+macro macULDosWin(sIn:string,bWhat:bool):string
+//bWhat==true - Win to DOS
+//bWhat==false - DOS to Win
+  var
+     sRet:string,
+     a:string,
+     n:integer,
+     s:string,
+     c:integer,
+     b:string;
+
+  array
+       arrSym;
+ 
+  arrSym(0)="▀╫╤╠╚╥▄┴▐╘█┬└╧╨╬╦─╞▌╔╓╙╩┼═├╪┘╟╒┌ ўёьшЄ№с■Ї√тряЁюыфц¤щЎєъхэу°∙чї·";
+  arrSym(1)="ЯЧСМИТЬБЮФЫВАПРОЛДЖЭЙЦУКЕНГШЩЗХЪячсмитьбюфывапролджэйцукенгшщзхъ";
+  
+  sRet="";
+  a="";
+  b="";
+  a=arrSym(0);
+  b=arrSym(1);
+  n=1;
+  s="";
+
+  if (not bWhat)
+    a=arrSym(1);
+    b=arrSym(0);
+  end;
+
+  while(n<=StrLen(sIn))
+    c=0;
+    s=SubStr(sIn,n,1);
+    c=index(a,s);
+    if (c!=0)
+      sRet=sRet+SubStr(b,c,1);
+    else
+      sRet=sRet+s;
+    end;
+    n=n+1;
+  end;
+  return sRet;
+end;
+
+//получение наименование банка^корсчета
+//по MFO
+macro macULGetBankNameKorAcc(sMfo:string):string
+  var
+     oTbl:object,
+     sRet:string;
+
+  oTbl=TBFile("bankdprt.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.MFO_Depart=sMfo;
+  oTbl.rec.Corr_Acc="";
+  if (getge(oTbl))
+    if (oTbl.rec.MFO_Depart==sMfo)
+      sRet=oTbl.rec.Name_Depart+"^"+oTbl.rec.Corr_Acc;
+    end;
+  end;
+  return sRet;
+end;
+
+//получение расширения в имени файла
+//bExt==true - только расширение
+//bExt==false - имя без расширения
+macro macGetFileName(sIn:string,bExt:bool):string
+  var
+    iA:integer,
+    sRet:string;
+
+  sRet="";
+  iA=0;
+  iA=index(sIn,".");
+  if (iA>0)
+    if (bExt)
+      sIn=SubStr(sIn,iA+1);
+      if (StrLen(sIn)==3)
+        sRet=sIn;
+      end;
+    else
+      sRet=SubStr(sIn,1,iA-1);
+    end;
+  end;
+  return sRet;
+end;
+
+//проверка на использование пользовательского поля 1
+//в валютных документах
+macro macULDocCheckUsrFld1()
+  var
+     oTbl:object,
+     i:integer;
+
+  i=0;
+  oTbl=TBFile("documnt$.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  initprogress(nrecords(oTbl),"Подождите, идет обработка данных","Обработка");
+  while (next(oTbl))
+    i=i+1;
+    useprogress(i);
+    if (StrLen(trim(oTbl.rec.UserField1))!=0)
+      println(trim(oTbl.rec.UserField1));
+    end;
+  end;
+end;
+
+//проверка на использование пользовательского поля 1
+//в валютных архивных документах
+macro macULArhCheckUsrFld1()
+  var
+     oTbl:object,
+     i:integer;
+
+  i=0;
+  oTbl=TBFile("arhdoc$.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  initprogress(nrecords(oTbl),"Подождите, идет обработка данных","Обработка");
+  while (next(oTbl))
+    i=i+1;
+    useprogress(i);
+    if (StrLen(trim(oTbl.rec.UserField1))!=0)
+      println(trim(oTbl.rec.UserField1));
+    end;
+  end;
+end;
+
+//проверка на использование пользовательского поля 1
+//в валютных счетах
+macro macULAccCheckUsrFld1()
+  var
+     oTbl:object,
+     i:integer;
+
+  i=0;
+  oTbl=TBFile("account$.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  initprogress(nrecords(oTbl),"Подождите, идет обработка данных","Обработка");
+  while (next(oTbl))
+    i=i+1;
+    useprogress(i);
+    if (StrLen(trim(oTbl.rec.UserField1))!=0)
+      println(trim(oTbl.rec.UserField1));
+    end;
+  end;
+end;
+
+//проверка на использование пользовательского поля 1
+//в валютных счетах
+macro macULAccCheckUsrFld3()
+  var
+     oTbl:object,
+     i:integer;
+
+  i=0;
+  oTbl=TBFile("account$.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  initprogress(nrecords(oTbl),"Подождите, идет обработка данных","Обработка");
+  while (next(oTbl))
+    i=i+1;
+    useprogress(i);
+    if (StrLen(trim(oTbl.rec.UserField3))!=0)
+      println(trim(oTbl.rec.UserField3));
+    end;
+  end;
+end;
+
+//макрос для анализа проводки в валютных
+//проведенных документах
+//для формирования номера уведомления в
+//acc.userfield1
+//documnt$.userfield1
+macro macULUpdValDocAccUvd(id:integer,dDateUvd:date):string
+  var
+     oTbl:object,
+     oTblAcc:object,
+     sTmp:string,
+     iTmp:integer,
+     sRet:string;
+
+  sRet="";
+  sTmp="";
+  iTmp=0;
+
+  //находим интересующую нас проводку по переданному коду в documnt$.dbt
+  oTbl=TBFile("documnt$.dbt","w",0,null,"bank.def");
+  oTblAcc=TBFile("account$.dbt","w",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.autokey=id;
+  if (geteq(oTbl))
+    if (StrLen(trim(oTbl.rec.UserField1))==0)
+      rewind(oTblAcc);
+      oTblAcc.rec.code_currency=SubStr(oTbl.rec.account_receiver,6,3);
+      oTblAcc.rec.account=oTbl.rec.account_receiver;
+      if (geteq(oTblAcc))
+        println(oTblAcc.rec.account);
+        if (StrLen(trim(oTblAcc.rec.UserField1))!=0)
+          //если нет номера в documnt$.dbt, но есть глобальный номер
+          //попытаемся извлечь номер
+          sTmp=macULGetOneT(oTblAcc.rec.UserField1,true);
+          if (sTmp!=oTblAcc.rec.UserField1) //т.к. в случае невозможности извлечь - возврат аргумента
+            //увеличиваем номер на 1
+           iTmp=int(sTmp)+1;
+           if (iTmp>0)
+             sTmp=string(iTmp);
+             oTbl.rec.UserField1=sTmp;
+             oTblAcc.rec.UserField1=oTbl.rec.UserField1+"/"+macULGetStrDate(dDateUvd);
+             //println(oTblAcc.rec.UserField1);
+             //обновляем необходимые таблицы
+             if (update(oTbl))
+               if (update(oTblAcc))
+                 sRet=oTbl.rec.UserField1;
+               end;
+             end;
+            end;
+          end;
+        else
+          //начинаем заново  нумерацию
+          oTbl.rec.UserField1=1;
+          oTblAcc.rec.UserField1=oTbl.rec.UserField1+"/"+macULGetStrDate(dDateUvd);
+          //обновляем необходимые таблицы
+          if (update(oTbl))
+            if (update(oTblAcc))
+              sRet=oTbl.rec.UserField1;
+            end;
+          end;
+        end;
+      end;
+    else
+      sRet=trim(oTbl.rec.UserField1); //номер уже присвоили
+    end;
+  end;
+  return sRet;
+end;                                     
+
+//макрос формирования форматного файла по держателям банковских карт
+macro macULRptBankCard():bool
+  var
+      bRet:bool,
+      oTblF1:object,
+      bNext:bool,
+      mOst:money,
+      oTblF2:object;
+
+  bRet=false;
+
+  oTblF1=TBfile("f_1.dbt","r",1,null,"bankinf.def");
+  oTblF2=TBfile("f_2.dbt","r",2,null,"bankinf.def");
+  rewind(oTblF2);
+  while(next(oTblF2))
+    rewind(oTblF1);
+    oTblF1.rec.IDCLT=oTblF2.rec.IDCLT;
+    if(geteq(oTblF1))
+      bNext=true;
+      while (bNext)
+        if (oTblF1.rec.IDCLT==oTblF2.rec.IDCLT)
+          mOst=Money(0);
+          mOst=money(oTblF1.rec.B51ACSL)-money(oTblF1.rec.B51DTRV)+money(oTblF1.rec.B51CRTR);
+          if (mOst>Money(0))
+            println(
+                    trim(oTblF2.rec.FC)+"^"+
+                    trim(oTblF2.rec.IC)+"^"+
+                    trim(oTblF2.rec.OC)+"^"+
+                    trim(oTblF2.rec.Acc)+"^"+
+                    StrSubst(string(mOst),".",",")       //общий входящий остаток
+                 );
+          end;
+          bNext=next(oTblF1);		
+        else
+          bNext=false;
+        end;
+      end;
+    end;
+  end;
+  return bRet;
+end;

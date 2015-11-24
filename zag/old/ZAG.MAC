@@ -1,0 +1,111 @@
+/*import lgs;*/
+import BankInter;
+file b1("..\\kassa\\vitta.txt") txt 1024;
+file postR(postdoc) key 0 write;
+
+var sumr=$0;
+var nr=0;
+var tmp_sum=0;
+var cou=0;
+var tmp="";   
+
+
+macro MyDate(var1)
+ var var2;
+ var2=date(Int(SubStr(var1,1,2)),Int(SubStr(var1,4,2)),Int(SubStr(var1,7,4)));
+ return var2;
+end;
+
+
+
+macro Insert_Rub
+/* -------------rub_doc------------ */
+ clearrecord(postR);
+ if(trim(b1(19))=="2")
+   postr.oper = 283;
+   postr.department = 2;
+ elif (trim(b1(19))=="0")
+   postr.oper = 230;
+   postr.department = 1;
+ else
+   exit(1);
+ end;
+ postr.Kind_Oper=b1(18);
+ postr.Shifr_Oper=trim(b1(17));
+ postr.Dispatch=0;
+ postr.MFO_Payer=trim(b1(4));
+ postr.CorAcc_Payer=trim(b1(5));
+ if((substr(trim(b1(7)),1,5)=="20202")or(substr(trim(b1(7)),1,5)=="40911"))
+   postr.bank_payer=GetBankName( "046359826", "30101810600000000826" );
+ else
+   postr.bank_payer =trim(b1(6));
+ end;
+ postr.account_payer = trim(b1(7));
+ postr.real_payer = trim(b1(7));
+ postr.Payer = StrSubst(trim(b1(8))," //","//");
+ postr.MFO_Receiver=trim(b1(9));
+ postr.CorAcc_Receiver=trim(b1(10));
+ if(substr(trim(b1(7)),1,5)=="20202")
+   postr.bank_receiver=GetBankName( "046359826", "30101810600000000826" );
+ else
+   postr.bank_receiver =trim(b1(11));
+ end;
+ postr.account_receiver = StrSubst(trim(b1(12)),"40503810800001000431","40501810900002000002");
+ if((postr.MFO_Receiver=="") OR (postr.MFO_Receiver=="046359826"))
+  postr.real_receiver = StrSubst(trim(b1(12)),"40503810800001000431","40501810900002000002");
+ else
+  postr.real_receiver = "30102810401000000826";
+ end;
+ postr.Receiver=trim(b1(13));
+ postr.sum = money( double(trim(b1(3))))/100;
+ postr.number_pack = Int(trim(b1(16)));
+ postr.code_currency = 0;
+ postr.date_value =MyDate(b1(1));
+ postr.date_document =MyDate( b1(1));
+ postr.pay_date =MyDate( b1(1));
+ postr.numb_document = trim(b1(0));
+ if((postr.MFO_Receiver=="") OR (postr.MFO_Receiver=="046359826"))
+  postr.OKPO_Receiver="7706195570";
+ else 
+  postr.OKPO_Receiver=trim(b1(20));
+ end;
+ if(trim(b1(19))=="1")
+   postr.Result_Carry=114;
+ else
+   postr.Result_Carry=112;
+ end;
+ /*
+ if(trim(b1(21))=="")
+  postr.OKPO_Payer="0";
+ else
+  postr.OKPO_Payer=trim(b1(21));
+ end;
+ */
+ postr.OKPO_Payer="7706195570";
+ postr.ground= trim(b1(14));
+ postr.Symbol_Cach=b1(15);
+ postr.SymbNotBal="  0";
+ postr.Payment=6;
+ if(insert(postr))
+  sumr=sumr+postr.sum;
+  nr=nr+1;
+ end;
+end;
+
+
+Close(b1);
+/*lgTermServ("c:\\vitta.txt","..\\txtfile\\vitta.txt"); druj*/
+open(b1);
+
+
+
+setDelim ("|");
+while (next(b1))
+ Insert_Rub;
+end;  /*  while   */
+
+[ˆŸ’ „Š“Œ…’‚ ‚‘…ƒ : ######
+
+“‹…‚›•: ######   € ‘“ŒŒ“ ################### “‹…‰
+](nr,nr,sumr:a);
+exit(1);

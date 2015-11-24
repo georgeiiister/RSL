@@ -1,0 +1,54 @@
+/*
+SBC21455268220070301_2867000007000025_001.txt
+SBC014552682_775020071122_2867000007000226_001
+*/
+/*Edit Polyakov 15.01.2008 Процедура убирает .txt и 
+добавляет код налоговой _6439, на 15.01.2008 не актульно!
+*/
+
+file  izv0 (nal_out,  "sofia.def") key 0;
+file  izv1 (nal_out,  "sofia.def") key 0 write;
+file  snd0 (nal_izv,  "sofia.def") key 0;
+file  snd1 (nal_izv,  "sofia.def") key 0 write;
+
+macro main()
+    ClearRecord(izv0);
+    rewind(izv0);
+    while(next(izv0))
+      FN    = "";
+      FNTmp = "";
+      FN = izv0.File_Name;
+      ID = izv0.ID;
+      if(index(FN,".txt") > 0)
+         FN = SubStr(FN,1,12)+"_7750"+SubStr(FN,13,29);
+         flag = 0;
+         rewind(izv1);
+         ClearRecord(izv1);
+         izv1.ID = ID;
+         flag = (GetEQ(izv1));
+         izv1.File_Name = FN;
+         update(izv1);
+      end;
+    end;
+    ClearRecord(snd0);
+    rewind(snd0);
+    while(next(snd0))
+      FN    = "";
+      FNTmp = "";
+      FN = snd0.File_SName;
+      ID = snd0.ID;
+      if(index(FN,".txt") > 0)
+         FN = SubStr(FN,1,12)+"_7750"+SubStr(FN,13,29);
+         flag = 0;
+         rewind(snd1);
+         ClearRecord(snd1);
+         snd1.ID = ID;
+         flag = (GetEQ(snd1));
+         snd1.File_SName = FN;
+         update(snd1);
+      end;
+    end;
+
+end;
+
+main();

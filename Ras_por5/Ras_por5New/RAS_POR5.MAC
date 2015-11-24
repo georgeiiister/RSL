@@ -1,0 +1,243 @@
+/* Программа удержания платы за инкассацию*/
+/*Edit Drujaev 28.04.2000
+ Расчет за проведение платежных документов за текущюю дату
+        */
+
+FILE docum(document) sort 0;
+/*FILE docum(arhdoc) sort 0;*/
+FILE acc(account) sort 0;
+file pos(postdoc) sort 2 write;
+file spz("obsl_poi.txt") txt 1024 write;
+file kl(client) sort 0;
+sum_pr02=0.002; /*0.2% for acc.UserTypeAccount=="N"*/
+sum_pr01=0.001; /*0.1% for acc.UserTypeAccount=="R"*/
+sum_pr005=0.0005;/*0.05% for acc.UserTypeAccount=="S"*/
+sum_pr=Money(0);
+polu=" ";
+NumberP=899;
+n_sch="70107810701001720103";
+acc.account=n_sch;
+
+/*ADD Polyakov 1.12.2005*/
+ Macro RetSum_pr(r_payer) /*Проверка на UserTypeAccount=="N","R","S"*/
+    clearrecord(acc);
+    acc.account=r_payer;
+    geteq(acc);
+ 	 if (Index(trim(acc.UserTypeAccount), "N")) 
+ 	 	 Return 1;
+ 	 End;
+ 	 if (Index(trim(acc.UserTypeAccount), "R")) 
+ 		 Return 2;
+ 	 End;
+ 	 if (Index(trim(acc.UserTypeAccount), "S"))
+ 		 Return 3;
+ 	 End;
+	         Return 0; 
+End;
+/*ADD Polyakov 1.12.2005*/
+ Macro InNull(Bik,Acc,Cor,AccP) 	/* Исключением платежей в Бюджет */
+
+   BalNoRKC=",40201,40202,"
+      +"40203,40204,40206,40301,40302,40303,40304,40306,40309,40312,40314,";   
+
+   CorNoRKC=",";
+
+   BalNoBank=",40201,40202,"
+      +"40203,40204,40206,40301,40303,40304,40306,40309,";
+
+      BalNoAcc=",40702810901000000169,"; /*Горбольница 1 и Цертус*/
+
+  BikI=SubStr(Bic,7,3);
+  CorI=","+SubStr(Cor,1,5)+",";
+  AccI=","+AccP+",";
+/*  if (Bik=="044583001")    Return 1;  end;        M*/
+/*  if (Bik=="04635900")    Return 1;  end;        */
+  if (Index(BalNoAcc,AccI)!=0)    Return 2;  end;
+ /* if (Index(BalNoBank,SubStr(acc,1,5))!=0)    Return 3;  end;*/
+
+  Return 0; /*Можно взыскать по тарифу*/
+ End;
+
+if (geteq(acc))
+  kl.client=acc.client;
+  if (geteq(kl))
+    polu=kl.name_client;
+  end;
+end;
+
+
+/*******************Точка входа**********/
+op={oper};
+/*GetInt(op,"Введите номер операциониста");*/
+
+rewind(pos);
+clearrecord(pos);
+  while( next(pos))
+  if ((pos.Number_Pack==NumberP) ) Delete(pos); end;
+  end;
+
+/*Плата за инкассацию*/
+rewind(docum);
+clearrecord(docum);
+nom=0;
+i=0;
+NR=NRecords(docum); 
+   InitProgress( NR, " Выпуск отчета", "Обработано строк отчета" );
+  while( next(docum))
+  i=i+1;
+  UseProgress(i);  
+  if ((RetSum_pr(docum.real_payer)!=0) and (SubStr(docum.real_payer,1,5)=="40906")              
+      /*((docum.real_payer=="40906810101000000008") or /* Счет инкасации*/
+        (docum.real_payer=="40906810301000000002") or /* Счет инкасации*/
+        (docum.real_payer=="40906810401000000009") or /* Счет инкасации*/
+        (docum.real_payer=="40906810101000000011") or /* Счет инкасации*/
+        (docum.real_payer=="40906810401000000012") or /* Счет инкасации*/
+        (docum.real_payer=="40906810001000000014") or /* Счет инкасации*/
+        (docum.real_payer=="40906810601000000016") or /* Счет инкасации*/
+        (docum.real_payer=="40906810901000000017") or /* Счет инкасации*/
+        (docum.real_payer=="40906810801000000010") or
+        (docum.real_payer=="40906810201000000018") or
+        (docum.real_payer=="40906810901000000020") or
+        (docum.real_payer=="40906810201000000021") or
+        (docum.real_payer=="40906810501000000022") or
+        (docum.real_payer=="40906810801000000023") or
+        (docum.real_payer=="40906810101000000024") or
+        (docum.real_payer=="40906810401000000025") or
+        (docum.real_payer=="40906810701000000026") or
+        (docum.real_payer=="40906810901100000001") or
+        (docum.real_payer=="40906810201100000002") or
+        (docum.real_payer=="40906810501000000019"))*/ 
+                                                   
+    and (docum.MFO_Receiver=="")                 /*Все внутренние*/
+    and (InNull(docum.MFO_Receiver,docum.Account_Payer,docum.CorAcc_Receiver,docum.Account_Receiver)==0)	/* За исключением платежей в Бюджет */
+    and (docum.Result_Carry!=23)
+
+/*   and (docum.Oper==op)             Только по нужному операцианисту */
+     
+    )
+    
+    if (RetSum_pr(docum.real_payer)==1)
+        sum_pr=sum_pr02
+     elif (RetSum_pr(docum.real_payer)==2) 
+        sum_pr=sum_pr01
+     elif (RetSum_pr(docum.real_payer)==3) 
+        sum_pr=sum_pr005
+     else sum_pr=Money(0)
+     end;
+      
+    /*clearrecord(acc);
+      acc.account=docum.real_receiver;
+      if (geteq(acc))*/
+        s_obl=money(0);
+          clearrecord(pos);
+          pos.real_payer=docum.real_receiver;
+          pos.date_document={curdate};
+          pos.Number_Pack=NumberP;
+          pos.sum=money(0);
+          if (getge(pos) and (pos.real_payer==docum.real_receiver)
+             and (pos.Number_Pack==NumberP) )
+            if (pos.Number_Pack==NumberP) 
+/*Edit Polyakov 1.12.2005*/
+/*               if (RetSum_pr(docum.real_payer)==1)
+                  sum_pr=sum_pr02
+               elif (RetSum_pr(docum.real_payer)==2) 
+	          sum_pr=sum_pr01
+               elif (RetSum_pr(docum.real_payer)==3) 
+                  sum_pr=sum_pr005
+               end;
+*/                   
+/*Edit Polyakov 1.12.2005*/
+               pos.sum=pos.sum+docum.sum*sum_pr;
+               update(pos);
+            end;
+          else
+            clearrecord(pos);
+            copy(pos,docum);   
+            pos.account_payer=docum.real_receiver;
+            pos.real_payer=docum.real_receiver;
+            pos.Payer=docum.Receiver;
+            pos.Shifr_Oper="09";
+            pos.date_document={curdate};
+            pos.Dispatch=0;
+            pos.date_value={curdate};
+            pos.MFO_Receiver="";
+            pos.CorAcc_receiver="";
+            pos.Bank_receiver={Name_Bank};
+            pos.Bank_Payer={Name_Bank};
+	    pos.Receiver="Плата, полученная за пересчет и упаковку денег (инкасация)";
+            pos.account_receiver=n_sch;
+            pos.real_receiver=n_sch;
+            pos.sum=s_obl;           
+	    pos.Symbol_Cach="  0";
+            pos.sum=docum.sum*sum_pr;
+
+/*/*Edit Polyakov 1.12.2005*/
+               if (RetSum_pr(docum.real_payer)==1)
+                  sum_pr=sum_pr02
+               elif (RetSum_pr(docum.real_payer)==2) 
+	          sum_pr=sum_pr01
+               elif (RetSum_pr(docum.real_payer)==3) 
+                  sum_pr=sum_pr005
+               end;
+                   
+/*Edit Polyakov 1.12.2005*/*/
+              
+/*msgbox(docum.real_receiver," 2222 ",docum.real_payer," ",docum.account_receiver," ",pos.sum," ",money(0),sum_pr,"  ",docum.sum);*/            
+
+            pos.ground="Пересчет инкассируемой выручки за "+string({curdate})+"/"+pos.account_payer+".Без НДС.";
+            pos.Number_Pack=NumberP;
+            pos.iApplicationKind=0;
+            pos.ApplicationKey="";
+            pos.Kind_Carry=0;
+            insert(pos);
+          end;
+/*        end;  */
+     /*end;*/
+    end;
+  end;
+RemProgress;
+
+
+println("   Пересчет инкассируемой выручки ");
+println("            За дату ",{curdate});
+/*println(" ----------------------------------------------------------");
+println("   N      Счет плательщика     Счет получателя      Сумма  ");
+println(" ----------------------------------------------------------");*/
+rewind(pos);
+sum_o=money(0);
+i=0;
+while( next(pos));
+ if ((pos.Number_Pack==NumberP) and (pos.result_Carry!=23))
+  i=i+1;
+  message(i);
+  nom=i;
+/*  pos.oper=i;*/
+  pos.numb_document=string(nom);
+  plat=pos.payer;
+  n_summa=string(pos.sum*100);
+  strok=pos.numb_document+", 6,,"+pos.real_payer+",,"+n_sch+","+n_summa+",995,30,0"+",  0,  0,"+plat+","+polu+","+pos.ground;
+  spz.str=strok;
+  insert(spz);
+/*  if(pos.Oper==op)*/
+   sum_o=sum_o+pos.sum;
+   println(" ",pos.oper:a:5," ",pos.real_payer,"  ",pos.real_receiver,"  ",pos.sum:a:10," ")
+/*  end;                */
+ end;
+end;
+if (i==0)
+  spz.str=" ";
+  insert(spz);
+end;
+
+println("            --Итого по расчету --");
+println("                                         ",sum_o:a:20);
+/* */
+end;
+ 
+
+
+
+
+
+ 
+ 

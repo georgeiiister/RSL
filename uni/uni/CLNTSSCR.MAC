@@ -1,0 +1,2464 @@
+/*-----------------------------------------------------------------------*-
+
+ File Name   : rslscr.mac
+
+ Copyright (c) 1991 - 1994 by R-Style Software Lab.
+ All Rights Reserved.
+
+-*- History -------------------------------------------------------------*-
+ November 27,1995  Sergei Kubrin (K78) - Create file
+ August   24,1997  Peter Titarov (TPS) - Добавил ClearField и вставил ее в
+                                         макpоопpеделение ClearDlgFields
+ August   25-27,1997 Peter Titarov(TPS)- Корректировка работы с неполностью
+                                         заполненным скроллингом; модифика-
+                                         ции для работы с фильтрами в обо-
+                                         лочке сводных отчетов по документам
+-*-----------------------------------------------------------------------*/
+
+const c_UP = 328,c_DOWN = 336, c_PGUP = 329, c_CtrlPgUp = 388, c_PGDOWN = 337, c_CtrlPgDown = 374,
+      c_HOME = 327,c_ENDKEY = 335, c_ENTER = 13, F10 = 324, c_F9 = 323, F8 = 322, F6 = 320,
+      F7 = 321, ESC = 27, F5 = 319, CTRLF5=354, CTRLF7=356, F4=318, F3 = 317, DELKEY = 339,
+      SPACE = 32, INS = 338, DEL = 339, SHIFTF1 = 340, SHIFTF2 = 341,
+      SHIFTF3 = 342, SHIFTF4 = 343, SHIFTF5 = 344, SHIFTF6 = 345, SHIFTF7 = 346,
+      SHIFTF8 = 347, SHIFTF9 = 348, SHIFTF10 = 349, SHIFTF11 = 391,
+      SHIFTF12 = 392, F12 = 390;
+
+
+/*=========================== TPS 24.08.97 =============================*/
+
+macro ClearField(fld)
+    const fld_type = ValType(fld);
+    var result;
+
+    if(   fld_type == V_STRING  )
+        result = "";
+    elif( fld_type == V_BOOL    )
+        result = FALSE;
+    elif( fld_type == V_DATE    )
+        result = Date(0,0,0);
+    elif( fld_type == V_TIME    )
+        result = Time(0,0,0);
+    else
+        result = 0;
+    end;
+
+    SetParm(0,result);
+
+    return result;
+end;
+
+/*=========================== TPS 25.08.97 =============================*/
+macro TPSGetDirect(f_ptr,pos)
+    if( (ValType(pos)==V_UNDEF) /*or (pos<0) */)  /* Kir*/
+        return FALSE;
+    else
+        return GetDirect(f_ptr,pos);
+    end;
+end;
+
+/*=======================================================================*/
+
+var lastUsed0, Nrec0,Nfields0,Scrff0;
+var Res;
+var MaxKey;
+var CurRecord;
+var SelectedIndex;
+var StrToFind;
+
+array Apos0;
+array DlgFields0;
+array FileFields0;
+
+/*=========================== Kir 06.04.99 =============================*/
+macro IfFirst(pos)
+  var isnext;
+
+  rewind (Scrff0);
+  isnext  = next (Scrff0);
+  while (isnext and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+    isnext = next (Scrff0);
+  end;
+
+  if (isnext and (GetPos (Scrff0) == pos))
+   return True;
+  else
+   return False;
+  end;
+end;
+
+macro IfLast(pos)
+  var isprev;
+
+  rewind (Scrff0);
+  isprev = prev (Scrff0);
+  while (isprev and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+    isprev = prev (Scrff0);
+  end;
+
+  if (isprev and (GetPos (Scrff0) == pos))
+   return True;
+  else
+   return False;
+  end;
+end;
+
+macro IfLastPage(pos)
+  var TestRow, isprev;
+
+  rewind(Scrff0);
+  isprev = prev(Scrff0);
+  while (isprev and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+    isprev = prev(Scrff0);
+  end;
+
+  TestRow = Nrec0;
+  while (isprev and (TestRow > 0))
+    if (GetPos(Scrff0)==pos)
+      return True;
+    end;
+
+    TestRow = TestRow - 1;
+    isprev = prev(Scrff0);
+    while (isprev and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+      isprev = prev(Scrff0);
+    end;
+  end;
+  return False;
+end;
+
+macro SetScroll0 (fl)
+  Scrff0 = fl;
+  var tmp,i,j = 0;
+
+  i = 1;
+  while (GetParm (i,tmp))
+    i = i + 1
+  end;
+  Nfields0 = (i - 1) / 2;
+
+  Asize (DlgFields0,Nfields0);
+  Asize (FileFields0,Nfields0);
+
+  i = 1;
+  while (GetParm (i,tmp))
+    DlgFields0 (j) = tmp;
+    GetParm (i+1,tmp);
+    if (ValType (tmp) != V_UNDEF)
+      FileFields0 (j) = FldIndex (Scrff0,tmp)
+    else
+      FileFields0 (j) = FldIndex (Scrff0,DlgFields0 (j))
+    end;
+    j = j + 1;
+    i = i + 2
+  end;
+end;
+
+macro SetDlgFields0 (dl,row)
+  var i = 0;
+  while (i < Nfields0)
+    dl (FldIndex (dl,DlgFields0 (i) + row)) = Scrff0 (FileFields0 (i));
+    i = i + 1;
+  end ;
+  if(Scrff0.bdFinishDate > date(0,0,0))
+   dl (FldIndex (dl,"Z" + row)) = "X";
+  else
+   dl (FldIndex (dl,"Z" + row)) = "";
+  end;
+end;
+
+macro FillDown0 (dl,pos)
+  macro ClearDlgFields (row)
+    var i = 0;
+    while (i < Nfields0)
+      /* TPS 24.08.97 dl (FldIndex (dl,DlgFields0 (i) + row)) = ""; */
+      ClearField(dl (FldIndex (dl,DlgFields0 (i) + row)));
+      i = i + 1
+    end
+  end;
+
+  var stat,i = 0;
+/*  MsgBox(NRecords(Scrff0));*/
+
+  if ((ValType(pos)==V_UNDEF) or (not pos))     /* TPS 27.08.97 */
+     return
+  end;
+
+  stat = TPSGetDirect (Scrff0,pos);
+  while (stat and (i < Nrec0))
+    if ((IsShowClosed == 2) or ((IsShowClosed==0) == (Scrff0.bdFinishDate==Date (0,0,0))))
+     lastUsed0 = i;
+     Apos0 (i) = GetPos (Scrff0);
+     SetDlgFields0 (dl,i);
+     i = i + 1
+    end;
+    stat = next (Scrff0);
+  end;
+
+  while (i < Nrec0)
+    Apos0(i) = -1;               /* TPS 25.08.97   */
+    ClearDlgFields (i);
+    i = i + 1
+  end;
+
+  UpdateFields (dl);
+end;
+
+macro FillUP0 (dl, pos)
+  var stat,i = Nrec0-1;
+
+  if ((ValType(pos)==V_UNDEF) or (not pos))     /* TPS 27.08.97 */
+     return
+  end;
+
+  stat = TPSGetDirect (Scrff0,pos);
+  while ((i >= 0) and stat)
+    if ((IsShowClosed == 2) or ((IsShowClosed==0) == (Scrff0.bdFinishDate==Date (0,0,0))))
+      Apos0 (i) = GetPos (Scrff0);
+      SetDlgFields0 (dl,i);
+      i = i - 1
+    end;
+    stat = prev (Scrff0);
+  end;
+
+  if (i >= 0)
+    FillDown0 (dl,Apos0 (i + 1))
+  else
+    UpdateFields (dl);
+    lastUsed0 = Nrec0 - 1;
+  end;
+
+
+  /* ===== TPS 25.08.97 ===== */
+/*  while(i>=0)
+    Apos0(i) = -1;
+    i=i-1;
+  end;*/
+  /* ========================= */
+
+end;
+
+macro Findrow0 (dl,id)
+   macro TestCol (name)
+     var len = StrLen (name), str;
+     if (name == SubStr (FldName (dl,id),1,len))
+       str = SubStr (FldName (dl,id),len+1);
+       if (str)
+         len = Int (str);
+         if ((len > 0) or ((len == 0) and  (str == "0")))
+           return len
+         end
+       end
+     end;
+     return -1
+   end;
+
+   var j = 0,row = -1;
+   while ((row == -1) and (j < Nfields0))
+     row = TestCol (DlgFields0 (j));
+     j = j + 1
+   end;
+   return row
+end;
+
+macro FindCol0 (dl,id)
+  var j = 0;
+  while (j < Nfields0)
+    if (DlgFields0 (j) == SubStr (FldName (dl,id),1,StrLen (DlgFields0 (j))))
+      return j
+    end;
+    j = j + 1
+  end;
+  return -1
+end;
+
+//macro ScrollMes (dl,cmd,id,key)
+macro ScrollMes0 (dl,cmd,id,key)
+  array ValArr;
+  var curRow,curCol,mypos,flag, PrintMenuRes, PrintMenuOper, PrintMenuType;
+  var ans,ii, NumFind, NumFound, str, DateTo;
+  var ob, WasDocumentsInYear, ertext;
+  var RiskStartDate, RiskEndDate, FindType;
+  var workfilename, isprev;
+
+  macro CalcNrec
+    Nrec0 = 0;
+    while (FldIndex (dl,DlgFields0 (0) + Nrec0) != -1)
+      Nrec0 = Nrec0 + 1
+    end;
+    Asize (Apos0,Nrec0)
+  end;
+
+  macro CopyDown
+    var i = 0,j;
+    while (i < Nrec0 - 1)
+      j = 0;
+      while (j < Nfields0)
+         dl (FldIndex (dl,DlgFields0 (j) + i)) = dl (FldIndex (dl,DlgFields0 (j) + (i+1)));
+         j = j + 1
+      end;
+      dl (FldIndex (dl,"Z" + i)) = dl (FldIndex (dl,"Z" + (i+1)));
+
+      Apos0 (i) = Apos0 (i + 1);
+      i = i + 1
+    end
+  end;
+
+  macro CopyUp
+    var i = Nrec0 - 1,j;
+    while (i > 0)
+      j = 0;
+      while (j < Nfields0)
+         dl (FldIndex (dl,DlgFields0 (j) + i)) = dl (FldIndex (dl,DlgFields0 (j) + (i-1)));
+         j = j + 1
+      end;
+      dl (FldIndex (dl,"Z" + i)) = dl (FldIndex (dl,"Z" + (i-1)));
+      Apos0 (i) = Apos0 (i - 1);
+      i = i - 1
+    end
+  end;
+
+
+  macro OneDown
+     var stat;
+     if ( (ValType(lastUsed0)==V_UNDEF) or (lastUsed0 != Nrec0-1) ) /* TPS 27.08.97 */
+        return
+     end;
+
+     stat = TPSGetDirect (Scrff0,Apos0 (lastUsed0));
+
+     if (stat)
+       stat = next (Scrff0);
+       while (stat and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+         stat = next (Scrff0);
+       end;
+
+       if (stat)
+         CopyDown();
+         SetDlgFields0 (dl,Nrec0 - 1);
+         Apos0 (Nrec0 - 1) = GetPos (Scrff0);
+         UpdateFields (dl)
+       end;
+     end
+   end;
+
+   macro OneUp
+     var stat;
+
+     stat = TPSGetDirect (Scrff0, Apos0(0));
+
+     if (stat)
+       stat = prev (Scrff0);
+       while (stat and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+         stat = prev (Scrff0);
+       end;
+
+       if (stat)
+         CopyUp();
+         SetDlgFields0 (dl,0);
+         Apos0 (0) = GetPos (Scrff0);
+         UpdateFields (dl);
+         if (lastUsed0 < Nrec0 - 1)
+           lastUsed0 = lastUsed0 + 1
+         end
+       end;
+     end;
+   end;
+
+/*
+   macro InSet (ar)
+     var j = 0;
+     while (j < Nfields0)
+       if (ar (j) == id)
+         return True
+       end;
+       j = j + 1
+     end;
+     return False
+   end;
+*/
+
+   if (cmd == DLG_INIT)
+      IsShowClosed = 2;	/* Показывать всех клиентов */
+      CalcNrec();
+      rewind (Scrff0);
+      if (next (Scrff0))
+        FillDown0 (dl,GetPos (Scrff0));
+      end;
+      Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+      SelectedIndex=2;
+    end;
+    if ((cmd == DLG_KEY) or (ContactAddClient == 1) or (ContactAddClient == 2))
+      /*MsgBox(id);*/
+      /*MsgBox(key);*/
+      if ((key == c_PGDOWN) and (FindCol0 (dl,id) != -1))
+         if (IfLast (Apos0(lastUsed0)))
+          curCol = FindCol0 (dl,id);
+          SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+          /*SetFocus(dl,lastUsed0*Nfields0);*/ /*Vlad 18.02.2000*/
+          UpdateFields(dl);
+         elif (IfLastPage (Apos0(lastUsed0)))
+           curCol = FindCol0 (dl,id);
+           if (curCol != -1)
+             rewind (Scrff0);
+             isprev = prev(Scrff0);
+             while (isprev and (IsShowClosed < 2) and ((IsShowClosed==0) != (Scrff0.bdFinishDate==Date (0,0,0))))
+               isprev = prev(Scrff0);
+             end;
+             if (isprev)
+               FillUP0 (dl,GetPos (Scrff0));
+               SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+             end
+           end
+         else
+          FillDown0 (dl,Apos0 (lastUsed0))
+         end;
+
+      elif ((key == c_HOME) and (FindCol0 (dl,id) != -1))
+        CurRow=Findrow0(dl,id);
+        SetFocus(dl,FldIndex(dl,DlgFields0(0)+curRow));
+        UpdateFields(dl);
+
+      elif ((key == c_ENDKEY) and (FindCol0 (dl,id) != -1))
+        CurRow = Findrow0 (dl, id);
+        SetFocus (dl, FldIndex (dl, DlgFields0(Nfields0-1) + curRow));
+        UpdateFields (dl);
+
+      elif ((key == c_PGUP) and (FindCol0 (dl, id) != -1))
+         if (IfFirst (Apos0(0)))
+          curCol = FindCol0 (dl, id);
+          SetFocus (dl, FldIndex (dl, DlgFields0(curCol) + 0));
+          /*SetFocus(dl,0);*/ /*Vlad 18.02.2000*/
+          UpdateFields(dl);
+         else
+          FillUP0 (dl,Apos0 (0))
+         end;
+
+      elif ((key == c_DOWN)  and (Findrow0 (dl,id) == Nrec0-1))
+         OneDown();
+         return CM_IGNORE
+
+      elif ((key == c_UP) and (Findrow0 (dl,id) == 0))
+         OneUp();
+         return CM_IGNORE
+
+      elif (key == c_CtrlPgUp)
+         curCol = FindCol0 (dl,id);
+         if (curCol != -1)
+           rewind (Scrff0);
+           if (next (Scrff0))
+             FillDown0 (dl,GetPos (Scrff0));
+             SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0))
+           end
+         end
+
+      elif (key == c_CtrlPgDown)
+         curCol = FindCol0 (dl,id);
+         if (curCol != -1)
+           rewind (Scrff0);
+           if (prev (Scrff0))
+             FillUP0 (dl,GetPos (Scrff0));
+             SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+           end
+         end
+
+      elif (key == c_ENTER)
+         curRow = Findrow0 (dl,id);
+         if (curRow >= 0)
+           if (curRow <= lastUsed0)
+             TPSGetDirect (Scrff0,Apos0 (curRow));
+             // rewind(clients1);
+             ClearRecord(clients1);
+             clients1.client = Scrff0.Client;
+             if(not GetEQ(clients1))
+              ClearRecord(clients1);
+              clients1.Client = Scrff0.Client;
+              Insert(clients1);
+             end;
+             //rewind(clients2);
+             ClearRecord(clients2);
+             clients2.client = Scrff0.Client;
+             if(not GetEQ(clients2))
+              ClearRecord(clients2);
+              clients2.Client = Scrff0.Client;
+              Insert(clients2);
+             end;
+             //rewind(clients3);
+             ClearRecord(clients3);
+             clients3.client = Scrff0.Client;
+             if(not GetEQ(clients3))
+              ClearRecord(clients3);
+              clients3.Client = Scrff0.Client;
+              Insert(clients3);
+             end;
+             //rewind(clnote);
+             ClearRecord(clnote);
+             clnote.client = Scrff0.Client;
+             clnote.iOper = 0;
+             if(not GetEQ(clnote))
+              ClearRecord(clnote);
+              clnote.Client = Scrff0.Client;
+              clnote.iOper = 0;
+              Insert(clnote);
+             end;
+             NewEdit = 2;
+             ClMain.NUMBER = Scrff0.Client;
+             ClMain.OPER = Scrff0.iCarryOper;
+             ClMain.CREDOPER = Scrff0.iCreditOper;
+             ClMain.DATEIN = Scrff0.bdStartDate;
+             ClMain.DATEOUT = Scrff0.bdFinishDate;
+             ClMain.NEREZ = Scrff0.NotResident;
+//             ClMain.PRINADL = PrinadlMenu(Scrff0.iOwnerKind);
+             ClMain.NAME = Scrff0.Name_Client;
+             ClMain.SHORTNAME = clients3.ShortName;
+             ClMain.GROUP = Scrff0.iGroup;
+             ClMain.VIDSOBSTV = clients3.iPropertyKind;
+             ClMain.ORGFORMA = clients3.iOrgForm;
+             ClMain.SFERA = clients3.iActivitiesSphere;
+             ClMain.OTRASL = clients3.iBranch;
+             ClMain.GEOGR = clients3.lGeographyLabel;
+             ClMain.OKPO = clients3.szOkpo;
+             ClMain.OKONH = clients3.CodeSector;
+
+             if (GetCtgVal (OBJTYPE_CLIENT, OBJCTG_OKATO, GetClientId (Scrff0.Client), ValArr))
+              ClMain.OKATO = ValArr(0);
+             end;
+
+             ClMain.NALOGINSP = clients3.iTaxInstitution;
+             ClMain.INN = clients3.InnKey;
+             ClMain.DATENALOG = clients3.bdTaxRegDate;
+
+             ClMain.DATEUSTAV = Scrff0.bdCharterDate;
+             ClMain.FONDOB = Scrff0.dmDeclareCapital;
+             ClMain.FONDFACT = Scrff0.dmRealCapital;
+             ClMain.CodeFONDOB = clients2.CodeFONDOB;
+             ClMain.CodeFONDFACT = clients2.CodeFONDFACT;
+             ClMain.IsNedenomUstav = clients3.IsNedenomUstav;
+             ClMain.ACTIONER = Scrff0.lHolder;
+             ClMain.TYPEUSER = Scrff0.szUserType;
+             ClMain.TYPESYST = clients3.szSysType;
+             ClMain.KPP = clients1.KPP;
+             ClMain.PLACEUSTAV = clients1.bdCharterPlace;
+             ClMain.NalogSvSer = clients1.NalogSvSer;
+             ClMain.NalogSvNum = clients1.NalogSvNum;
+             ClMain.SvPostNaUchet = clients3.SvPostNaUchet;
+
+             ClMain.Pere = clients1.Pere;
+             ClMain.SerSvidReg = clients1.SerSvidReg ;
+             ClMain.NumSvidReg = clients1.NumSvidReg ;
+             ClMain.GosRegNum = clients1.GosRegNum ;
+
+
+             ClAddr.UrAddrCountry = clients1.UrAddrCountry;
+             ClAddr.UrAddrRegion = clients1.UrAddrRegion;
+             ClAddr.UrAddrRaion = clients1.UrAddrRaion;
+             ClAddr.UrAddrTown = clients1.UrAddrTown;
+             ClAddr.UrAddrNas = clients1.UrAddrNas;
+             ClAddr.UrAddrIndex = clients1.UrAddrIndex;
+             ClAddr.UrAddrStreet = clients1.UrAddrStreet;
+             ClAddr.UrAddrHouse = clients1.UrAddrHouse;
+             ClAddr.UrAddrKorpus = clients1.UrAddrKorpus;
+             ClAddr.UrAddrStr = clients1.UrAddrStr;
+             ClAddr.UrAddrKvart = clients1.UrAddrKvart;
+             ClAddr.FactAddrCountry = clients1.FactAddrCountry;
+             ClAddr.FactAddrRegion = clients1.FactAddrRegion;
+             ClAddr.FactAddrRaion = clients1.FactAddrRaion;
+             ClAddr.FactAddrTown = clients1.FactAddrTown;
+             ClAddr.FactAddrNas = clients1.FactAddrNas;
+             ClAddr.FactAddrIndex = clients1.FactAddrIndex;
+             ClAddr.FactAddrStreet = clients1.FactAddrStreet;
+             ClAddr.FactAddrHouse = clients1.FactAddrHouse;
+             ClAddr.FactAddrKorpus = clients1.FactAddrKorpus;
+             ClAddr.FactAddrStr = clients1.FactAddrStr;
+             ClAddr.FactAddrKvart = clients1.FactAddrKvart;
+             ClAddr.GOAddrCountry = clients3.GOAddrCountry;
+             ClAddr.GOAddrRegion = clients3.GOAddrRegion;
+             ClAddr.GOAddrRaion = clients3.GOAddrRaion;
+             ClAddr.GOAddrTown = clients3.GOAddrTown;
+             ClAddr.GOAddrNas = clients3.GOAddrNas;
+             ClAddr.GOAddrIndex = clients3.GOAddrIndex;
+             ClAddr.GOAddrStreet = clients3.GOAddrStreet;
+             ClAddr.GOAddrHouse = clients3.GOAddrHouse;
+             ClAddr.GOAddrKorpus = clients3.GOAddrKorpus;
+             ClAddr.GOAddrStr = clients3.GOAddrStr;
+             ClAddr.GOAddrKvart = clients3.GOAddrKvart;
+             ClAddr.PHONE = clients3.szPhoneNumber;
+             ClAddr.PHONE2 = clients3.szPhoneNumber2;
+             ClAddr.TELEGRAPH = clients3.szTelegraph;
+             ClAddr.FAX = clients3.szTelexNumber;
+             ClAddr.EMAIL = clients1.EMAIL;
+
+             ClAddr.Insider = clients1.Insider;
+             ClAddr.Akcioner5= clients1.Akcioner5;
+             ClAddr.FWB=clients1.FaceWithBank;
+             ClAddr.IsInPlace=clients3.IsInPlace;
+             ClAddr.IsReligOrg=clients3.IsReligOrg;
+
+             ClPers.PassportType = clients1.PassportType;
+             ClPers.PassportSeria = clients1.PassportSeria;
+             ClPers.PassportNum = clients1.PassportNum;
+             ClPers.PassportWhen = clients1.PassportWhen;
+             ClPers.PassportWhere = clients1.PassportWhere;
+             ClPers.Poddanstvo = clients1.Poddanstvo;
+             ClPers.BirthDate = clients3.BirthDate;
+             ClPers.BirthPlace = clients3.BirthPlace;
+
+             SignCard.Path1 = clients3.SignCardPath1;
+             SignCard.Path2 = clients3.SignCardPath2;
+
+             ClPers.Face1Post = clients3.szFace1Post;
+             ClPers.Face1 = clients3.szFace1;
+
+             ClPers.Face1bPost = clients1.Face1bPost;
+             ClPers.Face1b = clients1.Face1b;
+             ClPers.Face1cPost = clients1.Face1cPost;
+             ClPers.Face1c = clients1.Face1c;
+
+             ClPers.DateEnd1 = clients1.DateEnd1;
+             ClPers.DateEnd1b = clients1.DateEnd1b;
+             ClPers.DateEnd1c = clients1.DateEnd1c;
+
+             ClPers.Face2bPost = clients1.Face2bPost;
+             ClPers.Face2b = clients1.Face2b;
+
+             ClPers.Face2Post = clients3.szFace2Post;
+             ClPers.Face2 = clients3.szFace2;
+
+             ClPers.Visa = clients1.Visa;
+             ClPers.VisaBDate = clients3.VisaBDate;
+             ClPers.VisaEDate = clients3.VisaEDate;
+
+             ClPers.MKNumb = clients3.MKNumb;
+             ClPers.MKBeginPrib = clients3.MKBeginPrib;
+             ClPers.MKEndPrib = clients3.MKEndPrib;
+
+             ClOther.BIK = clients3.BIC;
+             ClOther.LicVid = clients1.LicVid;
+             ClOther.LicNum = clients1.LicNum;
+             ClOther.LicDate = clients1.LicDate;
+             ClOther.LicWhereVid = clients3.LicWhereVid;
+             ClOther.DogSeria = clients1.DogSeria;
+             ClOther.DogNum = clients1.DogNum;
+             ClOther.ForeignName = clients3.ForeignName;
+/*             ClOther.PredpOperNum = clients1.PredpOperNum;
+             ClOther.PredpOperSum = clients1.PredpOperSum;
+             ClOther.FactOperNum = clients1.FactOperNum;
+             ClOther.FactOperSum = clients1.FactOperSum;*/
+             ClOther.FirstAccOpenDate = clients1.FirstAccOpenDate;
+             ClOther.AnketaDate = clients1.AnketaDate;
+             ClOther.RegSvNum = clients1.RegSvNum;
+             ClOther.RegDate = clients1.RegDate;
+             ClOther.Kurator = clients2.Kurator;
+             ClOther.UtvOtk = clients2.UtvOtk;
+             ClOther.SotrZapoln = clients3.SotrZapoln;
+
+             ClRisk.CreditRisk = clients2.CreditRisk;
+             ClRisk.URRISKA = clients1.UrRiska;
+             ClRisk.OcenkaRiska = clients1.OcenkaRiska;
+// добавлено по служ. от 12.07.10 по ИПДЛ
+             ClRisk.IDPL2 = clients3.IDPL2;
+/*	     if (Strlen(trim(ClRisk.IDPL2))>0)
+             ClRisk.IDPL1 = " ДА";
+             else
+             ClRisk.IDPL1 = "НЕТ";
+             end;
+*/
+             ClRisk.IDPL4 = clients3.IDPL4;
+/*	     if (Strlen(trim(ClRisk.IDPL4))>0)
+             ClRisk.IDPL3 = " ДА";
+             else
+             ClRisk.IDPL3 = "НЕТ";
+             end;
+*/
+             ClOrgans.Organs = clients2.Organs;
+             ClOrgans.Branches = clients1.Branches;
+
+             ClCor.Corresp = clients2.Corresp;
+
+             ClLicen.Licenses = clients2.Licenses;
+
+             ClUchred.Uchred = clients2.Uchred;
+
+             ClVid.VidDeyat = clients2.VidDeyat;
+
+             ClIP.RegistrIP = clients1.RegistrIP;
+             ClIP.VidIP = clients1.VidIP;
+
+             ClPrim.PRIM = clnote.szNoteText;
+             ClPrim.Prinadlezh = clients3.Prinadlezh;
+             ClPrim.ZalogBIKBank = clients3.ZalogBIKBank;
+             ClPrim.ZalogAcc = clients3.ZalogAcc;
+
+             ClVigoda.SvVigoda = clients3.SvVigoda;
+
+             /* Сохраняем существующее состояние базы для последующего сохранения истории изменений реквизитов */
+             copy(tohist,client);
+             copy(tohist1,clients1);
+             copy(tohist2,clients2);
+             copy(tohist3,clients3);
+
+             DialogID = 1;
+             while(DialogID != 0)
+              if(DialogID == 1)
+               RunDialog(clmain,"ClMainEvent");
+              end;
+              if(DialogID == 2)
+               RunDialog(claddr,"ClAddrEvent");
+              end;
+              if(DialogID == 3)
+               RunDialog(clpers,"ClPersEvent");
+              end;
+              if(DialogID == 4)
+               if((clother.FirstAccOpenDate == date(0,0,0)) AND
+                  (clmain.DATEIN != date(0,0,0)))
+                clother.FirstAccOpenDate = clmain.DATEIN;
+               end;
+               RunDialog(clother,"ClOtherEvent");
+              end;
+              if(DialogID == 5)
+               RunDialog(clrisk,"ClOtherEvent");
+              end;
+              if(DialogID == 6)
+               RunDialog(clorgans,"ClOtherEvent");
+              end;
+              if(DialogID == 7)
+               RunDialog(clcor,"ClOtherEvent");
+              end;
+              if(DialogID == 8)
+               RunDialog(cllicen,"ClOtherEvent");
+              end;
+              if(DialogID == 9)
+               RunDialog(cluchred,"ClOtherEvent");
+              end;
+              if(DialogID == 10)
+               RunDialog(clvid,"ClOtherEvent");
+              end;
+              if(DialogID == 11)
+               RunDialog(clip,"ClOtherEvent");
+              end;
+              if(DialogID == 12)
+               RunDialog(clprim,"ClOtherEvent");
+              end;
+              if(DialogID == 13)
+               RunDialog(clvigoda,"ClOtherEvent");
+              end;
+             end;
+
+             //rewind(client);
+             ClearRecord(client);
+             client.Client = ClMain.NUMBER;
+             if(GetEQ(client) AND (client.Client == ClMain.NUMBER))
+              //rewind(clients1);
+              ClearRecord(clients1);
+              clients1.Client = ClMain.NUMBER;
+              GetEQ(clients1);
+              //rewind(clients2);
+              ClearRecord(clients2);
+              clients2.Client = ClMain.NUMBER;
+              GetEQ(clients2);
+              //rewind(clients3);
+              ClearRecord(clients3);
+              clients3.Client = ClMain.NUMBER;
+              GetEQ(clients3);
+/*               ClearRecord(client);*/
+              client.iCarryOper = ClMain.OPER;
+              client.iCreditOper = ClMain.CREDOPER;
+              client.bdStartDate = ClMain.DATEIN;
+              client.bdFinishDate = ClMain.DATEOUT;
+              client.NotResident = ClMain.NEREZ;
+              client.Name_Client = ClMain.NAME;
+              clients3.ShortName = ClMain.SHORTNAME;
+              client.szShortName = clients3.ShortName;
+              client.iGroup = ClMain.GROUP;
+              clients3.iPropertyKind = ClMain.VIDSOBSTV;
+              clients3.iOrgForm = ClMain.ORGFORMA;
+              clients3.iActivitiesSphere = ClMain.SFERA;
+              clients3.iBranch = ClMain.OTRASL;
+              clients3.lGeographyLabel = ClMain.GEOGR;
+              clients3.szOkpo = ClMain.OKPO;
+              clients3.CodeSector = ClMain.OKONH;
+              clients3.iTaxInstitution = ClMain.NALOGINSP;
+              clients3.Innkey = ClMain.INN;
+              clients3.bdTaxRegDate = ClMain.DATENALOG;
+              client.bdCharterDate = ClMain.DATEUSTAV;
+              client.dmDeclareCapital = ClMain.FONDOB;
+              client.dmRealCapital = ClMain.FONDFACT;
+              client.lHolder = ClMain.ACTIONER;
+              client.szUserType = ClMain.TYPEUSER;
+              client.Code = String(client.Client);
+              client.Sort = mkstr(" ",35-Strlen(client.Code)) + client.Code;
+              if(Index(client.szUserType,"Ф") > 0)
+               client.LegalForm = 2;
+              else
+               client.LegalForm = 1;
+              end;
+              clients3.szSysType = ClMain.TYPESYST;
+              clients1.NalogSvSer = ClMain.NalogSvSer;
+              clients1.NalogSvNum = ClMain.NalogSvNum;
+              clients3.SvPostNaUchet = ClMain.SvPostNaUchet;
+              clients3.IsNedenomUstav = ClMain.IsNedenomUstav;
+
+              clients1.Pere = ClMain.Pere;
+              clients1.SerSvidReg = ClMain.SerSvidReg ;
+              clients1.NumSvidReg = ClMain.NumSvidReg ;
+              clients1.GosRegNum = ClMain.GosRegNum ;
+
+              clients1.UrAddrCountry = ClAddr.UrAddrCountry;
+              clients1.UrAddrRegion = ClAddr.UrAddrRegion;
+              clients1.UrAddrRaion = ClAddr.UrAddrRaion;
+              clients1.UrAddrTown = ClAddr.UrAddrTown;
+              clients1.UrAddrNas = ClAddr.UrAddrNas;
+              clients1.UrAddrIndex = ClAddr.UrAddrIndex;
+              clients1.UrAddrStreet = ClAddr.UrAddrStreet;
+              clients1.UrAddrHouse = ClAddr.UrAddrHouse;
+              clients1.UrAddrKorpus = ClAddr.UrAddrKorpus;
+              clients1.UrAddrStr = ClAddr.UrAddrStr;
+              clients1.UrAddrKvart = ClAddr.UrAddrKvart;
+              clients1.FactAddrCountry = ClAddr.FactAddrCountry;
+              clients1.FactAddrRegion = ClAddr.FactAddrRegion;
+              clients1.FactAddrNas = ClAddr.FactAddrNas;
+              clients1.FactAddrRaion = ClAddr.FactAddrRaion;
+              clients1.FactAddrTown = ClAddr.FactAddrTown;
+              clients1.FactAddrIndex = ClAddr.FactAddrIndex;
+              clients1.FactAddrStreet = ClAddr.FactAddrStreet;
+              clients1.FactAddrHouse = ClAddr.FactAddrHouse;
+              clients1.FactAddrKorpus = ClAddr.FactAddrKorpus;
+              clients1.FactAddrStr = ClAddr.FactAddrStr;
+              clients1.FactAddrKvart = ClAddr.FactAddrKvart;
+              clients3.GOAddrCountry = ClAddr.GOAddrCountry;
+              clients3.GOAddrRegion = ClAddr.GOAddrRegion;
+              clients3.GOAddrNas = ClAddr.GOAddrNas;
+              clients3.GOAddrRaion = ClAddr.GOAddrRaion;
+              clients3.GOAddrTown = ClAddr.GOAddrTown;
+              clients3.GOAddrIndex = ClAddr.GOAddrIndex;
+              clients3.GOAddrStreet = ClAddr.GOAddrStreet;
+              clients3.GOAddrHouse = ClAddr.GOAddrHouse;
+              clients3.GOAddrKorpus = ClAddr.GOAddrKorpus;
+              clients3.GOAddrStr = ClAddr.GOAddrStr;
+              clients3.GOAddrKvart = ClAddr.GOAddrKvart;
+
+              clients3.szPhoneNumber = ClAddr.PHONE;
+              clients3.szPhoneNumber2 = ClAddr.PHONE2;
+              clients3.szTelegraph = ClAddr.TELEGRAPH;
+              clients3.szTelexNumber = ClAddr.FAX;
+              clients1.EMAIL = ClAddr.EMAIL;
+              clients1.Insider = ClAddr.insider;
+              clients1.Akcioner5=ClAddr.Akcioner5;
+              clients1.FaceWithBank=ClAddr.FWB;
+              clients3.IsInPlace=ClAddr.IsInPlace;
+              clients3.IsReligOrg=ClAddr.IsReligOrg;
+
+              clients1.PassportType = ClPers.PassportType;
+              clients1.PassportSeria = ClPers.PassportSeria;
+              clients1.PassportNum = ClPers.PassportNum;
+              clients1.PassportWhen = ClPers.PassportWhen;
+              clients1.PassportWhere = ClPers.PassportWhere;
+              clients1.Poddanstvo = ClPers.Poddanstvo;
+              clients3.szFace1Post = ClPers.Face1Post;
+              clients3.BirthDate = ClPers.BirthDate;
+              clients3.BirthPlace = ClPers.BirthPlace;
+
+              clients3.SignCardPath1 = SignCard.Path1;
+              clients3.SignCardPath2 = SignCard.Path2;
+
+              clients3.szFace1 = ClPers.Face1;
+
+              clients1.Face1bPost = ClPers.Face1bPost;
+              clients1.Face1b = ClPers.Face1b;
+              clients1.Face1cPost = ClPers.Face1cPost;
+              clients1.Face1c = ClPers.Face1c;
+
+              clients1.DateEnd1 = ClPers.DateEnd1;
+              clients1.DateEnd1b = ClPers.DateEnd1b;
+              clients1.DateEnd1c = ClPers.DateEnd1c;
+
+              clients1.Face2bPost = ClPers.Face2bPost;
+              clients1.Face2b = ClPers.Face2b;
+
+              clients3.szFace2Post = ClPers.Face2Post;
+              clients3.szFace2 = ClPers.Face2;
+
+              clients1.Visa = ClPers.Visa;
+              clients3.VisaBDate = ClPers.VisaBDate;
+              clients3.VisaEDate = ClPers.VisaEDate;
+
+              clients3.MKNumb = ClPers.MKNumb;
+              clients3.MKBeginPrib = ClPers.MKBeginPrib;
+              clients3.MKEndPrib = ClPers.MKEndPrib;
+
+              clients3.BIC = ClOther.BIK;
+              clients1.LicVid = ClOther.LicVid;
+              clients1.LicNum = ClOther.LicNum;
+              clients1.LicDate = ClOther.LicDate;
+              clients3.LicWhereVid = ClOther.LicWhereVid;
+              clients1.DogSeria = ClOther.DogSeria;
+              clients1.DogNum = ClOther.DogNum;
+              clients3.ForeignName = ClOther.ForeignName;
+/*               clients1.PredpOperNum = ClOther.PredpOperNum;
+               clients1.PredpOperSum = ClOther.PredpOperSum;
+               clients1.FactOperNum = ClOther.FactOperNum;
+               clients1.FactOperSum = ClOther.FactOperSum;*/
+              clients1.FirstAccOpenDate = ClOther.FirstAccOpenDate;
+              clients1.AnketaDate = ClOther.AnketaDate;
+              clients1.RegSvNum = ClOther.RegSvNum;
+              clients1.RegDate = ClOther.RegDate;
+              clients2.Kurator = ClOther.Kurator;
+              clients2.UtvOtk = ClOther.UtvOtk;
+              clients3.SotrZapoln = ClOther.SotrZapoln;
+
+              clients2.CreditRisk = ClRisk.CreditRisk;
+              clients1.UrRiska = ClRisk.URRISKA;
+              clients1.OcenkaRiska = ClRisk.OcenkaRiska;
+// добавлено по служ. от 12.07.2010 по ИПДЛ
+	      clients3.IDPL2 = ClRisk.IDPL2;
+	      clients3.IDPL4 = ClRisk.IDPL4;
+	      
+
+              clients2.Organs = ClOrgans.Organs;
+              clients1.Branches = ClOrgans.Branches;
+
+              clients2.Corresp = ClCor.Corresp;
+
+              clients2.Licenses = ClLicen.Licenses;
+
+              clients2.Uchred = ClUchred.Uchred;
+
+              clients2.VidDeyat = ClVid.VidDeyat;
+
+              clients2.CodeFONDOB = ClMain.CodeFONDOB;
+              clients2.CodeFONDFACT = ClMain.CodeFONDFACT;
+
+
+              clients1.RegistrIP = ClIP.RegistrIP;
+              clients1.VidIP = ClIP.VidIP;
+
+              clnote.szNoteText = ClPrim.PRIM;
+              clnote.iOper = 0;
+
+              clients3.Prinadlezh = ClPrim.Prinadlezh;
+
+              clients3.ZalogBIKBank = clPrim.ZalogBIKBank;
+              clients3.ZalogAcc = clPrim.ZalogAcc;
+
+              clients3.SvVigoda = ClVigoda.SvVigoda;
+
+              clients3.PspSerNum = НормализоватьПаспорт(clients1.PassportSeria+clients1.PassportNum);
+
+/*              ii=0;
+              while(ii<asize(PrinadlMenu))
+               if(PrinadlMenu(ii)==ClMain.PRINADL)
+                client.iOwnerKind = ii;
+               end;
+               ii=ii+1;
+              end;*/
+
+              clients1.KPP = ClMain.KPP;
+              clients1.bdCharterPlace = ClMain.PLACEUSTAV;
+
+              if((NewEdit == 5) OR (БылиИзмененияРеквизитов() AND CanSave(client.Client,client.szUserType) AND GetTrue(true,"Реквизиты клиента изменены. Сохранить?")))
+               if((not ПроверитьПаспорт(clients1.PassportSeria, clients1.PassportNum)) AND
+                  (not ПроверитьНаТеррориста(client.Name_Client)) AND
+                  (not ПроверитьНаТеррориста(clients3.szFace1)) AND
+                  (not ПроверитьНаТеррориста(clients1.Face1b)) AND
+                  (not ПроверитьНаТеррориста(clients1.Face1c)) AND
+                  (not ПроверитьНаТеррориста(clients3.szFace2)) AND
+                  (not ПроверитьНаТеррориста(clients1.Face2b))
+                 )
+                if(КонтрольВводаРеквизитов(client))
+                 if(/*БылиИзмененияРеквизитов() AND*/ (GetTrue(true,"Обновить дату изменения анкеты?")))
+                  clients3.ChangeDate = date;
+                 end;
+                 SetCtgVal (OBJTYPE_CLIENT, OBJCTG_OKATO, GetClientId (ClMain.NUMBER), ClMain.OKATO, Date(0,0,0), true, true);
+                 Update(client);
+                 Update(clients1);
+                 Update(clients2);
+                 Update(clients3);
+                 Update(clnote);
+                 СохранитьИсториюРеквизитов();
+                 if(Index(client.szUserType,"Ф") > 0)
+                  rewind(persn);
+                  ClearRecord(persn);
+                  persn.ClientID = client.Client;
+                  if(not GetEQ(persn))
+                   rewind(persn);
+                   ClearRecord(persn);
+                   persn.ClientID = client.Client;
+                   Insert(persn);
+                  end;
+                  ii = Index(client.Name_Client," ");
+                  persn.LastName = SubStr(client.Name_Client,1,ii-1);
+                  str = SubStr(client.Name_Client,ii+1);
+                  ii = Index(str," ");
+                  persn.Name = SubStr(str,1,ii-1);
+                  persn.Patronymic = SubStr(str,ii+1);
+                  persn.BirthDate = clients3.BirthDate;
+                  persn.Sort = client.Sort;
+                  if(not Update(persn))
+                   MsgBox("ОШИБКА!!!! Не сохранены реквизиты физика!!! Позвоните в АСУ.\n"+Status(ertext)+" "+ertext+"\nНомер клиента: "+String(Scrff0.Client));
+                  end;
+                 end;
+                 СохранитьИННКлиента(client.Client, clients3.INNKey);
+                 СохранитьКППКлиента(client.Client, clients1.KPP);
+                 СохранитьВидСубъекта(client);
+                 ClientDataUpdate(client.Client)
+                end;
+               end;
+              end;
+
+             else
+              MsgBox("В базе не найден редактируемый клиент!");
+              exit(1);
+             end;
+
+             FillDown0 (dl,Apos0 (0));
+             return CM_IGNORE;
+           elif (curRow < Nrec0)
+             return CM_IGNORE;
+           end
+         end
+
+      elif (key == F7)
+         PrintMenuRes = menu(PrintMenu);
+         if(PrintMenuRes == 0)
+          curRow = Findrow0 (dl,id);
+          if (curRow >= 0)
+            if (curRow <= lastUsed0)
+              TPSGetDirect (Scrff0,Apos0 (curRow));
+              rewind(clients1);
+              ClearRecord(clients1);
+              clients1.client = Scrff0.Client;
+              GetEQ(clients1);
+              rewind(clients2);
+              ClearRecord(clients2);
+              clients2.client = Scrff0.Client;
+              GetEQ(clients2);
+              rewind(clients3);
+              ClearRecord(clients3);
+              clients3.client = Scrff0.Client;
+              GetEQ(clients3);
+              rewind(clnote);
+              ClearRecord(clnote);
+              clnote.client = Scrff0.Client;
+              clnote.iOper = 0;
+              GetEQ(clnote);
+              PrintAnketa(0);
+            end;
+          end;
+         end;
+
+         if(PrintMenuRes == 1)
+          PrintAnketa(11);
+          PrintMenuOper = {oper};
+          GetInt(PrintMenuOper,"Введите номер операциониста (0-все):",4);
+          rewind(client);
+          ClearRecord(client);
+          ii=0;
+          while(next(client))
+           ii=ii+1;
+           message("Идет поиск и печать клиентов: "+String(ii));
+           if((client.iCarryOper == PrintMenuOper) OR (PrintMenuOper == 0))
+            rewind(clients1);
+            ClearRecord(clients1);
+            clients1.client = Client.Client;
+            GetEQ(clients1);
+            rewind(clients2);
+            ClearRecord(clients2);
+            clients2.client = Client.Client;
+            GetEQ(clients2);
+            rewind(clients3);
+            ClearRecord(clients3);
+            clients3.client = Client.Client;
+            GetEQ(clients3);
+            rewind(clnote);
+            ClearRecord(clnote);
+            clnote.client = Client.Client;
+            clnote.iOper = 0;
+            GetEQ(clnote);
+            PrintAnketa(12);
+           end;
+          end;
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+          return CM_IGNORE;
+         end;
+
+         if(PrintMenuRes == 2)
+          PrintAnketa(11);
+          rewind(client);
+          ClearRecord(client);
+          ii=0;
+          while(next(client))
+           ii=ii+1;
+           message("Идет поиск и печать клиентов: "+String(ii));
+           if(Index(client.szUserType,"В") > 0)
+            rewind(clients1);
+            ClearRecord(clients1);
+            clients1.client = Client.Client;
+            GetEQ(clients1);
+            rewind(clients2);
+            ClearRecord(clients2);
+            clients2.client = Client.Client;
+            GetEQ(clients2);
+            rewind(clients3);
+            ClearRecord(clients3);
+            clients3.client = Client.Client;
+            GetEQ(clients3);
+            rewind(clnote);
+            ClearRecord(clnote);
+            clnote.client = Client.Client;
+            clnote.iOper = 0;
+            GetEQ(clnote);
+            PrintAnketa(12);
+           end;
+          end;
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+          return CM_IGNORE;
+         end;
+
+         if(PrintMenuRes == 3)
+          curRow = Findrow0 (dl,id);
+          if (curRow >= 0)
+            if (curRow <= lastUsed0)
+              TPSGetDirect (Scrff0,Apos0 (curRow));
+              rewind(clients1);
+              ClearRecord(clients1);
+              clients1.client = Scrff0.Client;
+              GetEQ(clients1);
+              rewind(clients2);
+              ClearRecord(clients2);
+              clients2.client = Scrff0.Client;
+              GetEQ(clients2);
+              rewind(clients3);
+              ClearRecord(clients3);
+              clients3.client = Scrff0.Client;
+              GetEQ(clients3);
+              rewind(clnote);
+              ClearRecord(clnote);
+              clnote.client = Scrff0.Client;
+              clnote.iOper = 0;
+              GetEQ(clnote);
+
+              workfilename = GetWorkFileName("anketa");
+              CopyFile("..\\Templs\\Sofia\\anketa.dbf", workfilename);
+              if (not open (ankdoc, workfilename))
+                MsgBox("Не могу открыть dbf-файл! Возможно, уже запущен Word!");
+              end;
+              ankdoc.NAME = Scrff0.Name_Client;
+
+              ClearRecord(acc);
+              acc.Open_Close = "";
+              acc.Client = Scrff0.Client;
+              flag = GetGE(acc);
+              str = "";
+              while(flag AND (acc.Open_Close == "" ) AND (acc.Client == Scrff0.Client) AND (StrLen(str) == 0))
+               if((Int(SubStr(acc.Account,1,3)) >= 401) AND (Int(SubStr(acc.Account,1,3)) <= 408))
+                str = acc.Account;
+               end;
+               flag = next(acc);
+              end;
+              ankdoc.ACCOUNT = str;
+
+              WasDocumentsInYear = false;
+              rewind(adoc1);
+              ClearRecord(adoc1);
+              adoc1.Real_Payer = str;
+              adoc1.Date_Carry = date - 366;
+              flag = GetGE(adoc1);
+              while(flag AND (not WasDocumentsInYear) AND (adoc1.Real_Payer == str))
+               if((SubStr(adoc1.Real_Receiver,1,5) == "70107") AND (adoc1.Result_Carry != 23))
+                WasDocumentsInYear = true;
+               end;
+               flag = next(adoc1);
+              end;
+              if(not WasDocumentsInYear)
+               rewind(adoc2);
+               ClearRecord(adoc2);
+               adoc2.Real_Receiver = str;
+               adoc2.Date_Carry = date - 366;
+               flag = GetGE(adoc2);
+               while(flag AND (not WasDocumentsInYear) AND (adoc2.Real_Receiver == str))
+                if(adoc2.Result_Carry != 23)
+                 WasDocumentsInYear = true;
+                end;
+                flag = next(adoc2);
+               end;
+              end;
+
+              rewind(clcoun);
+              ClearRecord(clcoun);
+              clcoun.CodeNum3 = clients1.UrAddrCountry;
+              if(GetEQ(clcoun))
+               str = clcoun.Name;
+              else
+               str = "Не найден";
+              end;
+              str = str + " ";
+              str = str + clients1.UrAddrIndex + " ";
+              str = str + clients1.UrAddrRegion + " ";
+              str = str + clients1.UrAddrRaion + " ";
+              str = str + clients1.UrAddrTown + " ";
+              str = str + clients1.UrAddrNas + " ";
+              str = str + clients1.UrAddrStreet + " ";
+              str = str + clients1.UrAddrHouse + " ";
+              str = str + clients1.UrAddrKorpus + " ";
+              str = str + clients1.UrAddrStr + " ";
+              str = str + clients1.UrAddrKvart + " ";
+              ankdoc.ADRESS = str;
+              DateTo = date() + 21;
+              while(IsHoliday(DateTo) == 1)
+               DateTo = DateTo + 1;
+              end;
+              ankdoc.DateTo = String(DateTo:m);
+              insert(ankdoc);
+              close(ankdoc);
+
+              if(IsStandAlone) /* Двухзвенка */
+//               Run(GetEnv("COMSPEC"),"/c mycopy.bat ..\\Templs\\Sofia\\anketa.dbf",null,null);
+               CopyFile(workfilename, "c:\\RSDocs\\anketa.dbf");
+               
+               if(WasDocumentsInYear)
+                CopyFile("..\\Templs\\Sofia\\anketa.doc", "c:\\RSDocs\\anketa.doc");
+                Run(GetEnv("COMSPEC"),"/c start c:\\RSDocs\\anketa.doc",null,null);
+               else
+                CopyFile("..\\Templs\\Sofia\\anketa2.doc", "c:\\RSDocs\\anketa2.doc");
+                Run(GetEnv("COMSPEC"),"/c start c:\\RSDocs\\anketa2.doc",null,null);
+               end;
+
+              else
+                /* Копируем обновленный файл */
+               if(not lgServTerm (workfilename, "c:\\RSDocs\\anketa.dbf"))
+                MsgBox("Не удалось скопировать anketa.dbf");
+                return;
+               end;
+               if(WasDocumentsInYear)
+                if(not lgServTerm ("..\\Templs\\Sofia\\anketa.doc", "c:\\RSDocs\\anketa.doc"))
+                 MsgBox("Не удалось скопировать anketa.doc");
+                 return;
+                end;
+               else
+                if(not lgServTerm ("..\\Templs\\Sofia\\anketa2.doc", "c:\\RSDocs\\anketa2.doc"))
+                 MsgBox("Не удалось скопировать anketa2.doc");
+                 return;
+                end;
+               end;
+               ob=TlgActiveX("Word.Application","",True);
+               if(WasDocumentsInYear)
+                ob.Documents.Open("c:\\RSDocs\\anketa.doc");
+               else
+                ob.Documents.Open("c:\\RSDocs\\anketa2.doc");
+               end;
+               ob.Visible = true;
+               if((ob.Version == "10.0") OR (ob.Version == "11.0"))
+                ob.ActiveDocument.MailMerge.OpenDataSource("c:\\RSDocs\\anketa.dbf");
+                ob.ActiveDocument.MailMerge.ViewMailMergeFieldCodes = 9999998;
+               end;
+              end;
+            end;
+          end;
+         end;
+
+         if(PrintMenuRes == 4)
+          PrintAnketa(11);
+          PrintMenuRes = menu(RiskMenu,"","Выберите уровень риска");
+          if(PrintMenuRes >= 0)
+           GetDate(RiskStartDate,"Дата начала периода?");
+           RiskEndDate = RiskStartDate;
+           GetDate(RiskEndDate,"Дата конца периода?");
+           PrintMenuOper = {oper};
+           GetInt(PrintMenuOper,"Введите номер операциониста (0-все):",4);
+
+           rewind(client);
+           ClearRecord(client);
+           ii=0;
+           while(next(client))
+            ii=ii+1;
+            message("Идет поиск и печать клиентов: "+String(ii));
+            if((client.bdStartDate >= RiskStartDate) AND 
+               (client.bdStartDate <= RiskEndDate) AND
+               ((client.iCarryOper == PrintMenuOper) OR (PrintMenuOper == 0))
+              )
+             rewind(clients1);
+             ClearRecord(clients1);
+             clients1.client = Client.Client;
+             GetEQ(clients1);
+             rewind(clients2);
+             ClearRecord(clients2);
+             clients2.client = Client.Client;
+             GetEQ(clients2);
+             rewind(clients3);
+             ClearRecord(clients3);
+             clients3.client = Client.Client;
+             GetEQ(clients3);
+             rewind(clnote);
+             ClearRecord(clnote);
+             clnote.client = Client.Client;
+             clnote.iOper = 0;
+             GetEQ(clnote);
+             if(Trim(clients1.UrRiska) == RiskMenu(PrintMenuRes))
+              PrintAnketa(12);
+             end;
+            end;
+           end;
+          end;
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+          return CM_IGNORE;
+         end;
+         if(PrintMenuRes == 5)
+          PrintAnketa(11);
+          PrintMenuType = "К";
+          GetString(PrintMenuType,"Введите искомый тип клиента (например: К - банки):",10);
+          rewind(client);
+          ClearRecord(client);
+          ii=0;
+          while(next(client))
+           ii=ii+1;
+           message("Идет поиск и печать клиентов: "+String(ii));
+           if((Index(client.szUserType,PrintMenuType)>0) OR (PrintMenuType == ""))
+            if(client.bdFinishDate == date(0,0,0)) /* Только открытые клиенты */
+             rewind(clients1);
+             ClearRecord(clients1);
+             clients1.client = Client.Client;
+             GetEQ(clients1);
+             rewind(clients2);
+             ClearRecord(clients2);
+             clients2.client = Client.Client;
+             GetEQ(clients2);
+             rewind(clients3);
+             ClearRecord(clients3);
+             clients3.client = Client.Client;
+             GetEQ(clients3);
+             rewind(clnote);
+             ClearRecord(clnote);
+             clnote.client = Client.Client;
+             clnote.iOper = 0;
+             GetEQ(clnote);
+             PrintAnketa(12);
+            end;
+           end;
+          end;
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+          return CM_IGNORE;
+         end;
+         if(PrintMenuRes == 6)
+          PrintAnketa(11);
+          PrintMenuType = "К";
+          GetString(PrintMenuType,"Введите искомый тип клиента (например: К - банки):",10);
+          [ ########## ########
+
+               Список клиентов с типом ## по состоянию на ##########
+
+          ](date,time,PrintMenuType,date);
+          NumFind = 0;
+          rewind(client);
+          ClearRecord(client);
+          ii=0;
+          while(next(client))
+           ii=ii+1;
+           message("Идет поиск и печать клиентов: "+String(ii));
+           if((Index(client.szUserType,PrintMenuType)>0) OR (PrintMenuType == ""))
+            if(client.bdFinishDate == date(0,0,0))
+             NumFind = NumFind + 1;
+             [ ###### #
+             ](client.Client,client.Name_Client);
+            end;
+           end;
+          end;
+          [ ----------------------------------------------------------------------------
+             Всего клиентов: #########
+             
+          ](NumFind);
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+          return CM_IGNORE;
+         end;
+         if(PrintMenuRes == 7) /* Печать списка клиентов по уровню риска */
+          PrintAnketa(11);
+          PrintMenuRes = menu(RiskMenu,"","Выберите уровень риска");
+          if(PrintMenuRes >= 0)
+           PrintMenuOper = {oper};
+           GetInt(PrintMenuOper,"Введите номер операциониста (0-все):",4);
+          [ ########## ########
+
+               Список клиентов с повышенным уровнем риска по состоянию на ##########
+
+          ](date,time,date);
+           FindType = "К";
+           GetString(FindType,"Введите искомый тип клиента (например: К - банки) или пусто для всех:",10);
+           FindType = trim(FindType);
+           NumFind = 0;
+
+           rewind(client);
+           ClearRecord(client);
+           ii=0;
+           while(next(client))
+            ii=ii+1;
+            message("Идет поиск и печать клиентов: "+String(ii));
+            if(((client.iCarryOper == PrintMenuOper) OR (PrintMenuOper == 0)) AND
+               (client.bdFinishDate == date(0,0,0))
+              )
+             rewind(clients1);
+             ClearRecord(clients1);
+             clients1.client = Client.Client;
+             GetEQ(clients1);
+             if(Trim(clients1.UrRiska) == RiskMenu(PrintMenuRes))
+              if((Index(client.szUserType,FindType) > 0) OR (FindType == ""))
+               NumFind = NumFind + 1;
+               [ ###### #
+               ](client.Client,client.Name_Client);
+              end;
+             end;
+            end;
+           end;
+          end;
+          [ ----------------------------------------------------------------------------
+             Всего клиентов: #########
+             
+          ](NumFind);
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+          return CM_IGNORE;
+
+
+/*          PrintAnketa(11);
+          PrintMenuType = "К";
+          GetString(PrintMenuType,"Введите искомый тип клиента (например: К - банки):",10);
+          [ ########## ########
+
+               Список клиентов с типом ## по состоянию на ##########
+
+          ](date,time,PrintMenuType,date);
+          NumFind = 0;
+          rewind(client);
+          ClearRecord(client);
+          ii=0;
+          while(next(client))
+           ii=ii+1;
+           message("Идет поиск и печать клиентов: "+String(ii));
+           if((Index(client.szUserType,PrintMenuType)>0) OR (PrintMenuType == ""))
+            if(client.bdFinishDate == date(0,0,0))
+             NumFind = NumFind + 1;
+             [ ###### #
+             ](client.Client,client.Name_Client);
+            end;
+           end;
+          end;
+          [ ----------------------------------------------------------------------------
+             Всего клиентов: #########
+             
+          ](NumFind);
+          PrintAnketa(13);
+          FillDown0 (dl,Apos0 (0));
+          Message("~F4~ - Поиск  ~F7~ - Печать  ~Enter~ - Редактирование  ~F9~ - Новый  ~Esc~ Выход");
+          return CM_IGNORE; */
+         end;
+         return CM_IGNORE;
+         
+      elif (key == F4)
+        curCol = FindCol0 (dl,id);
+        DoFind = false;
+        RunDialog(find,"FindEvent");
+        if(DoFind)
+         NumFind = 0;
+         if(Find.Numb>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.Name)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.INN)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.FIORuk)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.FIOBuh)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(Find.Group>0)
+          NumFind = NumFind + 1;
+         end;
+         if(Find.AddrCountry>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrRegion)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrRaion)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrTown)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrNas)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrIndex)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrStreet)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrHouse)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrKorpus)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrStr)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.AddrKvart)>0)
+          NumFind = NumFind + 1;
+         end;
+         if(StrLen(Find.SearchAccount)>0)
+          NumFind = NumFind + 1;
+         end;
+
+         if (Find.Numb > 0)
+          Scrff0.Client=Find.Numb;
+          if ((GetEQ(Scrff0)) and (Scrff0.Client==Find.Numb))
+           if (Scrff0.bdFinishDate == Date (0,0,0))
+             IsShowClosed = 0;
+           else
+             IsShowClosed = 1;
+           end;
+
+           mypos=GetPos(Scrff0);
+           if(IfLastPage(mypos))
+            FillUP0 (dl,mypos);
+            SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+           else
+            FillDown0 (dl,mypos);
+            SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0));
+           end;
+          end;
+
+         elif (Strlen(Find.SearchAccount) > 0)
+          if(Strlen(Find.SearchAccount) != 20)
+           MsgBox("Длина счета для поиска не = 20 символам!");
+          else
+           rewind(acc0);
+           ClearRecord(acc0);
+           acc0.Account = Find.SearchAccount;
+           if(GetEQ(acc0))
+            Scrff0.Client=acc0.Client;
+            if ((GetEQ(Scrff0)) and (Scrff0.Client==acc0.Client))
+             if (Scrff0.bdFinishDate == Date (0,0,0))
+               IsShowClosed = 0;
+             else
+               IsShowClosed = 1;
+             end;
+
+             mypos=GetPos(Scrff0);
+             if(IfLastPage(mypos))
+              FillUP0 (dl,mypos);
+              SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+             else
+              FillDown0 (dl,mypos);
+              SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0));
+             end;
+            end;
+           else
+            MsgBox("Клиент с таким счетом не найден!");
+           end;
+          end;
+
+         elif (Strlen(Find.INN) > 0)
+          if((Strlen(Find.INN) != 10) AND (Strlen(Find.INN) != 12))
+           MsgBox("Длина ИНН для поиска неверна (д.б. 10 или 12 символов!");
+          else
+           ClearRecord(clients3_2);
+           clients3_2.INNKey = Find.INN;
+           if(GetEQ(clients3_2))
+            Scrff0.Client=clients3_2.Client;
+            if ((GetEQ(Scrff0)) and (Scrff0.Client==clients3_2.Client))
+             if (Scrff0.bdFinishDate == Date (0,0,0))
+               IsShowClosed = 0;
+             else
+               IsShowClosed = 1;
+             end;
+
+             mypos=GetPos(Scrff0);
+             if(IfLastPage(mypos))
+              FillUP0 (dl,mypos);
+              SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+             else
+              FillDown0 (dl,mypos);
+              SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0));
+             end;
+            end;
+           else
+            MsgBox("Клиент с таким ИНН не найден!");
+           end;
+          end;
+
+         elif (NumFind > 0)
+          curRow = Findrow0 (dl,id);
+          if ((curRow >= 0) and (curRow <= lastUsed0))
+            curCol = FindCol0 (dl,id);
+            TPSGetDirect (Scrff0,Apos0 (curRow));
+            flag = false;
+            ans = 0;
+            while((next(Scrff0)) AND (not flag))
+              NumFound = 0;
+              ans=ans+1;
+              message("Идет поиск. Просмотрено строк: "+String(ans));
+
+              if(StrLen(Find.Name)>0)
+               if (Index(StrLwr(Scrff0.Name_Client),StrLwr(Find.Name))>0)
+                NumFound = NumFound + 1;
+               end;
+              end;
+
+              if(Find.Group>0)
+               if (Scrff0.iGroup == Find.Group)
+                NumFound = NumFound + 1;
+               end;
+              end;
+
+              ClearRecord(clients3);
+              clients3.Client = Scrff0.Client;
+              if (GetEQ(clients3))
+                if(StrLen(Find.FIORuk)>0)
+                 if (Index(StrLwr(clients3.szFace1),StrLwr(Find.FIORuk))>0)
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.FIOBuh)>0)
+                 if (Index(StrLwr(clients3.szFace2),StrLwr(Find.FIOBuh))>0)
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+              end;
+
+              ClearRecord(clients1);
+              clients1.Client = Scrff0.Client;
+              if (GetEQ(clients1))
+                if(Find.AddrCountry>0)
+                 if ((clients1.UrAddrCountry == Find.Addrcountry) OR
+                     (clients1.FactAddrCountry == Find.Addrcountry))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrRegion)>0)
+                 if ((Index(StrLwr(clients1.UrAddrRegion),StrLwr(Find.AddrRegion))>0) OR
+                     (Index(StrLwr(clients1.FactAddrRegion),StrLwr(Find.AddrRegion))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrRaion)>0)
+                 if ((Index(StrLwr(clients1.UrAddrRaion),StrLwr(Find.AddrRaion))>0) OR
+                     (Index(StrLwr(clients1.FactAddrRaion),StrLwr(Find.AddrRaion))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrTown)>0)
+                 if ((Index(StrLwr(clients1.UrAddrTown),StrLwr(Find.AddrTown))>0) OR
+                     (Index(StrLwr(clients1.FactAddrTown),StrLwr(Find.AddrTown))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrNas)>0)
+                 if ((Index(StrLwr(clients1.UrAddrNas),StrLwr(Find.AddrNas))>0) OR
+                     (Index(StrLwr(clients1.FactAddrNas),StrLwr(Find.AddrNas))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrIndex)>0)
+                 if ((Index(StrLwr(clients1.UrAddrIndex),StrLwr(Find.AddrIndex))>0) OR
+                     (Index(StrLwr(clients1.FactAddrIndex),StrLwr(Find.AddrIndex))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrStreet)>0)
+                 if ((Index(StrLwr(clients1.UrAddrStreet),StrLwr(Find.AddrStreet))>0) OR
+                     (Index(StrLwr(clients1.FactAddrStreet),StrLwr(Find.AddrStreet))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrHouse)>0)
+                 if ((Index(StrLwr(clients1.UrAddrHouse),StrLwr(Find.AddrHouse))>0) OR
+                     (Index(StrLwr(clients1.FactAddrHouse),StrLwr(Find.AddrHouse))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrKorpus)>0)
+                 if ((Index(StrLwr(clients1.UrAddrKorpus),StrLwr(Find.AddrKorpus))>0) OR
+                     (Index(StrLwr(clients1.FactAddrKorpus),StrLwr(Find.AddrKorpus))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrStr)>0)
+                 if ((Index(StrLwr(clients1.UrAddrStr),StrLwr(Find.AddrStr))>0) OR
+                     (Index(StrLwr(clients1.FactAddrStr),StrLwr(Find.AddrStr))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+                if(StrLen(Find.AddrKvart)>0)
+                 if ((Index(StrLwr(clients1.UrAddrKvart),StrLwr(Find.AddrKvart))>0) OR
+                     (Index(StrLwr(clients1.FactAddrKvart),StrLwr(Find.AddrKvart))>0))
+                  NumFound = NumFound + 1;
+                 end;
+                end;
+              end;
+
+              if(NumFind == NumFound)
+                flag = true;
+                if (Scrff0.bdFinishDate == Date (0,0,0))
+                  IsShowClosed = 0;
+                else
+                  IsShowClosed = 1;
+                end;
+                mypos=GetPos(Scrff0);
+                if(IfLastPage(mypos))
+                  FillUP0 (dl,mypos);
+                  SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + lastUsed0));
+                else
+                  FillDown0 (dl,mypos);
+                  SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0));
+                end;
+              end;
+            end;
+
+            if(not flag)
+              MsgBox("Не найдено!");
+            end;
+            Message("~F4~-Поиск ~F7~-Печать ~Enter~-Редактирование ~F9~-Новый ~F10~-Откр/закр ~Esc~-Выход");
+           end;
+         end;
+        end;
+
+      elif ((key == c_F9) or ((cmd == DLG_INIT) and (ContactAddClient != 0)))
+       NewEdit = 1;
+       ClMain.NUMBER = GetNewClientNumber();
+       clearrecord(Scrff0);
+       Scrff0.Client=ClMain.NUMBER;
+       Scrff0.Name_Client="Клиент вводится операционистом "+String({oper}+" ("+GetUserShortName({oper})+")");
+       Scrff0.Code = String(Scrff0.Client);
+       if(not insert(Scrff0))
+        MsgBox("ОШИБКА!!!! Не сохранен временный клиент!!! Позвоните в АСУ.\n"+Status(ertext)+" "+ertext+"\nНомер клиента: "+String(Scrff0.Client));
+       end;
+       ClMain.OPER = {oper};
+       ClMain.CREDOPER = 0;
+       ClMain.DATEIN = date();
+       ClMain.DATEOUT = date(0,0,0);
+       ClMain.NEREZ = "";
+       ClMain.PRINADL = PrinadlMenu(0);
+	/*
+	В переменной ContactDocID содержится уникальный номер в структуре contpaym.dbt
+	по которому будем вытаскивать реквизиты клиента
+
+	В переменной ContactWay содержится направление перевода
+	ContactWay = 0 - отправляем, т.е. клиент - отправитель
+	ContactWay = 1 - принимаем, клиент - получатель
+	ContactWay = 2 - направление не определено (для проверки)
+	*/
+       if (ContactAddClient == 1)
+    	if (ContactWay ==0) 	//все берем из Payer
+        ClMain.NAME 		= ContactAddClientFIO;
+        ClMain.SHORTNAME 	= GetClientShortName(ContactAddClientFIO);
+        ClPers.BirthDate 	= GetCntPayerBirthDay (ContactDocID);
+        ClAddr.UrAddrIndex 	= GetCntPayerIndex (ContactDocID);
+        ClAddr.UrAddrRegion 	= GetCntPayerRegion (ContactDocID);
+        ClAddr.UrAddrTown 	= GetCntPayerCity (ContactDocID);
+        ClAddr.PHONE 		= GetCntPayerPhone (ContactDocID);
+        ClPers.PassportType 	= PassportMenu(GetRSDocType(GetContactPayerDocName(ContactDocID)));
+        ClPers.PassportSeria 	= GetCntPayerDocSer (ContactDocID);
+        ClPers.PassportNum 	= GetCntPayerDocNum (ContactDocID);
+	// для паспорта РФ, который написали без пробела
+	if ((GetRSDocType(GetContactPayerDocName(ContactDocID)) == 1) and (StrLen(ClPers.PassportSeria) == 10) and (StrLen(ClPers.PassportNum) == 0))
+	        ClPers.PassportNum 	= SubStr (ClPers.PassportSeria,5,6);
+	        ClPers.PassportSeria 	= SubStr (ClPers.PassportSeria,1,4);
+	end;
+        ClPers.PassportWhen 	= GetCntPayerDocDate (ContactDocID);
+        ClPers.PassportWhere 	= GetCntPayerDocKem (ContactDocID);
+        ClMain.TYPEUSER = "Ф";
+        ClPers.Face1Post = "";
+        ClPers.Face2Post = "";
+        ClOrgans.Organs = "";
+
+	elif (ContactWay ==1)	// из Receiver
+
+        ClMain.NAME 		= ContactAddClientFIO;
+        ClMain.SHORTNAME 	= GetClientShortName(ContactAddClientFIO);
+        ClPers.BirthDate 	= GetCntReceiverBirthDay (ContactDocID);
+        ClAddr.UrAddrIndex 	= GetCntReceiverIndex (ContactDocID);
+        ClAddr.UrAddrRegion 	= GetCntReceiverRegion (ContactDocID);
+        ClAddr.UrAddrTown 	= GetCntReceiverCity (ContactDocID);
+        ClAddr.PHONE 		= GetCntReceiverPhone (ContactDocID);
+        ClPers.PassportType 	= PassportMenu(GetRSDocType(GetContactReceiverDocName(ContactDocID)));
+        ClPers.PassportSeria 	= GetCntReceiverDocSer (ContactDocID);
+        ClPers.PassportNum 	= GetCntReceiverDocNum (ContactDocID);
+	// для паспорта РФ, который написали без пробела
+ 	  if ((GetRSDocType(GetContactReceiverDocName(ContactDocID)) == 1) and (StrLen(ClPers.PassportSeria) == 10) and (StrLen(ClPers.PassportNum) == 0))
+	        ClPers.PassportNum 	= SubStr (ClPers.PassportSeria,5,6);
+	        ClPers.PassportSeria 	= SubStr (ClPers.PassportSeria,1,4);
+	  end;
+        ClPers.PassportWhen 	= GetCntReceiverDocDate (ContactDocID);
+        ClPers.PassportWhere 	= GetCntReceiverDocKem (ContactDocID);
+        ClMain.TYPEUSER = "Ф";
+        ClPers.Face1Post = "";
+        ClPers.Face2Post = "";
+        ClOrgans.Organs = "";
+
+	end;
+
+       elif (ContactAddClient == 2)  //Данные из системы Юнистрим
+    	if (ContactWay ==0) 	//все берем из Payer
+        ClMain.NAME 		= ContactAddClientFIO;
+        ClMain.SHORTNAME 	= GetClientShortName(ContactAddClientFIO);
+        ClPers.BirthDate 	= GetUniPayerBirthDay (ContactDocID);
+        ClAddr.UrAddrIndex 	= GetUniPayerIndex (ContactDocID);
+        ClAddr.UrAddrRegion 	= GetUniPayerRegion (ContactDocID);
+        ClAddr.UrAddrTown 	= GetUniPayerCity (ContactDocID);
+        ClAddr.PHONE 		= GetUniPayerPhone (ContactDocID);
+        ClPers.PassportType 	= PassportMenu(GetUnistreamDocType(GetUnistreamPayerDocName(ContactDocID)));
+        ClPers.PassportSeria 	= GetUniPayerDocSer (ContactDocID);
+        ClPers.PassportNum 	= GetUniPayerDocNum (ContactDocID);
+        ClPers.PassportWhen 	= GetUniPayerDocDate (ContactDocID);
+        ClPers.PassportWhere 	= GetUniPayerDocKem (ContactDocID);
+        ClMain.TYPEUSER = "Ф";
+        ClPers.Face1Post = "";
+        ClPers.Face2Post = "";
+        ClOrgans.Organs = "";
+
+	elif (ContactWay ==1)	// из Receiver
+
+        ClMain.NAME 		= ContactAddClientFIO;
+        ClMain.SHORTNAME 	= GetClientShortName(ContactAddClientFIO);
+        ClPers.BirthDate 	= GetUniReceiverBirthDay (ContactDocID);
+        ClAddr.UrAddrIndex 	= GetUniReceiverIndex (ContactDocID);
+        ClAddr.UrAddrRegion 	= GetUniReceiverRegion (ContactDocID);
+        ClAddr.UrAddrTown 	= GetUniReceiverCity (ContactDocID);
+        ClAddr.PHONE 		= GetUniReceiverPhone (ContactDocID);
+        ClPers.PassportType 	= PassportMenu(GetUnistreamDocType(GetUnistreamReceiverDocName(ContactDocID)));
+        ClPers.PassportSeria 	= GetUniReceiverDocSer (ContactDocID);
+        ClPers.PassportNum 	= GetUniReceiverDocNum (ContactDocID);
+        ClPers.PassportWhen 	= GetUniReceiverDocDate (ContactDocID);
+        ClPers.PassportWhere 	= GetUniReceiverDocKem (ContactDocID);
+        ClMain.TYPEUSER = "Ф";
+        ClPers.Face1Post = "";
+        ClPers.Face2Post = "";
+        ClOrgans.Organs = "";
+
+	end;
+
+
+
+
+
+
+       else
+       ClMain.NAME = "";
+       ClMain.SHORTNAME = "";
+
+       ClPers.BirthDate = date(0,0,0);
+       ClAddr.UrAddrIndex = "";
+       ClAddr.UrAddrRegion = "";
+       ClAddr.UrAddrTown = "";
+       ClAddr.PHONE = "";
+
+       ClPers.PassportType = PassportMenu(1);
+       ClPers.PassportSeria = "";
+       ClPers.PassportNum = "";
+       ClPers.PassportWhen = date(0,0,0);
+       ClPers.PassportWhere = "";
+
+       ClMain.TYPEUSER = "Ю";
+       ClPers.Face1Post = "ген. директор";
+       ClPers.Face2Post = "главный бухгалтер";
+       ClOrgans.Organs = "Общее собрание участников, генеральный директор.";
+       end;
+
+       ClMain.GROUP = 0;
+       ClMain.VIDSOBSTV = 0;
+       ClMain.ORGFORMA = 0;
+       ClMain.SFERA = 0;
+       ClMain.OTRASL = 0;
+       ClMain.GEOGR = 0;
+       ClMain.OKPO = "";
+       ClMain.OKONH = "";
+       ClMain.OKATO = "";
+       ClMain.NALOGINSP = 0;
+       ClMain.INN = "";
+       ClMain.DATENALOG = date(0,0,0);
+       ClMain.DATEUSTAV = date(0,0,0);
+       ClMain.FONDOB = Money(0);
+       ClMain.FONDFACT = Money(0);
+       ClMain.CodeFONDOB = 810;
+       ClMain.CodeFONDFACT = 810;
+       ClMain.IsNedenomUstav = "";
+
+       ClMain.ACTIONER = 0;
+//       ClMain.TYPEUSER = "Ю";
+       ClMain.TYPESYST = "";
+       ClMain.KPP = "";
+       ClMain.NalogSvSer = "";
+       ClMain.NalogSvNum = "";
+       ClMain.SvPostNaUchet = date(0,0,0);
+       ClMain.Pere= "";
+       ClMain.SerSvidReg= "" ;
+       ClMain.NumSvidReg= "" ;
+       ClMain.GosRegNum= "" ;
+
+       ClMain.PLACEUSTAV = "";
+       ClAddr.UrAddrCountry = "";
+//       ClAddr.UrAddrRegion = "";
+       ClAddr.UrAddrRaion = "";
+//       ClAddr.UrAddrTown = "";
+       ClAddr.UrAddrNas = "";
+//       ClAddr.UrAddrIndex = "";
+       ClAddr.UrAddrStreet = "";
+       ClAddr.UrAddrHouse = "";
+       ClAddr.UrAddrKorpus = "";
+       ClAddr.UrAddrStr = "";
+       ClAddr.UrAddrKvart = "";
+       ClAddr.FactAddrCountry = "";
+       ClAddr.FactAddrRegion = "";
+       ClAddr.FactAddrNas = "";
+       ClAddr.FactAddrRaion = "";
+       ClAddr.FactAddrTown = "";
+       ClAddr.FactAddrIndex = "";
+       ClAddr.FactAddrStreet = "";
+       ClAddr.FactAddrHouse = "";
+       ClAddr.FactAddrKorpus = "";
+       ClAddr.FactAddrStr = "";
+       ClAddr.FactAddrKvart = "";
+       ClAddr.GOAddrCountry = "";
+       ClAddr.GOAddrRegion = "";
+       ClAddr.GOAddrNas = "";
+       ClAddr.GOAddrRaion = "";
+       ClAddr.GOAddrTown = "";
+       ClAddr.GOAddrIndex = "";
+       ClAddr.GOAddrStreet = "";
+       ClAddr.GOAddrHouse = "";
+       ClAddr.GOAddrKorpus = "";
+       ClAddr.GOAddrStr = "";
+       ClAddr.GOAddrKvart = "";
+
+//       ClAddr.PHONE = "";
+       ClAddr.PHONE2 = "";
+       ClAddr.TELEGRAPH = "";
+       ClAddr.FAX = "";
+       ClAddr.EMAIL = "";
+       ClAddr.Insider = "";
+       ClAddr.Akcioner5= "";
+       ClAddr.FWB="";
+       ClAddr.IsInPlace="";
+       ClAddr.IsReligOrg="";
+
+//       ClPers.PassportType = PassportMenu(1);
+//       ClPers.PassportSeria = "";
+//       ClPers.PassportNum = "";
+//       ClPers.PassportWhen = date(0,0,0);
+//       ClPers.PassportWhere = "";
+       ClPers.Poddanstvo = "";
+//       ClPers.BirthDate = date(0,0,0);
+       ClPers.BirthPlace = "";
+
+//       ClPers.Face1Post = "ген. директор";
+       ClPers.Face1 = "";
+       SignCard.Path1 = "";
+       SignCard.Path2 = "";
+
+       ClPers.Face1bPost = "";
+       ClPers.Face1b = "";
+
+       ClPers.Face1cPost = "";
+       ClPers.Face1c = "";
+
+       ClPers.DateEnd1 = date(0,0,0);
+       ClPers.DateEnd1b = date(0,0,0);
+       ClPers.DateEnd1c = date(0,0,0);
+
+       ClPers.Face2bPost = "";
+       ClPers.Face2b = "";
+
+//       ClPers.Face2Post = "главный бухгалтер";
+       ClPers.Face2 = "";
+
+       ClPers.Visa = "";
+       ClPers.VisaBDate = date(0,0,0);
+       ClPers.VisaEDate = date(0,0,0);
+
+       ClPers.MKNumb = "";
+       ClPers.MKBeginPrib = date(0,0,0);
+       ClPers.MKEndPrib = date(0,0,0);
+
+
+       ClOther.BIK = "";
+       ClOther.LicVid = "";
+       ClOther.LicNum = "";
+       ClOther.LicDate = date(0,0,0);
+       ClOther.LicWhereVid = "";
+       ClOther.DogSeria = "";
+       ClOther.DogNum = "";
+       ClOther.ForeignName = "";
+/*       ClOther.PredpOperNum = 0;
+       ClOther.PredpOperSum = Money(0);
+       ClOther.FactOperNum = 0;
+       ClOther.FactOperSum = Money(0);*/
+       ClOther.FirstAccOpenDate = date();
+       ClOther.AnketaDate = date();
+       ClOther.RegSvNum = "";
+       ClOther.RegDate = date(0,0,0);
+       if({oper} == 36)
+        ClOther.Kurator = "Дробышева Ю.В.";
+       elif(({oper} == 25) OR ({oper} == 24))
+        ClOther.Kurator = GetUserShortName({oper});
+       else
+        ClOther.Kurator = "Лобачева О.В.";
+       end;
+       if(({oper} == 25) OR ({oper} == 24))
+        ClOther.UtvOtk = "Смирнов И.А.";
+       elif(({oper} == 43) OR ({oper} == 44))
+        ClOther.UtvOtk = "Сергушкина Н.С.";
+       else
+        ClOther.UtvOtk = "Федорова И.А.";
+       end;
+       ClOther.SotrZapoln = GetUserShortName({oper});
+
+       ClRisk.CreditRisk = 11;
+       ClRisk.URRISKA = RiskMenu(1);
+       ClRisk.OcenkaRiska = "Не соответствует критериям оценки высокого риска.";
+
+//       ClOrgans.Organs = "Общее собрание участников, генеральный директор.";
+       ClOrgans.Branches = "";
+
+       ClCor.Corresp = "";
+
+       ClLicen.Licenses = "";
+
+       ClUchred.Uchred = "";
+
+       ClVid.VidDeyat = "";
+
+       ClIP.RegistrIP = "";
+       ClIP.VidIP = "";
+
+       ClPrim.PRIM = "";
+       ClPrim.ZalogBikBank = "";
+       ClPrim.ZalogAcc = "";
+       ClPrim.Prinadlezh = "";
+
+       ClVigoda.SvVigoda = "";
+
+//         MsgBox ("1111 " + ContactAddClient + " " + cmd + " " + DLG_INIT + " " + DLG_KEY);
+       ContactClientID = ClMain.NUMBER; //устанавливаем номер для возврата в cntsearsh
+       ContactAddClient = 2; //переменная из макроса cntaddcl
+
+       DialogID = 1;
+       while(DialogID != 0)
+        if(DialogID == 1)
+         RunDialog(clmain,"ClMainEvent");
+        end;
+        if(DialogID == 2)
+         RunDialog(claddr,"ClAddrEvent");
+        end;
+        if(DialogID == 3)
+         RunDialog(clpers,"ClPersEvent");
+        end;
+        if(DialogID == 4)
+         if((clother.FirstAccOpenDate == date(0,0,0)) AND
+            (clmain.DATEIN != date(0,0,0)))
+          clother.FirstAccOpenDate = clmain.DATEIN;
+         end;
+         RunDialog(clother,"ClOtherEvent");
+        end;
+        if(DialogID == 5)
+         RunDialog(clrisk,"ClOtherEvent");
+        end;
+        if(DialogID == 6)
+         RunDialog(clorgans,"ClOtherEvent");
+        end;
+        if(DialogID == 7)
+         RunDialog(clcor,"ClOtherEvent");
+        end;
+        if(DialogID == 8)
+         RunDialog(cllicen,"ClOtherEvent");
+        end;
+        if(DialogID == 9)
+         RunDialog(cluchred,"ClOtherEvent");
+        end;
+        if(DialogID == 10)
+         RunDialog(clvid,"ClOtherEvent");
+        end;
+        if(DialogID == 11)
+         RunDialog(clip,"ClOtherEvent");
+        end;
+        if(DialogID == 12)
+         RunDialog(clprim,"ClOtherEvent");
+        end;
+        if(DialogID == 13)
+         RunDialog(clvigoda,"ClOtherEvent");
+        end;
+       end;
+
+       if((NewEdit == 5) OR (CanSave(ClMain.NUMBER,ClMain.TYPEUSER) AND (GetTrue(true,"Сохранить данные по новому клиенту?"))))
+        if((not ПроверитьПаспорт(clPers.PassportSeria, clPers.PassportNum)) AND
+           (not ПроверитьНаТеррориста(ClMain.NAME)) AND
+           (not ПроверитьНаТеррориста(ClPers.Face1)) AND
+           (not ПроверитьНаТеррориста(ClPers.Face1b)) AND 
+           (not ПроверитьНаТеррориста(ClPers.Face1c)) AND
+           (not ПроверитьНаТеррориста(ClPers.Face2)) AND
+           (not ПроверитьНаТеррориста(ClPers.Face2b)) 
+          )
+         if(Strlen(Trim(ClMain.NAME)) > 0)
+//          rewind(Scrff0); /* Кусок с поиском записи перед updat'ом введен Киром 23.06.2006___15:23:34 */
+          ClearRecord(Scrff0);
+          Scrff0.Client = ClMain.NUMBER;
+          if((not GetEQ(Scrff0)) OR (Scrff0.Client != ClMain.NUMBER))
+           MsgBox("ОШИБКА!!!! Информация не сохранена!!! Позвоните в АСУ!!!\nНе удалось спозиционироваться на клиента!");
+           return CM_IGNORE;
+          end;
+
+          Scrff0.iCarryOper = ClMain.OPER;
+          Scrff0.iCreditOper = ClMain.CREDOPER;
+          Scrff0.bdStartDate = ClMain.DATEIN;
+          Scrff0.bdFinishDate = ClMain.DATEOUT;
+          Scrff0.NotResident = ClMain.NEREZ;
+          Scrff0.Name_Client = ClMain.NAME;
+          clients3.ShortName = ClMain.SHORTNAME;
+          Scrff0.szShortName = clients3.ShortName;
+          Scrff0.iGroup = ClMain.GROUP;
+          clients3.iPropertyKind = ClMain.VIDSOBSTV;
+          clients3.iOrgForm = ClMain.ORGFORMA;
+          clients3.iActivitiesSphere = ClMain.SFERA;
+          clients3.iBranch = ClMain.OTRASL;
+          clients3.lGeographyLabel = ClMain.GEOGR;
+          clients3.szOkpo = ClMain.OKPO;
+          clients3.CodeSector = ClMain.OKONH;
+          clients3.iTaxInstitution = ClMain.NALOGINSP;
+          clients3.Innkey = ClMain.INN;
+          clients3.bdTaxRegDate = ClMain.DATENALOG;
+          Scrff0.bdCharterDate = ClMain.DATEUSTAV;
+          Scrff0.dmDeclareCapital = ClMain.FONDOB;
+          Scrff0.dmRealCapital = ClMain.FONDFACT;
+          Scrff0.lHolder = ClMain.ACTIONER;
+          Scrff0.szUserType = ClMain.TYPEUSER;
+          Scrff0.Code = String(Scrff0.Client);
+          Scrff0.Sort = mkstr(" ",35-Strlen(Scrff0.Code)) + Scrff0.Code;
+          if(Index(Scrff0.szUserType,"Ф") > 0)
+           Scrff0.LegalForm = 2;
+          else
+           Scrff0.LegalForm = 1;
+          end;
+          clients3.szSysType = ClMain.TYPESYST;
+          clients1.NalogSvSer = ClMain.NalogSvSer;
+          clients1.NalogSvNum = ClMain.NalogSvNum;
+  
+          clients1.Pere = ClMain.Pere;
+          clients1.SerSvidReg = ClMain.SerSvidReg;
+          clients1.NumSvidReg = ClMain.NumSvidReg;
+          clients3.SvPostNaUchet = ClMain.SvPostNaUchet;
+          clients1.GosRegNum = ClMain.GosRegNum;
+  
+          clients1.UrAddrCountry = ClAddr.UrAddrCountry;
+          clients1.UrAddrRegion = ClAddr.UrAddrRegion;
+          clients1.UrAddrRaion = ClAddr.UrAddrRaion;
+          clients1.UrAddrTown = ClAddr.UrAddrTown;
+          clients1.UrAddrNas = ClAddr.UrAddrNas;
+          clients1.UrAddrIndex = ClAddr.UrAddrIndex;
+          clients1.UrAddrStreet = ClAddr.UrAddrStreet;
+          clients1.UrAddrHouse = ClAddr.UrAddrHouse;
+          clients1.UrAddrKorpus = ClAddr.UrAddrKorpus;
+          clients1.UrAddrStr = ClAddr.UrAddrStr;
+          clients1.UrAddrKvart = ClAddr.UrAddrKvart;
+          clients1.FactAddrCountry = ClAddr.FactAddrCountry;
+          clients1.FactAddrRegion = ClAddr.FactAddrRegion;
+          clients1.FactAddrRaion = ClAddr.FactAddrRaion;
+          clients1.FactAddrTown = ClAddr.FactAddrTown;
+          clients1.FactAddrNas = ClAddr.FactAddrNas;
+          clients1.FactAddrIndex = ClAddr.FactAddrIndex;
+          clients1.FactAddrStreet = ClAddr.FactAddrStreet;
+          clients1.FactAddrHouse = ClAddr.FactAddrHouse;
+          clients1.FactAddrKorpus = ClAddr.FactAddrKorpus;
+          clients1.FactAddrStr = ClAddr.FactAddrStr;
+          clients1.FactAddrKvart = ClAddr.FactAddrKvart;
+          clients3.GOAddrCountry = ClAddr.GOAddrCountry;
+          clients3.GOAddrRegion = ClAddr.GOAddrRegion;
+          clients3.GOAddrRaion = ClAddr.GOAddrRaion;
+          clients3.GOAddrTown = ClAddr.GOAddrTown;
+          clients3.GOAddrNas = ClAddr.GOAddrNas;
+          clients3.GOAddrIndex = ClAddr.GOAddrIndex;
+          clients3.GOAddrStreet = ClAddr.GOAddrStreet;
+          clients3.GOAddrHouse = ClAddr.GOAddrHouse;
+          clients3.GOAddrKorpus = ClAddr.GOAddrKorpus;
+          clients3.GOAddrStr = ClAddr.GOAddrStr;
+          clients3.GOAddrKvart = ClAddr.GOAddrKvart;
+ 
+          clients3.szPhoneNumber = ClAddr.PHONE;
+          clients3.szPhoneNumber2 = ClAddr.PHONE2;
+          clients3.szTelegraph = ClAddr.TELEGRAPH;
+          clients3.szTelexNumber = ClAddr.FAX;
+          clients1.EMAIL = ClAddr.EMAIL;
+
+          clients1.Insider = ClAddr.insider;
+          clients1.Akcioner5=ClAddr.Akcioner5;
+          clients1.FaceWithBank=ClAddr.FWB;
+          clients3.IsInPlace=ClAddr.IsInPlace;
+          clients3.IsReligOrg=ClAddr.IsReligOrg;
+   
+          clients1.PassportType = ClPers.PassportType;
+          clients1.PassportSeria = ClPers.PassportSeria;
+          clients1.PassportNum = ClPers.PassportNum;
+          clients1.PassportWhen = ClPers.PassportWhen;
+          clients1.PassportWhere = ClPers.PassportWhere;
+          clients1.Poddanstvo = ClPers.Poddanstvo;
+          clients3.BirthDate = ClPers.BirthDate;
+          clients3.BirthPlace = ClPers.BirthPlace;
+   
+          clients3.SignCardPath1 = SignCard.Path1;
+          clients3.SignCardPath2 = SignCard.Path2;
+
+          clients3.szFace1Post = ClPers.Face1Post;
+          clients3.szFace1 = ClPers.Face1;
+   
+          clients1.Face1bPost = ClPers.Face1bPost;
+          clients1.Face1b = ClPers.Face1b;
+ 
+          clients1.Face1cPost = ClPers.Face1cPost;
+          clients1.Face1c = ClPers.Face1c;
+ 
+          clients1.DateEnd1 = ClPers.DateEnd1;
+          clients1.DateEnd1b = ClPers.DateEnd1b;
+          clients1.DateEnd1c = ClPers.DateEnd1c;
+  
+          clients1.Face2bPost = ClPers.Face2bPost;
+          clients1.Face2b = ClPers.Face2b;
+
+          clients3.szFace2Post = ClPers.Face2Post;
+          clients3.szFace2 = ClPers.Face2;
+
+          clients1.Visa = ClPers.Visa;
+          clients3.VisaBDate = ClPers.VisaBDate;
+          clients3.VisaEDate = ClPers.VisaEDate;
+   
+          clients3.MKNumb = ClPers.MKNumb;
+          clients3.MKBeginPrib = ClPers.MKBeginPrib;
+          clients3.MKEndPrib = ClPers.MKEndPrib;
+  
+          clients3.BIC = ClOther.BIK;
+          clients1.LicVid = ClOther.LicVid;
+          clients1.LicNum = ClOther.LicNum;
+          clients1.LicDate = ClOther.LicDate;
+          clients3.LicWhereVid = ClOther.LicWhereVid;
+          clients1.DogSeria = ClOther.DogSeria;
+          clients1.DogNum = ClOther.DogNum;
+          clients3.ForeignName = ClOther.ForeignName;
+/*         clients1.PredpOperNum = ClOther.PredpOperNum;
+          clients1.PredpOperSum = ClOther.PredpOperSum;
+          clients1.FactOperNum = ClOther.FactOperNum;
+          clients1.FactOperSum = ClOther.FactOperSum;*/
+          clients1.FirstAccOpenDate = ClOther.FirstAccOpenDate;
+          clients1.AnketaDate = ClOther.AnketaDate;
+          clients1.RegSvNum = ClOther.RegSvNum;
+          clients1.RegDate = ClOther.RegDate;
+          clients2.Kurator = ClOther.Kurator;
+          clients2.UtvOtk = ClOther.UtvOtk;
+          clients3.SotrZapoln = ClOther.SotrZapoln;
+  
+          clients2.CreditRisk = ClRisk.CreditRisk;
+          clients1.UrRiska = ClRisk.URRISKA;
+          clients1.OcenkaRiska = ClRisk.OcenkaRiska;
+// добавлено по служебке от 12.07.2010 по ИПДЛ
+          clients3.IDPL2 = ClRisk.IDPL2;
+          clients3.IDPL4 = ClRisk.IDPL4;
+
+  
+          clients2.Organs = ClOrgans.Organs;
+          clients1.Branches = ClOrgans.Branches;
+  
+          clients2.Corresp = ClCor.Corresp;
+  
+          clients2.Licenses = ClLicen.Licenses;
+  
+          clients2.Uchred = ClUchred.Uchred;
+  
+          clients2.VidDeyat = ClVid.VidDeyat;
+          clients2.CodeFONDOB = ClMain.CodeFONDOB;
+          clients2.CodeFONDFACT = ClMain.CodeFONDFACT;
+          clients3.IsNedenomUstav = ClMain.IsNedenomUstav;
+  
+          clients1.RegistrIP = ClIP.RegistrIP;
+          clients1.VidIP = ClIP.VidIP;
+  
+          clnote.szNoteText = ClPrim.PRIM;
+          clnote.iOper = 0;
+          clients3.Prinadlezh = clPrim.Prinadlezh;
+          clients3.ZalogBIKBank = clPrim.ZalogBIKBank;
+          clients3.ZalogAcc = clPrim.ZalogAcc;
+
+          clients3.SvVigoda = ClVigoda.SvVigoda;
+  
+          clients3.PspSerNum = НормализоватьПаспорт(clients1.PassportSeria+clients1.PassportNum);
+
+/*          ii=0;
+          while(ii<asize(PrinadlMenu))
+           if(PrinadlMenu(ii)==ClMain.PRINADL)
+            Scrff0.iOwnerKind = ii;
+           end;
+           ii=ii+1;
+          end;*/
+ 
+          clients1.KPP = ClMain.KPP;
+          clients1.bdCharterPlace = ClMain.PLACEUSTAV;
+          clients3.ChangeDate = date;
+ 
+          Scrff0.Client = ClMain.NUMBER;
+          if(КонтрольВводаРеквизитов(Scrff0))
+           if(not Update(Scrff0))
+            MsgBox("ОШИБКА!!!! Информация не сохранена!!! Позвоните в АСУ.\n"+Status(ertext)+" "+ertext+"\nНомер клиента: "+String(Scrff0.Client));
+           end;
+           if (Scrff0.bdFinishDate == Date (0,0,0))
+             IsShowClosed = 0;
+           else
+             IsShowClosed = 1;
+           end;
+           clients1.Client = Scrff0.Client;
+           Insert(clients1);
+           clients2.Client = Scrff0.Client;
+           insert(clients2);
+           clients3.Client = Scrff0.Client;
+           insert(clients3);
+           clnote.Client = Scrff0.Client;
+           Insert(clnote);
+           SetCtgVal (OBJTYPE_CLIENT, OBJCTG_OKATO, GetClientId (ClMain.NUMBER), ClMain.OKATO, Date(0,0,0), true, true);
+           if(Index(Scrff0.szUserType,"Ф") > 0)
+            // rewind(persn);
+            ClearRecord(persn);
+            persn.ClientID = Scrff0.Client;
+            ii = Index(Scrff0.Name_Client," ");
+            persn.LastName = SubStr(Scrff0.Name_Client,1,ii-1);
+            str = SubStr(Scrff0.Name_Client,ii+1);
+            ii = Index(str," ");
+            persn.Name = SubStr(str,1,ii-1);
+            persn.Patronymic = SubStr(str,ii+1);
+            persn.BirthDate = clients3.BirthDate;
+            persn.Sort = Scrff0.Sort;
+            if(not Insert(persn))
+             MsgBox("ОШИБКА!!!! Не сохранены реквизиты физика!!! Позвоните в АСУ.\n"+Status(ertext)+" "+ertext+"\nНомер клиента: "+String(Scrff0.Client));
+            end;
+           end;
+           СохранитьИННКлиента(Scrff0.Client, clients3.INNKey);
+           СохранитьКППКлиента(Scrff0.Client, clients1.KPP);
+           СохранитьВидСубъекта(Scrff0);
+
+           ClientDataInsert(Scrff0.Client);	// Вызов "пустого" макроса для дополнительной обработки в филиалах
+          end;
+
+         else
+          MsgBox("Нельзя сохранить клиента с незаполненным наименованием (ФИО)!");
+          rewind(Scrff0); /* Кусок с поиском записи перед delet'ом введен Киром 31.08.2007___10:06:34 */
+          ClearRecord(Scrff0);
+          Scrff0.Client = ClMain.NUMBER;
+          if((not GetEQ(Scrff0)) OR (Scrff0.Client != ClMain.NUMBER))
+           MsgBox("ОШИБКА!!!! Не удален временный клиент!!! Позвоните в АСУ!!!\nНе удалось спозиционироваться на клиента!");
+            if (ContactAddClient == 2)
+              return CM_CANCEL;
+            end;
+           return CM_IGNORE;
+          else
+           if(not delete(Scrff0))
+            MsgBox("Ошибка удаления временного клиента!");
+           end;
+          end;
+         end;
+
+        else	// Плохой паспорт или клиент не прошел проверку на терроризм
+         rewind(Scrff0); /* Кусок с поиском записи перед delet'ом введен Киром 31.08.2007___10:06:34 */
+         ClearRecord(Scrff0);
+         Scrff0.Client = ClMain.NUMBER;
+         if((not GetEQ(Scrff0)) OR (Scrff0.Client != ClMain.NUMBER))
+          MsgBox("ОШИБКА!!!! Не удален временный клиент!!! Позвоните в АСУ!!!\nНе удалось спозиционироваться на клиента!");
+          if (ContactAddClient == 2)
+            return CM_CANCEL;
+          end;
+          return CM_IGNORE;
+         else
+          if(not delete(Scrff0))
+           MsgBox("Ошибка удаления временного клиента!");
+          end;
+         end;
+        end;
+
+       else	// Отказ от сохранения нового клиента
+        ContactClientID = 0; //устанавливаем номер для возврата в cntsearsh
+        rewind(Scrff0); /* Кусок с поиском записи перед delet'ом введен Киром 31.08.2007___10:06:34 */
+        ClearRecord(Scrff0);
+        Scrff0.Client = ClMain.NUMBER;
+        if((not GetEQ(Scrff0)) OR (Scrff0.Client != ClMain.NUMBER))
+         MsgBox("ОШИБКА!!!! Не удален временный клиент!!! Позвоните в АСУ!!!\nНе удалось спозиционироваться на клиента!");
+          if (ContactAddClient == 2)
+            return CM_CANCEL;
+          end;
+         return CM_IGNORE;
+        else
+         if(not delete(Scrff0))
+          MsgBox("Ошибка удаления временного клиента!");
+         end;
+        end;
+       end;
+
+       if (ContactAddClient == 2)
+         return CM_CANCEL;
+       end;
+
+        FillDown0 (dl,Apos0 (0));
+       return CM_IGNORE;
+
+      elif (key == F10)
+       if (IsShowClosed == 0)
+         IsShowClosed = 1;
+       else
+         IsShowClosed = 0;
+       end;
+
+       curCol = FindCol0 (dl,id);
+       if (curCol != -1)
+         rewind (Scrff0);
+         if (next (Scrff0))
+           FillDown0 (dl,GetPos (Scrff0));
+           SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0));
+         end;
+       end;
+
+      elif (key == SHIFTF10)
+       IsShowClosed = 2;
+
+       curCol = FindCol0 (dl,id);
+       if (curCol != -1)
+         rewind (Scrff0);
+         if (next (Scrff0))
+           FillDown0 (dl,GetPos (Scrff0));
+           SetFocus (dl,FldIndex (dl,DlgFields0 (curCol) + 0));
+         end;
+       end;
+
+       return CM_IGNORE;
+/*      elif (key == F8)
+
+      elif (key == ESC)
+         Res=3;
+         return CM_CANCEL;
+      elif (key == F5)
+         Res=6;
+         return CM_CANCEL;
+      elif (key == F2)
+         return CM_IGNORE; */
+      end;
+   elif (cmd == DLG_DESTROY)
+     Asize (DlgFields0,0);
+     Asize (FileFields0,0);
+     Asize (Apos0,0);
+   end;
+   return CM_DEFAULT;
+end;

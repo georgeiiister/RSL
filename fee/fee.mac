@@ -1,0 +1,10 @@
+/*
+  макрос запуска удержания вознаграждений банка
+  author: Polyakov S.George
+  ver: 1.00-27.12.2012
+*/
+
+import "..\\mac\\bfsofia\\feelib.mac";
+
+macFLMain();
+exit(0);

@@ -1,0 +1,204 @@
+/*developer Polyakov S.George 27.09.2010*/
+/*Формирование пакета данных для реестра обязательств*/
+/*edt Polyakov S.George 24.05.2011*/
+/*edt Polyakov S.George 02.08.2012 Добавлена работа в терминале*/
+/*edt Polyakov S.George 05.04.2013 Изменен ip Retail*/
+
+file postf2(f_2,"..\\DBFILE\\bankinf.def") Key 0 write;
+file postf1(f_1,"..\\DBFILE\\bankinf.def") Key 0 write;
+file ac (account) key 0;
+
+Create(postf2);
+Create(postf1);
+
+import BankInter,rsexts;
+
+var j=0;
+var k=0;
+var Mn=Money(0),bFlg=false,dRep=Date(0,0,0);
+var sHead="",sHead0="",sHeadB="",sFile_n="",sFile_p="",sFile_p01="",sFile_p02="",sF1_n="",sF2_n="",sM="",sD="",{curdate},{Name_Bank},{Oper},d=0,m=0,y=0;
+
+const
+     S_PATH_SRV:string="\\\\10.13.1.36\\for_exp\\";
+
+//file f2txt("..\\Report\\Pl_card\\F_txt\\F_2.txt") txt 1024;
+//file f1txt("..\\Report\\Pl_card\\F_txt\\F_1.txt") txt 1024;
+
+file f2txt() txt 1024;
+file f1txt() txt 1024;
+
+
+Macro BalRSTCheck(data)
+var sm42301=$0, sm42309=$0, sm40817=$0;
+ ac.account="40817000000000000000";
+ rewind(ac);
+ getGE(ac);
+ while ( (next(ac)) and (ac.account<"42310000000000000000") )
+   if ((Index(ac.NameAccount,"картам")!=0) and (substr(ac.Account,1,5)=="42301"))
+     sm42301=sm42301+RestA(ac.account,data);
+   elif ((substr(ac.Account,10,5)=="02020")  and (substr(ac.Account,1,5)=="42309"))
+     sm42309=sm42309+RestA(ac.account,data);
+   elif ((substr(ac.Account,10,5)=="02021")  and (substr(ac.Account,1,5)=="40817"))
+     sm40817=sm40817+RestA(ac.account,data);
+   end;
+ end;
+ return "42301 = "+sm42301+"|"+"42309 = "+sm42309+"|"+"40817 = "+sm40817+"|"+"ИТОГО = "+(sm42301+sm42309+sm40817)
+end;                        
+
+macro insert_f_2
+  clearrecord(postf2);
+  j=j+1;
+  postf2.FC=String(trim(f2txt(1)));
+  postf2.IC=String(trim(f2txt(2)));
+  postf2.OC=String(trim(f2txt(3)));
+  postf2.ADDR=String(trim(f2txt(4)));
+  postf2.DOCUM=String(trim(f2txt(5)));
+  postf2.ACC=String(trim(f2txt(6)));
+  postf2.R1=String(trim(f2txt(7)));
+  postf2.DOC_ID=String(trim(f2txt(8)));
+  postf2.TYPE_DOC=String(trim(f2txt(9)));
+  postf2.DEPAT=String(trim(f2txt(10)));
+  postf2.IDCLT=Int(trim(f2txt(11)));
+  if (trim(f2txt(1))!="")
+    insert(postf2);     
+    Message("Идет выгрузка данных по клиенту ",j); 
+  end;
+end;
+
+macro insert_f_1
+  clearrecord(postf1);
+  k=k+1;
+  postf1.B51ACNC=String(trim(f1txt(1)));
+  postf1.B51VALD=Date(int(substr(trim(f1txt(2)),1,2)),int(substr(trim(f1txt(2)),4,2)),int(substr(trim(f1txt(2)),7,4)));
+  postf1.B51CRTR=Double(StrSubst(Trim(f1txt(3)),",","."));
+  postf1.B51DTRV=Double(StrSubst(Trim(f1txt(4)),",","."));
+  postf1.B51ACSL=Double(StrSubst(Trim(f1txt(5)),",","."));
+  Mn=Mn+(postf1.B51ACSL-postf1.B51DTRV+postf1.B51CRTR);
+  postf1.B51SANM=Double(StrSubst(Trim(f1txt(6)),",","."));
+  postf1.IDCLT=Int(trim(f1txt(7)));
+  if (trim(f1txt(1))!="")
+    insert(postf1);     
+    Message("Идет выгрузка движения по счетам ",k); 
+  end;
+end;
+
+
+/*Точка входа в программу*/
+dRep={curdate};
+If (getDate(dRep,"Введите дату отчета"))
+  If (dRep!=Date(0,0,0))
+    DateSplit(dRep,d,m,y);
+    y=y-2000;
+    If (StrLen(String(m))<2)
+      sM="0"+String(m)
+    else
+      sM=String(m)
+    End;
+    If (StrLen(String(d))<2)
+      sD="0"+String(d)
+    else
+      sD=String(d)
+    End;
+    bFlg=true;
+  else
+    MsgBox("Значение даты должно быть больше нуля!")
+  end;
+end;
+
+//add Polyakov S.George 02.08.2012
+
+//забираем файлы с сервера
+
+if (IsStandAlone)
+  bFlg=copyfile(S_PATH_SRV+"F_1\\"+String(y)+sM+sD+"F_1.txt","..\\Report\\Pl_card\\F_txt\\"+String(y)+sM+sD+"F_1.txt",true,"Подождите! Идет копирование...");
+  if (bFlg)
+    bFlg=copyfile(S_PATH_SRV+"F_2\\"+String(y)+sM+sD+"F_2.txt","..\\Report\\Pl_card\\F_txt\\"+String(y)+sM+sD+"F_2.txt",true,"Подождите! Идет копирование...");
+  end;
+else
+  bFlg=copyfile("$"+S_PATH_SRV+"F_1\\"+String(y)+sM+sD+"F_1.txt","..\\Report\\Pl_card\\F_txt\\"+String(y)+sM+sD+"F_1.txt",true,"Подождите! Идет копирование...");
+  if (bFlg)
+    bFlg=copyfile("$"+S_PATH_SRV+"F_2\\"+String(y)+sM+sD+"F_2.txt","..\\Report\\Pl_card\\F_txt\\"+String(y)+sM+sD+"F_2.txt",true,"Подождите! Идет копирование...");
+  end;
+end;
+
+sFile_p01="..\\Report\\Pl_card\\F_txt\\"+String(y)+sM+sD+"F_1.txt";
+sFile_p02="..\\Report\\Pl_card\\F_txt\\"+String(y)+sM+sD+"F_2.txt";
+sFile_n="p"+String(y)+sM+sD;
+sFile_p="..\\Report\\pl_Card\\";
+
+If (bFlg)
+  If (StrLen(FindPath(sFile_n,sFile_p,".arj",false))!=0)
+    If (GetTrue(true,"Данные для отсылки были уже сформированы! Имя файла: "+sFile_p+sfile_n+".arj"+ " Хотите переформировать?"))
+      If (not RemoveFile(sFile_p+sfile_n+".arj"))
+        bFlg=false;
+        MsgBox("Ошибка удаления файла"+sFile_p+sFile_n+".arj");
+      end;
+    else
+      bFlg=false;
+    end;
+  end;
+end;
+
+If (bFlg)
+  If (open(f2txt,sFile_p02) and (open(f1txt,sFile_p01)))
+    setDelim ("|");
+    while (next(f2txt))
+      insert_f_2;
+    end;
+    setDelim ("|");
+    while (next(f1txt))
+      insert_f_1;
+    end;
+  else
+    MsgBox("Ошибка открытия исходного текстового ф-ла или данные для обработки за указанный период отсутствуют!");
+    bFlg=false;
+  end;
+
+  close(postf2);
+  close(postf1);
+
+  sHead0="Данные для формирования реестра обязательств Банка перед вкладчиками";
+  sHead="|Остаток средств на карточных счетах |на "+dRep+" составляет "+Mn+"руб."; 
+  sHeadB="|Остаток средств на карточных счетах по балансу| "+BalRSTCheck(dRep)+"|";
+  
+  If (bFlg)
+    If (GetTrue(true,sHead+sHeadB+" Cформировать данные для отсылки?"));
+       //***************************
+       sF1_n="..\\DBFILE\\F_1.dbt";
+       sF2_n="..\\DBFILE\\F_2.dbt";
+       //***************************
+       run("..\\nalogi\\obj\\arj.exe","a -e "+sFile_p+sFile_n+" "+sF1_n+" "+sF2_n,"Выполняется архивация...","Архиватор завершил работу! Нажмите ESC для продолжения!");
+       
+       If (RslCopyFile(sFile_p+sFile_n+".arj","..\\RS_OBMEN\\balakovo\\pl_card\\"+sFile_n+".arj")!=0)
+         MsgBox("Внимание! Пакет сформирован, но не приготовлен для отправки! Обратитесь к разработчику");
+       end;
+       If (not RemoveFile(sF1_n))
+         MsgBox("Ошибка удаления файла"+sF1_n);
+       else
+         If (not RemoveFile(sF2_n))
+           MsgBox("Ошибка удаления файла"+sF2_n);
+         end;	
+       end;
+       println({Name_Bank}+", отдел банковских карт");
+       println("Дата операционного дня: "+dRep+" Время: "+time());
+       println();
+       println(sHead0);
+       println();
+       println(sHead);
+       println();
+       println(sHeadB);
+       println();
+       println();
+       println("                  _____________ "+GetFioOper({oper},true,"."));
+       println();
+       println("- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -");
+    else
+       println("ОПЕРАЦИЯ ОТМЕНЕНА ПОЛЬЗОВАТЕЛЕМ!");
+    end;
+  end;
+else
+  println("ОТСЫЛКА НЕ ВЫПОЛНЕНА!");
+end;
+
+
+                   

@@ -1,0 +1,76 @@
+file f2txt("J:\\F_2.txt") txt 1024;
+file f1txt("J:\\F_1.txt") txt 1024;
+
+file postf2(f_2,"..\\DBFILE\\bankinf.def") Key 0 write;
+file postf1(f_1,"..\\DBFILE\\bankinf.def") Key 0 write;
+
+Create(postf2);
+Create(postf1);
+
+var j=0;
+var i=2;
+var k=0;
+var l=2;
+var Mn=Money(0);
+macro insert_f_2
+clearrecord(postf2);
+j=j+1;
+postf2.FC=String(trim(f2txt(1)));
+postf2.IC=String(trim(f2txt(2)));
+postf2.OC=String(trim(f2txt(3)));
+postf2.ADDR=String(trim(f2txt(4)));
+postf2.DOCUM=String(trim(f2txt(5)));
+postf2.ACC=String(trim(f2txt(6)));
+postf2.R1=String(trim(f2txt(7)));
+postf2.DOC_ID=String(trim(f2txt(8)));
+postf2.TYPE_DOC=String(trim(f2txt(9)));
+postf2.DEPAT=String(trim(f2txt(10)));
+postf2.IDCLT=Int(trim(f2txt(11)));
+if (trim(f2txt(1))!="")
+ insert(postf2);     
+ Message("Идет выгрузка данных по клиенту ",j); 
+end;
+end;
+
+macro insert_f_1
+clearrecord(postf1);
+k=k+1;
+postf1.B51ACNC=String(trim(f1txt(1)));
+postf1.B51VALD=Date(trim(f1txt(2)));
+postf1.B51CRTR=Double(StrSubst(Trim(f1txt(3)),",","."));
+postf1.B51DTRV=Double(StrSubst(Trim(f1txt(4)),",","."));
+postf1.B51ACSL=Double(StrSubst(Trim(f1txt(5)),",","."));
+postf1.B51SANM=Double(StrSubst(Trim(f1txt(6)),",","."));
+postf1.IDCLT=Int(trim(f1txt(7)));
+if (trim(f1txt(1))!="")
+ insert(postf1);     
+ Message("Идет выгрузка движения по счетам ",k); 
+end;
+end;
+
+
+
+
+/*Точка входа в программу*/
+while (next(f2txt) and i!=0)
+i=i-1;
+end;
+setDelim ("|");
+
+while (next(f2txt))
+ insert_f_2;
+end;  
+
+while (next(f1txt) and l!=0)
+l=l-1;
+end;
+setDelim ("|");
+
+while (next(f1txt))
+ insert_f_1;
+end;  
+println("Выгружено строк в структуру F_1 ",k);
+println("Выгружено строк в структуру F_2 ",j);
+end
+
+                   

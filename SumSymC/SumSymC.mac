@@ -1,0 +1,323 @@
+/*
+  Макрос подсчета итогов по кассовым символам для архивных документов
+  developer Polyakov S.George
+  v.1.00-24.09.2012
+  v.1.01-04.10.2012
+    исправлены ошибки в выводе суммы накопления
+    добавлена обработка спецсимволов 35 и 70
+  v.1.02-08.10.2012
+    исправлен алгоритм фильтрации документов для итогов
+*/
+
+import "..\\mac\\bfsofia\\UtlLib.mac";
+import "..\\mac\\bfsofia\\AccLib.mac";
+import BankInter;
+
+array 
+     aSym,aSum;
+
+//макрос возвращающий остаток по лицевому счету
+//балансовые рублевые/валютные, с 
+//указанным или нет валютным значением
+macro macSSBalRestA(sTbl:string,sBal:string,dDate:date,sVal:string):money
+  var
+     mRet:money,
+     i:integer,
+     sAcc:string,
+     bNext:bool,
+     bYes:bool,
+     oTbl:Object;
+  mRet=money(0);
+  sAcc="";
+  i=0;
+  oTbl=TBFile(sTbl,"r",0,null,"bank.def");
+  while (I_ACC_LEN-StrLen(sBal)!=StrLen(sAcc))
+    sAcc=sAcc+"0";
+  end;
+  sAcc=sBal+sAcc;
+  oTbl.rec.Account=sAcc;
+  bNext=true;
+  rewind(oTbl);
+  if (getge(oTbl))
+    while(bNext)
+      if (
+          (oTbl.rec.Balance==sBal) and
+          (index(oTbl.rec.Type_Account,"П")==0)
+         )
+        bYes=true;
+        if (ValType(sVal)!=V_UNDEF)
+          if (SubStr(oTbl.rec.Account,I_BAL_LEN+1,I_VAL_LEN)!=sVal)
+            bYes=false;
+          end;
+        end;
+        if (bYes)
+          mRet=mRet+restA(oTbl.rec.Account,dDate);
+        end;
+      else
+         bNext=false;
+      end;
+      bNext=next(oTbl);
+    end;
+  end;
+  return mRet;
+end;
+
+//макрос вывода разделительной линии
+macro macSSPrnDelim()
+[+---------------------------------------+------+-----------------------+]
+end;
+
+//макрос вывода подписей 
+macro macSSPrnLowRpt(sFIOHead:string,sPost2Head:string,sFio2Head:string,sFioOper:string);
+var
+   {curdate};
+[
+   Руководитель                              #
+
+   #                                         #
+
+   Исполнитель                               #
+                               
+   #
+](sFIOHead:l,sPost2Head:l,sFio2Head:l,sFioOper:l,macULGetStrDate({curdate}):l);
+end;
+
+//макрос вывода заголовка отчета
+macro macSSPrnHeadRpt(sBnkName:string,sBnkAddr:string,sDate1:string,sDate2:string)
+[                  ВЕДОМОСТЬ УЧЕТА КАССОВЫХ ОБОРОТОВ
+                      c ########## по ########## 
+########################################################################
+########################################################################
+
+](sDate1,sDate2,sBnkName:c,sBnkAddr:c);
+end;
+
+//макрос вывода содержимого отчета
+macro macSSPrnBodyRpt(aSymName:Object,sSym:string,mSum:money)
+  [|#######################################|######|#######################|
+   |#######################################|      |                       |
+   +---------------------------------------+------+-----------------------+]
+ (aSymName(0),sSym:r,mSum:a,aSymName(1));
+end;
+
+//макрос вывода содержимого массивов
+macro macSSPrnArr()
+
+  var
+     j:integer,
+     mSymSum:money,
+     sSymName:string,
+     iTypeSym:integer,
+     iSymMid:integer,
+     i:integer;
+  array
+      aSortSym;  //ссылка на отсортированный массив
+  i=0;
+  iTypeSym=int(0);
+  mSymSum=Money(0);
+  aSortSym=aSym; 
+  macULBublSortASC(aSortSym); //сортируем пузырьком
+  while (i<asize(aSortSym))
+    j=0;
+    while (j<asize(aSym))
+      if (aSortSym(i)==aSym(j))
+        sSymName=macULGetOneT(macULGetSymCash(String(aSortSym(i))),true,"^");
+         if (i==0)
+           iTypeSym=int(macULGetOneT(macULGetSymCash(String(aSortSym(i))),false,"^"));
+           iSymMid=i;
+         end;
+         if (
+              iTypeSym!=int(
+                            macULGetOneT(
+                                         macULGetSymCash(String(aSortSym(i))),false,"^"
+                                        )
+                           )
+            )
+           //не равно - выводим итог
+           macSSPrnBodyRpt(
+                           StrSplit2("Итого по символам:",40,40,2),
+                           macULSetAddSpace(aSortSym(iSymMid),2,"0")
+                           +"-"+macULSetAddSpace(aSortSym(i-1),2,"0"),
+                           mSymSum
+                          );
+           mSymSum=Money(aSum(j));
+           iSymMid=i;
+           iTypeSym=int(macULGetOneT(macULGetSymCash(String(aSortSym(i))),false,"^"));
+         else
+           mSymSum=mSymSum+Money(aSum(j)); //копим сумму по категории символов
+         end;
+         macSSPrnBodyRpt(
+                         StrSplit2(sSymName,40,40,2),
+                         macULSetAddSpace(string(aSortSym(i)),2,"0"),
+                         aSum(j)
+                        )
+      end;
+      j=j+1;
+    end;
+    i=i+1;
+  end;
+  if (i==0)
+    msgbox("Данные для вывода не сформированы!");
+    exit(1);
+  end;
+end;
+
+//макрос заполнения массивов с данными по символам
+//и по суммам
+macro macSSSetArr(iSym:integer,mSum:money):bool
+  var
+     bRet:bool,
+     bYes:bool,
+     i:integer;
+  bRet=false;
+  bYes=false;
+  i=0;
+  if (asize(aSym)==0)
+    aSym(i)=iSym;
+    aSum(i)=mSum;
+    bRet=true;
+  else
+    while (i<asize(aSym))
+      if (aSym(i)==iSym)
+        bYes=true;
+        aSum(i)=aSum(i)+mSum;
+      end;
+      i=i+1;
+    end;
+    if (not bYes)
+      aSym(i)=iSym;
+      aSum(i)=mSum;
+    end;
+  end;
+  return bRet;
+end;
+
+//основной макрос вывода данных
+macro macSSMain()
+  var
+     {Name_Bank},
+     {Post_Addr},
+     {FIO_Boss},
+     {Name_Book},
+     {FIO_Book},
+     {oper},
+     oTbl:Object,
+     oTblS:Object,
+     bNext:bool,
+     bNextS:bool,
+     dDate1:date,
+     dDate2:date,
+     sDate:string,
+     sSym:string,
+     j:integer,
+     b:integer,
+     k:integer,
+     i:integer;
+
+  array
+       aT,aBal,aTAcc;
+
+  oTblS=TBFile("symbcash.dbt","r",0,"symbcash.dbt","bank.def");  
+  aT(0)="arhdoc.dbt";
+  aBal(0)="20202";
+  aTAcc(0)="account.dbt";
+  bNext=true;
+  sDate=macULSetDate1to2();
+  if (StrLen(sDate)!=0)
+    dDate1=macULGetDateStr(macULGetOneT(sDate,true));
+    if (dDate1!=Date(0,0,0))
+      dDate2=macULGetDateStr(macULGetOneT(sDate,false));
+      if (dDate2==Date(0,0,0))
+        bNext=false;
+      end;
+    else
+      bNext=false;
+    end;
+  else
+    bNext=false;
+  end;
+  i=0;
+  if (bNext)
+    while (i<asize(aT))
+      j=0;
+      oTbl=TBFile(aT(i),"r",0,aT(i),"bank.def");
+      rewind(oTbl);
+      oTbl.rec.Date_Carry=dDate1;
+      bNext=GetGE(oTbl);
+      while (bNext)
+        j=j+1;
+        message("Обрабатываем строку "+j);
+        if (
+            (oTbl.rec.Date_Carry>=dDate1) and
+            (oTbl.rec.Date_Carry<=dDate2)
+           )
+          if ( 
+              (oTbl.rec.Date_Document==oTbl.rec.Date_Carry) or
+              (oTbl.rec.Date_Carry==oTbl.rec.Date_Value)
+             )                                  
+            sSym=Trim(oTbl.rec.Symbol_Cach);
+            //if (oTbl.rec.Sum==money(65000)) msgbox(oTbl.rec.Symbol_Cach) end;
+            if (
+                (sSym!="0") and
+                (StrLen(sSym)!=0) 
+               )
+              //if ((int(sSym)==98) and (true)) println(oTbl.rec.Sum+" 1 "+oTbl.rec.ApplicationKey) end;              
+              macSSSetArr(int(sSym),oTbl.rec.Sum);
+            else
+              //смотрим по symbcash
+              rewind(oTblS);
+              oTblS.rec.Kind=1;
+              oTblS.rec.iApplicationKind=oTbl.rec.iApplicationKind;
+              oTblS.rec.ApplicationKey=oTbl.rec.ApplicationKey;
+              if (geteq(oTblS))
+                bNextS=true;
+                while (bNextS)
+                  if (
+                      (oTblS.rec.Kind==1) and
+                      (oTblS.rec.iApplicationKind==oTbl.rec.iApplicationKind) and
+                      (oTblS.rec.ApplicationKey==oTbl.rec.ApplicationKey)
+                     )
+                    // if ((int(trim(oTbls.rec.Symbol))==98) and (true)) println(oTbls.rec.Sum) end;
+                     macSSSetArr(int(trim(oTbls.rec.Symbol)),oTbls.rec.Sum)
+                  end;
+                  bNextS=next(oTblS);
+                end;
+              end;
+            end;
+          end;
+          bNext=next(oTbl);
+        else
+          bNext=false;
+        end;
+      end;
+      message("Подсчет по символам 35 и 70");
+      //нестандартные символы
+      if (asize(aSym)!=0)
+        k=0;
+        while(k<asize(aTAcc))
+          b=0;
+          while (b<asize(aBal))
+            macSSSetArr(35,-macSSBalRestA(aTAcc(k),aBal(b),dDate1-1));
+            macSSSetArr(70,-macSSBalRestA(aTAcc(k),aBal(b),dDate2));
+            b=b+1;
+          end;
+        k=k+1;
+        end;
+      end;
+      i=i+1;
+    end;
+  end;
+  message("Формирование отчета");
+  macSSPrnHeadRpt(
+                 {Name_Bank},
+                 {Post_Addr},
+                 macULGetStrDate(dDate1),
+                 macULGetStrDate(dDate2)
+                 );
+  macSSPrnDelim();
+  macSSPrnArr();
+  macSSPrnLowRpt({FIO_Boss},{Name_Book},{FIO_Book},GetFioOper({oper}));
+end;
+
+//точка входа в программу
+macSSMain();

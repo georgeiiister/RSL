@@ -1,0 +1,1530 @@
+/* 
+   Макрос для подготовки собщений в НО
+
+   developer Polyakov S.George 
+
+   v 1.00-20.04.2012
+      Подготовка данных для НО
+   v 1.01-28.07.2012
+      Добавлена автоматическая проверка всех необходимых реквизитов
+      Изменен путь вывода файлов на отправку
+      Добавлен лог не подготовленых данных
+   v 1.02-28.07.2012
+      Переформулировано сообщение об ошибке при проверке типа клиента и типового наименования
+   v 1.03-30.07.2012
+      Добавлено меню, изменена процедура macIAAddAccToUsrFld3()
+   v 1.04-31.07.2012 
+      Добавлены макросы инициализации номеров сообщений и указание номеров подразделений
+   v 1.05-13.08.2012
+      Добавлена проверка на число определенных символов в строке 
+   v 1.06-15.08.2012
+      Добавлена проверка на число цифр в ИНН и извлекаемого типа клиента
+      На обязательность реквизита КПП для юридических лиц
+   v 1.07-16.08.2012
+      Добавлена процедура получения списка всех подразделений организаци
+*/
+
+import "..\\mac\\bfsofia\\ClnID_cp.mac",
+       "..\\mac\\bfsofia\\ClnID.mac"
+       "..\\mac\\bfsofia\\ContClnLib.mac",
+       "..\\mac\\bfsofia\\CliBnk.mac",
+       rsexts;
+        
+
+//раздел объявления глобальных для модуля переменных
+var 
+    iYearMsg:integer,
+    {CurDate}:date,
+    iDayMsg:integer,
+    iDay:integer, //день отправки
+    iMon:integer, //месяц отправки
+    iYear:integer;//год отправки
+
+//Раздел объявления констант (изменяемый участок)
+
+Const
+    S_DIR:string=GetWorkFileName("nalogi_out"),
+    I_MON:integer=8,    //месяц Х 
+    I_DAY:integer=6,    //день Х
+    I_YEAR:integer=2012, //год Х
+    S_FAM_OTPR:string="Данилов", //отправитель  (может отличаться от представителя)
+    S_INNB_OTPR:string="7706195570", //ИНН(10) банка отправителя
+    S_INNB_OLD:string="7706195570", //старый ИНН банка
+    S_BIC_BNK:string="043601981",  //БИК банка отправителя (!!!)-используется в названии файла
+    S_BIC_BNK_OLD:string="046359826",  //старый БИК банка
+    S_KPPB_OTPR:string="631602001",
+    S_KPPB_OLD:string="643902001", //старый КПП банка
+    S_OGRN_OTPR:string="1027739066354",
+    S_OGRN_OLD:string="1027739066354",
+    S_VER_PROG:string="МАКРОС_NAL311ALL 1.07-16.08.2012",
+    S_TEL_OTPR:string="8(8453)445-773", //телефон отправителя
+    S_TEL_PRED:string="8(8453)445-773", //телефон представителя 
+    S_POST_OTPR:string="Начальник отдела по работе с клиентами", //должность отправителя
+    S_POST_PRED:string="Начальник отдела по работе с клиентами", //должность представителя (права эл. подписи)
+    S_FAM_PRED:string="Данилов",  //представитель
+    S_IMYA_PRED:string="Сергей",
+    S_OTCH_PRED:string="Юрьевич",
+    S_VER_FORM_1:string="5",
+    S_VER_FORM_2:string="02",
+    S_CODE_NAL:string="6316", //4-х значный код НО по месту нахождения банка (!!!)
+    S_NAME_BANK:string="ЗАО \X22ИШБАНК\X22, ФИЛИАЛ \X22ПОВОЛЖСКИЙ\X22",
+    S_NAME_BANK_OLD:string="ЗАО \X22ИШБАНК\X22, ФИЛИАЛ БАЛАКОВСКИЙ",
+    S_ADDR_BANK:string="443099,63,,САМАРА Г,,АЛЕКСЕЯ ТОЛСТОГО УЛ,122,,",
+    S_ADDR_BANK_OLD:string="413840,64,САРАТОВСКИЙ,БАЛАКОВО Г,,ТИТОВА УЛ,37,,",
+    S_REG_NUM_BANK:string="2867", //регистрационный номер банка
+    S_REG_NUM_BANK_OLD:string="2867", //старый регистрационный номер банка
+    S_NUM_FIL:string="2",//номер филиала
+    S_NUM_FIL_OLD:string="1", //старый номер филиала
+    S_CNT_DOC:string="1";
+
+array 
+     aD;
+   //инициализация глобальных переменных (изменяемый участок)
+
+   iYearMsg=int(51001); //Номер сообщения в текущем году, начинаем с этого диапазона
+   iDayMsg=int(1);	   //порядковый номер файлов в день
+
+   DateSplit({CurDate},iDay,iMon,iYear);
+
+//макрос выполняющий инициализацию номеров файлов в году и в день
+macro macIASetYDMsg()
+  var 
+     bNext;
+  bNext=true;
+  while (bNext)
+    if (getInt(iYearMsg,"Укажите номер сообщения в текущем году с которого надо начать выгрузку"))
+    else
+      MsgBox("Оставлено значение по умолчанию! "+string(iYearMsg));
+    end;
+    if (getInt(iDayMsg,"Укажите номер файл в текушем день с которого надо начать выгрузку"))
+    else
+      MsgBox("Оставлено значение по умолчанию! "+string(iDayMsg));
+    end;
+    if (getTrue(true,"Начало номеров сообщений в году: "+string(iYearMsg)+" Начальный номер файлов за день "+string(iDayMsg)))
+       bNext=false;   
+    end;
+  end;
+end;
+
+//макрос заполняющий номера подразделений, по которым производится выгрузка
+macro macIASetDepArray()
+  var i:integer,
+      b:integer,
+      bNext:bool,
+      iNumDep:integer;
+  i=0;
+  iNumDep=-1;
+  while (i>=0)
+    if (getInt(iNumDep,"Введите номер ПОДРАЗДЕЛЕНИЯ для которого хотите выполнить действия"))
+      if (iNumDep>=0)
+        b=0;
+        bNext=true;
+        while (b<aSize(aD))
+          if (aD(b)==iNumDep)
+            bNext=false;
+            msgbox("Номер уже был добавлен!");
+          end;
+          b=b+1;
+        end;
+        if (bNext)
+          aD(i)=iNumDep;
+          if (gettrue(true,"Добавить следующее подразделение?"))
+            i=i+1;
+          else
+             i=-1;
+          end;
+        end;
+      end;
+    else
+     i=-1;
+    end;
+    if ((i==-1) and (asize(aD)==0))
+      if (gettrue(true,"Вы не указали ни одного подразделения. Повторить?"))
+         i=0;
+      else
+         msgbox("Внимание! Любая проверка на принадлежность счетов к подразделеням НЕ БУДЕТ ВЫПОЛНЕНА!");
+      end;
+    end;
+  end;
+  if (asize(aD)!=0)
+    msgbox("Введенное число подразделений: "+asize(aD));
+  end;
+end;
+
+//макрос возвращающий true, если подразделение СВОЕ
+macro macIADep(iDep:integer):bool
+  var i:integer,
+      bRet:bool;
+  i=0;
+  bRet=false;
+  while ((i<aSize(aD)) and (not bRet))
+    if (aD(i)==iDep)
+      bRet=true;
+    end;
+    i=i+1;
+  end;
+  return bRet;
+end;
+
+//конец файла
+macro macIAPrnEndFile()
+  print("===");
+end;
+
+//конец части
+macro macIAPrnEndPart()
+  println("@@@");
+end;
+
+//конец блока
+macro macIAPrnEndBlok()
+  println("###");
+end;
+
+//макрос формирования номера сообщения
+//iYear - YYYY год формирования сообщения
+//если сообщение корректирующее или отменяющее, то = году исходного сообщения
+//именно здесь будеи фигурировать не текущий год, а год сообщения при корректировки
+macro macIANumMsg(iYearOld:integer,iYearMsg:integer):string
+  var
+     sRegNumBank:string,
+     sNumFil:string;
+  sRegNumBank=macAddSpace(S_REG_NUM_BANK,4,"0");
+  sNumFil=macAddSpace(S_NUM_FIL,4,"0");
+  return sRegNumBank+sNumFil+SubStr(string(iYearOld),3,2)+macAddSpace(iYearMsg,6,0)
+end;
+
+//макрос формирования идентификатора файла
+
+macro macIAIDFile
+                 (
+                  iYear:integer,
+                  iMon:integer,
+                  iDay:integer,
+                  iDayMsg:integer
+                 ):string
+  var
+    sIDFile:string;
+
+  sIDFile="";
+  sIDFile=S_INNB_OTPR+"**"+S_KPPB_OTPR;
+  sIDFile=sIDFile+string(iYear)+macAddSpace(string(iMon),2,"0");
+  sIDFile=sIDFile+macAddSpace(string(iDay),2,"0");
+  sIDFile=sIDFile+macAddSpace(string(iDayMsg),6,"0");
+
+  return sIDFile;
+end;
+
+//макрос наименования файла электронного сообщения
+macro macIANameFile
+                 (
+                  iTypeMsg:integer,   //0-открытие счета, 1 - измен. реквизитов, 2-закрытие счета
+                  iPoryadMsg:integer,  //1-первичное, 2-корректирующее, 3-отменяющее
+                  iYear:integer,   //дата направления сообщения (YYYY.MM.DD)
+                  iMon:integer,
+                  iDay:integer,
+                  iYearOld:integer, //год сообщения (важно, если это корректировка, то здесь год первичного(!!!) сообщения)
+                  iYearMsg:integer, //номер сообщения в году (если корректировка = первичному)
+                  iTypeCln:integer, //тип клиента (1,2,3,4,5)
+                  iLastNum:integer  //номер сообщения под данному счету
+                 ):string
+  var
+     sName:string;
+
+   sName="SBC"+string(iTypeMsg)
+          +string(iPoryadMsg)
+          +SubStr(S_BIC_BNK,3,7) /*не передаем как параметр, так как описали как константу*/
+          +"_"+macAddSpace(S_CODE_NAL,4,"0")
+          +String(iYear)
+          +macAddSpace(String(iMon),2,"0")
+          +macAddSpace(String(iDay),2,"0")
+          +"_"+macIANumMsg(iYearOld,iYearMsg)
+          +"_"+iTypeCln+macAddSpace(String(iLastNum),2,"0")+".TXT";
+   return sName;
+end;
+
+//макрос формирования ИНФОРМАЦИОННОЙ ЧАСТИ сообщения ИЗМЕНЯЕМОЙ ЧАСТИ (!!!)
+//ИЗМЕНЕНИЕ РЕКВИЗИТОВ СЧЕТА
+macro macIAChangeInfoPrnChAcc(
+                     	    sNumShOld:string, //старый номер счета (ЕДИНСООБЩ - отсутствует)
+                        	    sNumDog:string,   //номер договора (ЕДИНСООБЩ - отсутствует)
+                                sNameClnU:string,  //Полное наименование организации (отсутствует для (ЕДИНСООБЩ) и ИП, Адвоката, Нотариуса
+                                sFIOCln:string,
+                                sINN:string,
+                                sKPP:string,
+                                sOGRN:string,
+                                sChAccOrNot:string,
+                                iCodeVal:string,
+                                sTxtTypeAcc:string,
+                                sChBank:string, //признак изменения сведений о банке (филиале)
+                                sAccNew:string,  //номер счета после изменения
+                                sChDteAcc:string,
+                                sNameBankOld:string,
+                                sAddrBankOld:string,
+                                sRegNumBankOld:string,
+                                sNumFilOld:string,
+                                sBicBnkOld:string,
+                                sINNBnkOld:string,
+                                sKPPBnkOld:string,
+                                sOGRNBnkOld:string,
+                                sChDteBnk:string
+                            )
+//если V_UNDEF... то реквизит отсутствует (не включается в форматный файл)
+//если "" не заполянется (важный момент)
+  if (ValType(sNumShOld)!=V_UNDEF)
+    if (strlen(sNumShOld)!=0)
+      println("НомСчСтар:"+sNumShOld);
+    else
+      println("НомСчСтар:");
+    end;
+  end;
+  if (strlen(sNumDog)!=V_UNDEF)
+    if (strlen(sNumDog)!=0)
+      println("НомерДог:"+sNumDog);
+    else
+      println("НомерДог:");
+    end;
+  end;
+  if (ValType(sNameClnU)!=V_UNDEF)
+    if (strlen(sNameClnU)!=0)
+      println("НаимНП:"+sNameClnU);
+    else
+      println("НаимНП:");
+    end;
+  end;
+  if (ValType(sFIOCln)!=V_UNDEF) 
+    if (strlen(sFIOCln)!=0)
+      println("ФИОИП:"+sFIOCln);
+    else
+      println("ФИОИП:");
+    end;
+  end;
+  if (ValType(sINN)!=V_UNDEF)
+    if (strlen(sINN)!=0)
+      println("ИНННП:"+sINN);
+    else
+      println("ИНННП:");
+    end;
+  end;
+  if (ValType(sKPP)!=V_UNDEF)
+    if (strlen(sKPP)!=0)
+      println("КППНП:"+sKPP);
+    else
+      println("КППНП:");
+    end;
+  end;
+  if (ValType(sOGRN)!=V_UNDEF)
+    if (strlen(sOGRN)!=0)
+      println("ОГРННП:"+sOGRN);
+    else
+      println("ОГРННП:");
+    end;
+  end;
+  println("ПризнИзмНСч:"+sChAccOrNot);  //всегда включается в форматный файл
+  if (ValType(iCodeVal)!=V_UNDEF)
+    if (strlen(string(iCodeVal))!=0)
+      if (iCodeVal==I_VAL)
+        println("ВалСч:"+string(0));
+       else
+        println("ВалСч:"+string(1));
+      end;
+    else
+      println("ВалСч:");
+    end;
+  end;
+  if (ValType(sTxtTypeAcc)!=V_UNDEF)
+    if (strlen(sTxtTypeAcc)!=0)
+      println("ВидСч:"+StrUpr(sTxtTypeAcc));
+    else
+      println("ВидСч:");
+    end;
+  end;
+  if (ValType(sChBank)!=V_UNDEF)
+    if (strlen(sChBank)!=0)
+      println("ПризнИзмКО:"+sChBank);
+    else
+      println("ПризнИзмКО:");
+    end;
+  end;
+  if (ValType(sAccNew)!=V_UNDEF)
+    if (strlen(sAccNew)!=0)
+      println("НомИзмСч:"+sAccNew);
+    else
+      println("НомИзмСч:");
+    end;
+  end;
+  if (ValType(sChDteAcc)!=V_UNDEF)
+    if (strlen(sChDteAcc)!=0)
+      println("ДатаИзмСч:"+sChDteAcc);
+    else
+      println("ДатаИзмСч:");
+    end;
+  end;
+  if (ValType(sNameBankOld)!=V_UNDEF)
+    if (strlen(sNameBankOld)!=0)
+      println("НаимКОР:"+StrUpr(sNameBankOld));
+    else
+      println("НаимКОР:");
+    end;
+  end;
+  if (ValType(sAddrBankOld)!=V_UNDEF)
+    if (strlen(sAddrBankOld)!=0)
+      println("АдрКОР:"+StrUpr(sAddrBankOld));
+    else
+      println("АдрКОР:");
+    end;
+  end;
+  if (ValType(sRegNumBankOld)!=V_UNDEF)
+    if (strlen(sRegNumBankOld)!=0)
+      println("РегНомКОР:"+sRegNumBankOld);
+    else
+      println("РегНомКОР:");
+    end;
+  end;
+  if (ValType(sNumFilOld)!=V_UNDEF)
+    if (strlen(sNumFilOld)!=0)
+      println("НомФР:"+sNumFilOld);
+    else
+      println("НомФР:");
+    end;
+  end;
+  if (ValType(sBicBnkOld)!=V_UNDEF)
+    if (strlen(sBicBnkOld)!=0)
+      println("БИКР:"+sBicBnkOld);
+    else
+      println("БИКР:");
+    end;
+  end;
+  if (ValType(sInnBnkOld)!=V_UNDEF)
+    if (strlen(sInnBnkOld)!=0)
+      println("ИННКОР:"+sInnBnkOld);
+    else
+      println("ИННКОР:");
+    end;
+  end;
+  if (ValType(sKPPBnkOld)!=V_UNDEF)
+    if (strlen(sKPPBnkOld)!=0)
+      println("КППКОР:"+sKPPBnkOld);
+    else
+      println("КППКОР:");
+    end;
+  end;
+  if (ValType(sOGRNBnkOld)!=V_UNDEF)
+    if (strlen(sOGRNBnkOld)!=0)
+      println("ОГРНКОР:"+sOGRNBnkOld);
+    else
+      println("ОГРНКОР:");
+    end;
+  end;
+  if (ValType(sChDteBnk)!=V_UNDEF)
+    if (strlen(sChDteBnk)!=0)
+      println("ДатаИзмКОР:"+sChDteBnk);
+    else
+      println("ДатаИзмКОР:");
+    end;
+  end;
+  //******
+end;
+
+//макрос формирования ИНФОРМАЦИОННОЙ ЧАСТИ сообщения НЕИЗМЕННОЙ (нижняя часть) 
+//для разных ТИПОВ СООБЩЕНИЯ 
+macro macIAConstInfoPrnDown
+                           (
+                            sPostOtpr:string, //должность отправителя
+                            sFam:string,      //ФИО отправителя
+                            sImya:string,
+                            sOtch:string,
+                            iYear:integer,    //год отправителя (совпадает с годом в Идентификаторе Файла и Наменовании Файла(DD...))
+                            iMon:integer,
+                            iDay:integer,
+                            sTelPred         //телефон представителя с кодом города (NNNN)
+                           )
+  [ДолжнПрБ:####################################################################################################
+   ФИОПрБ:######################################################################################################
+   ДатаСооб:##########
+   ТелБанка:####################
+  ]
+  (
+   StrUpr(sPostOtpr),
+   StrUpr(sFam)+","+StrUpr(sImya)+","+StrUpr(sOtch),
+   macAddSpace(String(iDay),2,"0")+"."+ macAddSpace(String(iMon),2,"0")+"."+ String(iYear),
+   sTelPred
+  )
+end;
+
+//макрос формирования ИНФОРМАЦИОННОЙ ЧАСТИ сообщения НЕИЗМЕННОЙ (верхняя часть) 
+//для разных типов сообщения о ИЗМЕНЕНИИИ/ОТКРЫТИИ/ЗАКРЫТИИ 
+macro macIAConstInfoPrnHead
+                           (
+                            iYear:integer,	 	 //год направления сообщения
+                            iMon:integer, 		 //месяц направления сообщения
+                            iDay:integer, 	 	 //день направления сообщения
+                            iDayMsg:integer,    	        //порядковый номер файла за указанный день
+                            iYearMsg:integer,            //порядковый номер файла за указанный год
+                            iTypeCln:integer,            //тип клиента (1,2,3,4,5)
+                            iLastNum:integer             //0 - первичное,01,02,03...76 -корректирующее, 77 - отменяющее
+                           )
+  var
+    sIDDoc:string;  //идентификатор документа ИдДок:
+  
+  sIDDoc=macIAIDFile(iYear,iMon,iDay,iDayMsg); //получили идентификатор файла
+  sIDDoc=sIDDoc+macAddSpace(S_CNT_DOC,6,"0");
+
+  [ИдДок:#########################################
+   НомСооб:################,###
+   КодНОБ:####
+   НаимКО:####################################################################################################
+   АдрКО:#####################################################################################################
+   РегНомКО:####
+   НомФ:####
+   БИК:#########
+   ИННКО:##########
+   КППКО:#########
+   ОГРНКО:#############
+  ]
+  (
+   sIDDoc,
+   macIANumMsg(iYear,iYearMsg),
+   iTypeCln+macAddSpace(string(iLastNum),2,"0"),
+   S_CODE_NAL,
+   S_NAME_BANK,
+   StrUpr(S_ADDR_BANK),
+   S_REG_NUM_BANK,
+   S_NUM_FIL,
+   S_BIC_BNK,
+   S_INNB_OTPR,
+   S_KPPB_OTPR,
+   S_OGRN_OTPR
+  )
+end;
+
+//макрос формирования СЛУЖЕБНОЙ ЧАСТИ сообщения (заголовок документа)
+macro macIAPrnHead
+                  (
+                   iYear:integer,	 	 //год направления сообщения
+                   iMon:integer, 		 //месяц направления сообщения
+                   iDay:integer, 	 	 //день направления сообщения
+                   iDayMsg:integer,	 //порядковый номер файла за тек. день
+                   sTypeInfo:string,	 //тип информации
+                   sTelOtpr:string,        //телефон отправителя
+                   sPostOtpr:string,       //должность отправителя
+                   sFamOtpr:string         //фамилия отправителя
+                  )
+  var
+    sIDFile:string;
+
+  //ИдФайл
+
+  sIDFile=macIAIDFile(iYear,iMon,iDay,iDayMsg);
+
+  //ТипИнф
+
+  sTypeInfo=StrUpr(sTypeInfo);
+
+  sPostOtpr=StrUpr(sPostOtpr); //Должность отправителя сообщения
+
+  sFamOtpr=StrUpr(sFamOtpr);   //Фамилия отправителя сообщения
+   
+  //*******************************************
+  [ИдФайл:###################################
+  ТипИнф:##########
+  ВерсПрог:#######################################
+  ТелОтпр:####################
+  ДолжнОтпр:####################################################################################################
+  ФамОтпр:############################################################
+  КолДок:##########
+  ВерсФорм:#.##
+  ]
+  (
+   sIDFile,
+   sTypeInfo,
+   S_VER_PROG,
+   sTelOtpr,
+   sPostOtpr,
+   sFamOtpr,
+   S_CNT_DOC,
+   S_VER_FORM_1,
+   S_VER_FORM_2
+  )
+  //******************************************
+
+end;
+
+//макрос меню
+macro macIAMenu1():string
+  var
+     iVarMen:integer,
+     sRet:string,
+     sAcc:string,   //номер счета основной для поиска
+     sAccOld:string,
+     bNext:bool,
+     oTbl:object;
+
+  array arr;
+  
+  arr(0)="Электронное сообщение об ОТКРЫТИИ счета по заявлению клиента";
+  arr(1)="Электронное сообщение об ЗАКРЫТИИ счета по заявлению клиента";
+  arr(2)="Электронное сообщение об ЗАКРЫТИИ счета банком в ОДНОСТОРОННЕМ ПОРЯДКЕ";
+  arr(3)="Электронное сообщение об ЗАКРЫТИИ счета банком ПО РЕШЕНИЮ СУДА";
+  arr(4)="Электронное сообщение об ИЗМЕНЕНИИ счета клиента";
+
+  iVarMen=menu(arr,"Выбор","Укажите тип формируемого сообщения");
+  sRet="";
+  bNext=false;
+  sAcc="";
+  sAccOld="";
+  if (iVarMen>=0)
+    if (iVarMen!=4)
+      if (getstring(sAcc,"Укажите номер счета для обработки",20))
+        if (macCCLenAcc(sAcc))
+          bNext=true;
+        else
+           MsgBox("Неверная длина счета");
+        end;
+      end;
+    else
+      if (getstring(sAcc,"Укажите номер счета ПОСЛЕ(!!!) изменения",20))
+        if (macCCLenAcc(sAcc))
+          if (getstring(sAccOld,"Укажите номер счета ДО(!!!) изменения",20))
+            if (macCCLenAcc(sAccOld))
+              bNext=true;
+            else
+              MsgBox("Неверная длина счета");  
+            end;
+          end;
+        else
+          MsgBox("Неверная длина счета");  
+        end;
+      end;
+    end;
+    if (bNext)
+      //если все провереки по указанным счатам прошли успешно
+      sRet=iVarMen+"/"+sAcc+sAccOld;
+    end;
+  end;
+  return sRet;
+end;
+
+//макрос проверки корректности парсинга ФИО для клиента
+macro macIACheckFIO(sName:string):bool
+  var
+    bRet:bool;
+
+  bRet=false;
+  if (macNoU(sName,true)!=sName) 
+    bRet=true;
+  end;
+  return bRet;
+end; 
+
+//макрос возвращающий код типа клиента
+macro macIATypeCln(iCln:integer):integer
+//iRet=0 - err
+//iRet=1 - организация
+//iRet=2 - индивидуальный предприниматель
+//iRet=3 - физическое лицо
+  var
+    iRet:integer,
+    sType:string,
+    Tbl:object;
+
+  iRet=0;
+  Tbl=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("Client")=iCln;
+  if (geteq(Tbl))
+     sType=StrUpr(trim(Tbl.item("szUserType")));
+     if (index(sType,"Ю")>0)
+       iRet=1;
+     elif (index(sType,"И")>0)
+       iRet=2;
+     elif (
+           (index(sType,"Ф")>0)
+                                 and 
+           (index(sType,"И")==0)
+          )
+       iRet=3;
+     end;
+  end;
+  return iRet;
+end;
+
+//макрос проверяющий соответствие длины ИНН и типа клиента
+macro macIACheckLenInnTypeCln(iCln:integer):bool
+  var
+     bRet:bool,
+     iType:integer;
+
+  bRet=false;
+  iType=macIATypeCln(iCln);
+  if (iType!=0)
+    if (iType==1)
+       if (StrLen(GetClientInn(iCln))==10)
+         bRet=true;
+       end;
+    elif (
+          (iType==2)
+                   or 
+          (iType==3)
+         )
+       if (StrLen(GetClientInn(iCln))==12)
+         bRet=true;
+       end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос возвращающий цифры для конца сообщения о типе клиента ?NN
+//по указанному коду клиента и наименованию
+/*
+?:
+  1-Организация
+  2-ИП
+  3-нотариус
+  4-адвокат
+  5-Изменение реквизитов счета (ЕДИНСООБЩ)
+*/
+macro macIAEndMEss(iCln:integer,sClnName:string):integer
+//0 - возврат при ошибке, неразобраное наименование ИП
+   var
+      iRet:integer;
+
+   iRet=0; //err=0
+   if (macIATypeCln(iCln)==1)
+     iRet=1;
+   elif (macIATypeCln(iCln)==2)
+     //ИП, КФХ,
+     if (
+         (index(strLwr(sClnName),"индивидуальный предприниматель")>0) or 
+         (index(strLwr(sClnName),"глава крестьянского")>0) or 
+         (index(strLwr(sClnName),"крестьянское (фермерское)")>0) or 
+         (index(strLwr(sClnName),"крестьянско-фермерское")>0)
+        ) 
+       iRet=2;
+     elif (index(strLwr(sClnName),"нотариус")>0)
+       iRet=3;
+     elif (index(strLwr(sClnName),"адвокатский кабинет")>0)
+       iRet=4;
+     end;
+   end;
+   return iRet;
+end;
+
+//макрос проверки, что в передаваемой строке - ВСЕ числа
+macro macIAIsNum(sIn:string):bool
+ 
+ var 
+    i:integer,
+    j:integer,
+    bNum:bool,
+  bRet:bool;
+  bRet=false;
+  if (StrLen(sIn)!=0)
+    bRet=true;
+  end;
+  i=int(0);
+  while (
+          (i!=StrLen(sIn)) and bRet
+        )
+    i=i+1;
+    j=int(0);
+    bNum=false;
+    while (j<=9)
+    //msgbox(i+"  "+j+"  "+SubStr(sIn,i,1));
+      if (SubStr(sIn,i,1)==string(j))
+        bNum=true;
+      end;
+      j=j+1;
+    end;
+    if (not bNum)
+      bRet=false;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос проверки корректности ИНН
+macro macIACheckINN(sInn:string):bool
+  var
+     bRet:bool,
+     iCheck:integer,
+     iContNum:integer;
+  bRet=false;
+  if (macIAIsNum(sInn))
+    if (StrLen(trim(sInn))==10)
+      //проверка ИНН для ЮЛ
+      iCheck=2*int(SubStr(sInn,1,1))+
+             4*int(SubStr(sInn,2,1))+
+             10*int(SubStr(sInn,3,1))+
+             3*int(SubStr(sInn,4,1))+
+             5*int(SubStr(sInn,5,1))+
+             9*int(SubStr(sInn,6,1))+
+             4*int(SubStr(sInn,7,1))+
+             6*int(SubStr(sInn,8,1))+
+             8*int(SubStr(sInn,9,1)); 
+
+      iContNum=iCheck-iCheck/11*11;
+    
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+    
+      if (int(SubStr(sInn,10,1))==iContNum)
+         bRet=true;   
+      end;
+
+    elif (StrLen(trim(sInn))==12)
+      //проверка ИНН для ФЛ
+      iCheck=7*int(SubStr(sInn,1,1))+
+             2*int(SubStr(sInn,2,1))+
+             4*int(SubStr(sInn,3,1))+
+             10*int(SubStr(sInn,4,1))+
+             3*int(SubStr(sInn,5,1))+
+             5*int(SubStr(sInn,6,1))+
+             9*int(SubStr(sInn,7,1))+
+             4*int(SubStr(sInn,8,1))+
+             6*int(SubStr(sInn,9,1))+
+             8*int(SubStr(sInn,10,1));
+
+      iContNum=iCheck-iCheck/11*11;
+    
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+
+      if (SubStr(sInn,11,1)==iContNum)
+        iCheck=3*int(SubStr(sInn,1,1))+
+               7*int(SubStr(sInn,2,1))+
+               2*int(SubStr(sInn,3,1))+
+               4*int(SubStr(sInn,4,1))+
+              10*int(SubStr(sInn,5,1))+
+               3*int(SubStr(sInn,6,1))+
+               5*int(SubStr(sInn,7,1))+
+               9*int(SubStr(sInn,8,1))+
+               4*int(SubStr(sInn,9,1))+
+               6*int(SubStr(sInn,10,1))+
+               8*int(SubStr(sInn,11,1));
+
+        iContNum=iCheck-iCheck/11*11;
+
+        if (iContNum>9) iContNum=mod(iContNum,10) end;
+
+        if (SubStr(sInn,12,1)==iContNum)
+          bRet=true;
+        end;
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос проверки корректности ОГРН
+macro macIACheckOGRN(sOGRN:string):bool
+  var
+    bRet:bool,
+    nContNum:numeric,
+    sContNum:string,
+    iContNum:integer;
+  bRet=false;
+  if (macIAIsNum(sOGRN))
+    if (strlen(trim(sOGRN))==13)
+      nContNum=numeric(SubStr(sOGRN,1,12))/11;
+      sContNum=String(nContNum);
+      sContNum=SubStr(sContNum,1,index(sContNum,".")-1);
+      nContNum=numeric(sContNum);
+      iContNum=int(numeric(SubStr(sOGRN,1,12))-nContNum*11);
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+      if (iContNum==int(SubStr(sOGRN,13,1)))
+        bRet=true; 
+      end;
+    elif (strlen(trim(sOGRN))==15)
+      nContNum=numeric(SubStr(sOGRN,1,14))/13;
+      sContNum=String(nContNum);
+      sContNum=SubStr(sContNum,1,index(sContNum,".")-1);
+      nContNum=numeric(sContNum);
+      iContNum=int(numeric(SubStr(sOGRN,1,14))-nContNum*13);
+
+      if (iContNum>9) iContNum=mod(iContNum,10) end;
+      if (iContNum==int(SubStr(sOGRN,15,1)))
+        bRet=true; 
+      end
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос проверяет корректность заполнения обязательных реквизитов 
+//для налоговой и возвращает:
+//0 - все реквизиты КОРРЕКТНЫ
+//1 - неверный ИНН
+//2 - неверный ОГРН
+//3 - неверный КПП
+macro macIACheckRekvCln(iCln):integer
+var
+   iRet:integer,
+   sOGRN:string,
+   sKpp:string;
+   iRet=0;
+   if (macIACheckINN(GetClientInn(iCln)))
+     sOGRN=macCBGetOGRN(iCln);
+     //**********
+     if (StrLen(sOGRN)!=0)
+       if (not macIACheckOGRN(sOGRN))
+         iRet=2;
+       end;
+     end;
+     if (iRet==0)
+       sKpp=macCBGetKPP(iCln);
+       if ((sKpp!="0") and (strLen(sKpp)!=0))
+         if (not macIAIsNum(sKpp))
+           iRet=3;
+         end;
+       end;
+     end;
+     //**********
+   else
+     iRet=1;
+   end;
+   return iRet;
+end;
+
+//макрос проверки корректности заполнения обязательных реквизитов по Клиентам
+macro macIACheckRekv()
+  var
+     Tbl:object,
+     sErr:string,
+     sErr1:string,
+     sKpp:string,
+     bNext:bool;
+  Tbl=TBFile("account.dbt","r",0,"account.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("account")="40502000000000000000";
+  if (getGE(Tbl))
+    bNext=true;
+    sErr="Ошибка в реквизите! ";
+    sErr1="Код клиента ";
+    while (bNext)
+     if (Tbl.item("account")<="40900000000000000000")
+       if (
+           (Tbl.item("Open_close")!="З") and
+           (StrLen(GetClientInn(Tbl.item("client")))!=0) and
+           (macCBClnAccU(Tbl.item("account"))) and
+           (macIADep(Tbl.item("Department")))
+          )
+           message("Идет просмотр клиента: "+Tbl.item("client"));
+           if (not macIACheckOGRN(macCBGetOGRN(Tbl.item("client"))))
+             println(sErr+"НЕВЕРНЫЙ ОГРН! "+sErr1+Tbl.item("client"))
+           end;
+           if (not macIACheckINN(GetClientInn(Tbl.item("client"))))
+             println(sErr+"НЕВЕРНЫЙ ИНН! "+sErr1+Tbl.item("client"))
+           end;
+           sKpp=macCBGetKPP(Tbl.item("client"));
+           if (
+               (sKpp!="0") and 
+               (strLen(sKpp)!=0)
+              )
+             if (not macIAIsNum(sKpp))
+               println(sErr+"НЕВЕРНЫЙ КПП! "+sKpp+" "+sErr1+Tbl.item("client"))
+             end;
+           end;
+           bNext=next(Tbl);
+       else
+         bNext=next(Tbl);
+       end;
+     else
+       exit;
+     end;
+    end;
+  end;
+end;
+
+//макрос проверки корректности заполнения поля3 со "Старым" счетом
+macro macIACheckFld3(sAcc:string):bool
+  var
+     Tbl:Object,
+     bRet:bool;
+  bRet=false;
+  Tbl=TBFile("account.dbt","r",0,"account.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("Account")=sAcc;
+  if (getEQ(Tbl))
+    if (StrLen(trim(Tbl.item("userfield3")))!=0)
+      if (macCCLenAcc(trim(Tbl.item("userfield3"))))
+        bRet=true;
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//макрос исключения определенных счетов (!!!)
+
+macro macIANotAcc(sAcc:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  sAcc=trim(sAcc);
+  if (SubStr(sAcc,14,1)=="1")
+    //println(SubStr(sAcc,14,1));
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос проверяющий определенное число вхождений символа в строку
+macro macIACheckSymInStr(sString:string,sSym:string,iNumIter:integer):bool
+//sString - где ищем
+//sSym - какой символ ищем
+//iNumIter - сколько должно быть вхождений? "<" или ">" - return false 
+  var
+    bRet:bool,
+    i:integer,
+    iNext:integer;
+  bRet=false; //return false - неудача
+  iNext=-1;
+  i=0;
+  while ((iNext!=0) and (i<=iNumIter))
+    if (iNext==-1)
+      iNext=Index(sString,sSym);
+    else
+      iNext=Index(sString,sSym,iNext+1);
+    end;
+    if (iNext!=0)
+      i=i+1;
+    end;
+  end;
+  if (i==iNumIter)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос обработаки ФИО с форматом - 2 запятые
+macro macIAFormatFio(sFIO:string):string
+  var
+    sRet:string,
+    i:integer,
+    nPos:integer;
+  sRet=sFIO;
+  //если 1 пробел
+  if (macIACheckSymInStr(sFIO," ",1))
+    //если один пробел в ФИО
+    //так может быть, если нет отчества
+    //например Махмут Санзебай
+    //или ошибка
+    //например Иванов ИванИванович
+    sRet=StrSubst(sFIO," ",",")+",";
+  elif (macIACheckSymInStr(sFIO," ",3))
+    //если пробелов 3
+    //или ошибка или характерно для ВОСТОЧНЫХ фамилия
+    //махмут санезбай давид  оглы  Формат ВЫВОДА - махмут,санезбай,давид оглы
+    i=1;
+    nPos=-1;
+    while ((i<=3) and (nPos!=0))
+      if (i==1)
+         nPos=index(sFIO," ");
+      else
+         nPos=index(sFIO," ",nPos+1);
+      end;
+      if ((nPos!=0) and (i==3))
+        sRet=StrSubst(SubStr(sFIO,1,nPos-1)," ",",")+SubStr(sFIO,nPos);
+      end;
+      i=i+1;
+    end;
+  elif (macIACheckSymInStr(sFIO," ",2))
+    sRet=StrSubst(sFIO," ",",");
+  end;
+  return sRet;
+end;
+
+//макрос проверки обязательного заполнения КПП
+macro macIAIsKPP(iCln:integer):bool
+ var
+    sKpp:string,
+    bRet:bool;
+ bRet=false;
+ sKpp=macCBGetKPP(iCln);
+ if (
+     (sKPP!="0") and
+     (StrLen(sKpp)!=0)
+    )
+    bRet=true;
+ end;
+ return bRet;
+end;
+
+//макрос подготовки данных для сообщения в НО 
+//одновременно по всем ОТКРЫТЫМ (!!!) счетам
+macro macIAFindAcc()
+  var
+     Tbl:object,
+     i:integer,
+     dDateOp:date,
+     iOper:integer,
+     iLastNum:integer,
+     sClnName:string,
+     sClnU:string,
+     sFIO:string,
+     sFIOtmp:string,
+     sOGRN:string,
+     sKPP:string,
+     sErr1:string,
+     bNext:bool,
+     {oper},
+     iNotErr:integer,
+     iErrRekv:integer,
+     sFileErrLog:string,
+     sFileNotU:string,
+     sFileNotInnLog:string,
+     sFileAccLog:string,
+     sFileName:string;
+
+  array aErrRekv;
+  aErrRekv(0)="Нет ошибок в реквизитах";
+  aErrRekv(1)="Некорректный ИНН";
+  aErrRekv(2)="Некорректный ОГРН";
+  aErrRekv(3)="Некорректный КПП";
+  i=int(0);
+  iNotErr=0;
+  iOper={oper};
+  sFileErrLog="ErrLog.txt";
+  sFileAccLog="AccLog.txt";
+  sFileNotInnLog="NotInn.txt";
+  sFileNotU="AccNotULog.txt"; //счета не принадлежащие к экспортируемому диапазону
+  sErr1="Данные не сформированы по клиенту: ";
+  Tbl=TBFile("account.dbt","r",0,"account.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("account")="40502000000000000000";
+  if (getge(Tbl))
+    makedir(S_DIR); //создаем временный каталог
+    while (Tbl.item("account")<="40900000000000000000")
+      if (
+              (macIADep(Tbl.item("Department"))) 
+           and
+              (Tbl.item("Open_close")!="З")
+           and
+              (StrLen(GetClientInn(Tbl.item("client")))!=0)
+         ) 
+        if (
+            (macCBClnAccU(Tbl.item("account"))) 
+                                               and
+            (not macIANotAcc(Tbl.item("account")))
+           )
+          i=i+1;
+          message("Идет обработка счета: "+Tbl.item("account"));
+          dDateOp=Tbl.item("Open_Date"); //дата открытия счета
+          sClnName=macCBGetNameCln(Tbl.item("Client"));
+          iLastNum=macIAEndMEss(Tbl.item("Client"),sClnName); //сформировали только код типа клиента
+          SetOutput(S_DIR+"\\"+sFileErrLog,true); //формируем лог ошибок
+          if (iLastNum!=0) //0 - ошибка - не указан тип клиента
+            bNext=true;
+            //проверка на корректность заполнения UserField3 со старым счетом
+            if (not macIACheckFld3(Tbl.item("account")))
+              bNext=false;
+              println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Для счета: "+Tbl.item("account")
+                      +" В пользовательском Поле3 НЕКОРРЕКТНОЕ значение \X22СТАРОГО\X22 счета");
+            end;
+            if (bNext)
+              iErrRekv=macIACheckRekvCln(Tbl.item("client"));
+              if (iErrRekv!=0)
+                bNext=false;
+                println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Сч."+Tbl.item("account")+" "+aErrRekv(iErrRekv));
+              end;
+            end;
+            //---
+            //add Polyakov S.George 15.08.2012
+            //дополнительная проверка на число цифр в ИНН при указанном типе клиента
+            if (bNext)
+              if (not macIACheckLenInnTypeCln(Tbl.item("client")))
+                bNext=false;
+                println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Сч."+Tbl.item("account")+" Несоответствие типа клиента и длины ИНН");
+              end;
+            end;
+            //add Polyakov S.George 15.08.2012
+            //проверка на обязательность заполнения КПП для Юридического лица
+            if (bNext)
+              if (iLastNum==1) //только для Юридических лиц
+                if (not macIAIsKpp(Tbl.item("client")))
+                  if (dDateOp>=Date(1,1,1999))
+                    bNext=false;
+                    println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Сч."+Tbl.item("account")+" КПП не указан!");
+                  end;
+                end;
+              end;
+            end;
+            if (bNext)
+              sFIO="";
+              if ((iLastNum!=1) and (iLastNum!=5)) //не юр. лицо
+                if (macIACheckFIO(sClnName)) //можно ли извлечь ФИО?
+                  sFIO=macCBFirstSymUpFIO(macNoU(sClnName,true));
+                  if (not macIACheckSymInStr(sFIO," ",2))
+                    //если в Фамилиии Имени Отчестве больше или меньше 2 пробелов
+                    sFIOtmp=macIAFormatFio(sFIO);
+                    if (sFIO!=sFIOtmp)
+                      //преобразовали, но надо вывести предупреждение
+                      sFIO=sFIOtmp;
+                      println(string({curDate})+" "+string(time())+" Данные сформированы по клиенту: "+Tbl.item("client")+" НО (!!!) выполнено автоматическое преобразование ФИО по шаблону. Проверьте корректность формата!");
+                    else
+                      //преобразовать не смогли
+                      bNext=false;
+                      println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Неверное число пробелов в ФИО клиента! Допускается ТОЛЬКО 2");
+                    end;
+                  else
+                    sFIO=StrSubst(sFIO," ",",");
+                  end;
+                else
+                  bNext=false;
+                  println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Не извлечено ФИО из наименования клиента!");
+                end;
+              end;
+            end;
+            //---
+            if (bNext)
+              iNotErr=iNotErr+1;
+              //+++++++++++
+              //получаем имя файла для отправляемого сообщения
+              sFileName=macIANameFile(
+                                      1, //сообщение об изменении рекв. счета
+                                      1, //все сообщения как первичные (первоначальная отправка)
+                                      iYear,
+                                      iMon,
+                                      iDay,
+                                      I_YEAR,//так как сообщение не корректирующее, то года = году отправки сообщения
+                                      iYearMsg, //число сообщений в году (измен. параметр)
+                                      iLastNum,
+                                      0
+                                     );
+              SetOutput(S_DIR+"\\"+sFileName,false);
+              //формируем неизменный для данной массовой рассылки сообщений заголовок
+              macIAPrnHead(
+                           iYear,
+                           iMon,
+                           iDay,
+                           iDayMsg,
+                           "сообщизмен",
+                           S_TEL_OTPR,
+                           S_POST_OTPR,
+                           S_FAM_OTPR
+                           );
+              macIAPrnEndBlok(); //добавляем конец блока
+              macIAPrnEndPart(); //добавляем конец части 
+              macIAConstInfoPrnHead(
+                                    iYear,
+                                    iMon,
+                                    iDay,
+                                    iDayMsg,
+                                    iYearMsg,
+                                    iLastNum,
+                                    0
+                                   );
+              //готовим данные для основной части
+              if (StrLen(sFIO)!=0)
+                sClnName=Null;  //если ИП, Адвокат или нотариус, то передаем пустой параметр
+              else
+                sFIO=Null; //значит ЮЛ
+              end;
+              sOGRN=macCBGetOGRN(Tbl.item("client"));
+              if (Strlen(sOGRN)==0)
+                sOGRN=Null; //реквизит отсутствует 
+              end;
+              if (iLastNum==1)
+                if (not macIAIsKpp(Tbl.item("client")))
+                  if (dDateOp<Date(1,1,1999))
+                    sKpp=Null
+                  end;
+                else
+                  sKPP=macCBGetKPP(Tbl.item("client"));
+                end;
+              else
+                sKPP=Null; //реквизит отсутствует
+              end;
+              //формируем основную часть (!!!)
+              macIAChangeInfoPrnChAcc
+                                (
+                                 Tbl.item("UserField3"), //старый номер счета
+                                 macCBGetNumContr(Tbl.item("client")),
+                                 sClnName,
+                                 sFIO,
+                                 GetClientInn(Tbl.item("client")),
+                                 sKPP,
+                                 sOGRN,
+                                 "1",
+                                 SubStr(Tbl.item("account"),6,3), //валюта счета (передаем именно валюту, а не параметр)
+                                 "расчетный",
+                                 "8",
+                                 Tbl.item("account"), //актуальный номер счета
+                                 macRetStrDate(Date(I_DAY,I_MON,I_YEAR)),
+                                 S_NAME_BANK_OLD,  //старое название банка
+                                 S_ADDR_BANK_OLD,  //адрес старого банка
+                                 S_REG_NUM_BANK_OLD,
+                                 S_NUM_FIL_OLD,
+                                 S_BIC_BNK_OLD,
+                                 S_INNB_OLD,
+                                 S_KPPB_OLD,
+                                 Null,
+                                 macRetStrDate(Date(I_DAY,I_MON,I_YEAR))  //важно просмотреть эту дату
+                                );
+              macIAConstInfoPrnDown(
+                                    S_POST_PRED,
+                                    S_FAM_PRED,
+                                    S_IMYA_PRED,
+                                    S_OTCH_PRED,
+                                    iYear,
+                                    iMon,
+                                    iDay,
+                                    S_TEL_PRED
+                                   );
+             macIAPrnEndBlok();
+             macIAPrnEndPart();
+             macIAPrnEndFile();
+             iDayMsg=iDayMsg+1; //наращиваем число сообщений в день
+             iYearMsg=iYearMsg+1; //наращиваем число сообщений в году
+             //+++++++++++
+             SetOutput(S_DIR+"\\"+sFileAccLog,true); //выводим успешно выгруженные счета
+             println(Tbl.item("account")+" "+Tbl.item("UserField3")+" "+Tbl.item("client")+" "+sFileName+" Успешно выгружен!");
+            end;
+          else
+           println(string({curDate})+" "+string(time())+" "+sErr1+Tbl.item("client")+" Не указан тип клиента или опечатка в ТИПОВОМ наименовании!");  
+          end;
+        else
+          //не принадлежат к экспортируемому диапазону
+          SetOutput(S_DIR+"\\"+sFileNotU,true);
+          println(Tbl.item("account")+" "+Tbl.item("UserField3")+" Диапазон не экспортируется! В выгрузку не добавлен!");
+        end;
+      else
+         //дополнительный вывод счетов без ИНН в клиенте
+         if (
+              (macIADep(Tbl.item("Department")))
+                                                 and
+              (StrLen(GetClientInn(Tbl.item("client")))==0)
+                                                            and
+              (Tbl.item("Open_close")!="З")
+            )
+            SetOutput(S_DIR+"\\"+sFileNotInnLog,true);
+            println(Tbl.item("account")+" "+Tbl.item("client")+" Нет ИНН! В выгрузку не добавлен!");
+         end;
+      end;
+      next(Tbl);
+    end;
+  end;
+  sErr1="Подготовлено на отправку счетов: "+iNotErr+" \nСмотрите выгрузку в "+S_DIR;
+  msgbox(sErr1);
+  if ((i-iNotErr)!=0) 
+    sErr1="ВНИМАНИЕ! По некоторым счетам сообщения НЕ созданы!"; 
+    sErr1=sErr1+"\nСмотрите лог:"+S_DIR+"\\"+sFileErrLog;
+    MsgBox(sErr1);
+  end;
+end;
+
+//макрос дублирования счета в поле UserField3
+macro macIAAddAccToUsrFld3(bCheck:bool)
+  var
+    oTbl:Object,
+    i:integer,
+    k:integer,
+    j:integer;
+
+  array aTblAcc;
+  aTblAcc(0)="account.dbt";
+  aTblAcc(1)="account$.dbt";
+  aTblAcc(2)="obacnt.dbt";
+  aTblAcc(3)="obacnt$.dbt";
+  i=int(0);
+  while (i<aSize(aTblAcc))
+    oTbl=TBFile(aTblAcc(i),"w",0,aTblAcc(i),"bank.def");
+    rewind(oTbl);
+    initprogress(nRecords(oTbl),"Обработка","Таблица "+FileName(oTbl));
+    j=int(0);
+    k=int(0);
+    while(next(oTbl))
+      j=j+1;
+      useprogress(j);
+      if (StrLen(trim(oTbl.item("account")))!=0)
+        if (
+            (
+              (StrLen(trim(oTbl.item("userfield3")))==0) or 
+              (not macCCLenAcc(trim(oTbl.item("userfield3"))))               
+            )
+              and
+
+              (macIADep(oTbl.item("Department")))
+ 
+              and
+
+              (macCBClnAccU(oTbl.item("account")))
+
+              and
+
+              (StrLen(GetClientInn(oTbl.item("client")))!=0)
+             
+           )
+          if (not bCheck)
+            oTbl.item("userfield3")=oTbl.item("account");
+            if (not update(oTbl))
+              println("! Не обновлено "+FileName(oTbl)+" "+oTbl.item("userfield3")+" "+oTbl.item("account"));
+            else
+              k=k+1;
+            println(oTbl.item("account"));
+            end;
+          else
+           println(FileName(oTbl)+" "+oTbl.item("account")+" По счету некорректное значение поля 3! Клиент: "+oTbl.item("Client"));
+          end;
+        end;
+      end;
+    end;
+    if (not bCheck)
+      println("Всего просмотрено по структуре "+FileName(oTbl)+" "+j+" обновлено "+k);
+    end;
+    remprogress(j);
+    i=i+1;
+  end;
+end;
+
+//получение всех пользовательских типов клиентов
+
+macro macIAGetClnUsrType():string
+  var
+     oTbl:Object,
+     j:integer,
+     k:integer,
+     bNotAdd:bool,
+     sRet:string;
+  array
+     aType;
+
+  oTbl=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+
+  rewind(oTbl);
+  initprogress(nRecords(oTbl),"Обработка","Таблица client.dbt");
+  j=int(0);
+  sRet="";
+  while (next(oTbl))
+    j=j+1;
+    useprogress(j);
+     k=int(0);
+      //msgbox(oTbl.item("Department"));
+      if (asize(aType)==0)
+        if (StrLen(trim(oTbl.item("szUserType")))!=0)
+          aType(0)=oTbl.item("szUserType");
+          sRet=aType(0);
+        end;
+      else
+        if (StrLen(trim(oTbl.item("szUserType")))!=0)
+          bNotAdd=false;
+          while(
+                (k<asize(aType)) and
+                (not bNotAdd)
+               )
+            if (aType(k)==trim(oTbl.item("szUserType")))
+              bNotAdd=true;
+            end;
+            k=k+1;
+          end;
+          if (not bNotAdd)
+            //msgbox(oTbl.item("Department")+" "+asize(aDep));
+            aType(asize(aType))=trim(oTbl.item("szUserType"));
+            sRet=sRet+" "+trim(oTbl.item("szUserType"));
+          end;
+        end;
+      end;
+  end;
+  remprogress(j);
+  sRet=trim(sRet);
+  if (Strlen(sRet)==0)
+    sRet="Не найдены!";
+  end;
+  return trim(sRet);
+end;
+
+//получение всех подразделений банка
+
+macro macIAGetDprt():string
+  var
+     oTbl:Object,
+     i:integer,
+     k:integer,
+     bNotAdd:bool,
+     sRet:string,
+     j:integer;
+
+  array aTblAcc,
+        aDep;
+  aTblAcc(0)="account.dbt";
+  aTblAcc(1)="account$.dbt";
+  aTblAcc(2)="obacnt.dbt";
+  aTblAcc(3)="obacnt$.dbt";
+  i=int(0);
+  sRet="";
+  while (i<aSize(aTblAcc))
+    oTbl=TBFile(aTblAcc(i),"r",0,aTblAcc(i),"bank.def");
+    rewind(oTbl);
+    initprogress(nRecords(oTbl),"Обработка","Таблица "+FileName(oTbl));
+    j=int(0);
+    while(next(oTbl))
+      j=j+1;
+      useprogress(j);
+      //**********
+      k=int(0);
+      //msgbox(oTbl.item("Department"));
+      if (asize(aDep)==0)
+        aDep(0)=oTbl.item("Department");
+        sRet=string(aDep(0));
+      else
+        bNotAdd=false;
+        while(
+              (k<asize(aDep)) and
+              (not bNotAdd)
+             )
+          if (aDep(k)==oTbl.item("Department"))
+            bNotAdd=true;
+          end;
+          k=k+1;
+        end;
+        if (not bNotAdd)
+          //msgbox(oTbl.item("Department")+" "+asize(aDep));
+          aDep(asize(aDep))=oTbl.item("Department");
+          sRet=sRet+" "+string(oTbl.item("Department"));
+        end;
+      end;
+      //**********
+    end;
+    remprogress(j);
+    i=i+1;
+  end;
+  sRet=trim(sRet);
+  if (Strlen(sRet)==0)
+    sRet="Не найдены!";
+  end;
+  return trim(sRet);
+end;
+
+macro macIAMain
+  var
+     iM:integer,
+     bCheck:bool;
+  array aM;
+
+  bCheck=true;
+  aM(0)="Формировать данные для налоговой (основная задача макроса)";
+  aM(1)="Заполнить пользов-е поле 3 в account.dbt значением счета";
+  aM(2)="Отобразить ВСЕ подразделения организации";
+  aM(3)="Отобразить ВСЕ пользовательские типы КЛИЕНТОВ";
+  iM=menu(aM,"Выбор","Варианты");
+  if (iM==0)
+    macIASetDepArray();
+    macIASetYDMsg();
+    macIAFindAcc();
+  elif (iM==1)
+    macIASetDepArray();
+    if (gettrue(false,"Запуск процедуры приведет к замене СУЩЕСТВУЮЩЕЙ информации  в пользовательском поле 3! Выполнить обновление?"))
+       bCheck=false;
+    end;
+    if (bCheck)
+      msgbox("Будет выполнена ТОЛЬКО проверка на корректность пользовательского поля 3");
+    end;
+    macIAAddAccToUsrFld3(bCheck);
+  elif (iM==2)
+    msgbox("Перечень подразделений: "+macIAGetDprt());
+  elif (iM==3)
+    msgbox("Перечень пользовательских типов клиентов: "+macIAGetClnUsrType());
+  end;
+end;
+
+macIAMain;

@@ -1,0 +1,65 @@
+/* 
+Макрос работы с Word документам и шаблонами
+developer Polyakov S.George 20.09.2011
+*/
+import lgxs;
+import rsexts;
+import lgs; //для копирования шаблона в терминальном режиме
+
+Class ToWord
+   Var obW;
+   Var obW1;
+   //****
+   Macro CreateWordDocument(cTemplPathAndName,lVisible)    
+      //cTemplPathAndName - путь к файлу word
+      //lVisible показать ? 
+      This.obW = ActiveX ("Word.Application",null,true);
+      This.obW.Documents.Add(cTemplPathAndName,False);
+      If (VALTYPE(lVisible) == V_BOOL)
+         This.obW.Visible=lVisible;
+      else
+         This.obW.Visible=True;
+         This.obW.Activate;
+      End;
+      This.obW1 = This.obW.ActiveDocument.Content.Find;
+   End;
+   //***
+   Macro FindAndReplace(FindText,ReplaceWith)            
+      this.obW1.Execute(FindText,false,true,false,false,false,true,0,false,ReplaceWith,2);
+   End;
+   //***
+   Macro ShowDocument                                  
+      This.obW.Visible=True;
+      This.obW.Activate;
+   End;
+End;
+
+//получение домашнего каталога пользователя
+macro macGetHome():string
+  return (StrSubst(GETENV("HOMEDRIVE")+GETENV("HOMEPATH"),"\\","\\\\")+"\\\\");
+end;
+
+//копирование шаблона на клиента
+macro macCopyDot(sPath:string,sDot:string,sLocDir):string //Возврат пути к локально скопированному шаблону  
+  var
+     sHome:string;
+  if (IsStandAlone)
+    //работа в классике
+    sHome=macGetHome;
+    if (ValType(sHome)==V_STRING)
+      if (sHome!="")
+        MakeDir(sHome+sLocDir); //не проверяем успешно ли создана dir
+        if (CopyFile(sPath+sDot,sHome+sLocDir+"\\\\"+sDot,true,"Подождите идет копирование шаблона"))
+            //все удачно скопировали, шаблон локальный
+            return(sHome+sLocDir+"\\\\"+sDot);
+          else
+            MsgBox("Ошибка копирования шаблона с сервера! Шаблон не найден или открыт!");   
+        end;
+      end;
+    else
+      MsgBox("Ошибка определения домашнего каталога пользователя");
+    end;
+  else
+    MsgBox("Программа не допускает работу в 3-х звенной архитектуре!");
+  end;
+end;

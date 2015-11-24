@@ -1,0 +1,155 @@
+SELECT
+/*Запрос для формирования отчета в БФ АКБ "София" (f_2 с дополнительным полем сводного счета ACCS (привязка к зарплатному проекту)) Developer Polyakov S. George*/
+            UPPER(SUBSTR(N31.N31NAMF,1,1))||LOWER(SUBSTR(N31.N31NAMF,2)) AS FC, /*Фамилия клиента*/
+            UPPER(SUBSTR(N31.N31NAMI,1,1))||LOWER(SUBSTR(N31.N31NAMI,2)) AS IC, /*Имя клиента*/
+            UPPER(SUBSTR(N31.N31NAMO,1,1))||LOWER(SUBSTR(N31.N31NAMO,2)) AS OC,/*Отчество*/
+           NVL(N40NPAD,REPLACE(REPLACE(REPLACE(TRIM(N401.B78CNNN||' '||N401.N40INDX||' '||N401.N40RGNM||' '||N401.N40TRNM||' '||N401.N40AREA||' '||N401.N40TARE||' '||N401.N40TSIT||' '||N401.N40SITY||' '||N401.N40PNTP||' '||N401.N40PNNM||' '||N401.N40STTP||' '||N401.N40STNM||' '||N401.N40HOUS||' '||N401.N40BLDN||' '||N401.N40APRT),' ',' $'),'$ '),'$')) ADDR, /*Адрес регистрации физ. лица.*/
+            '@'||REPLACE(TRIM(N37.N37PSER),' ','')||''||REPLACE(TRIM(N37.N37PNUM),' ','')||'@'||TO_CHAR(N37.N37PDAT,'dd.mm.yyyy')||'@'||TRIM(N37.N37PORG) AS DOCUM, /*Серия, номер,дата.организация для ДУЛ*/
+             N32.N67ACCN AS ACC,/*Основной счет договора*/
+             N32.N67ACCNS AS ACCS, /*Номер сводного счета*/ 
+             N32.N30AGCD||' от '||TO_CHAR(N32.N30DTST,'dd.mm.yyyy') AS R1, /*Номер договора в кодировке банка и от какого числа */
+             REPLACE(TRIM(N37.N37PSER),' ','')||''||REPLACE(TRIM(N37.N37PNUM),' ','') AS DOC_ID,
+             N37.T80CLDS AS TYPE_DOC,  /*Тип ДУЛ*/
+             '2' AS DEPAT,
+             N32.N67ACNC AS IDCLT
+FROM N31 
+LEFT OUTER JOIN (
+                                SELECT                                                                                                                                                                                                                               
+                                           N40.N40MBID,
+                                           TRIM(B78.B78CNNN) AS B78CNNN,
+                                           N40.N40INDX,
+                                           TRIM(N40.N40RGNM) AS N40RGNM,
+                                           TRIM(N40.N40TRNM) AS N40TRNM,
+                                           TRIM(N40.N40AREA) AS N40AREA,
+                                           TRIM(N40.N40TARE) AS N40TARE,
+                                           TRIM(N40.N40TSIT) AS N40TSIT,
+                                           TRIM(N40.N40SITY) AS N40SITY,
+                                           TRIM(N40.N40PNTP) AS N40PNTP,
+                                           TRIM(N40.N40PNNM) AS N40PNNM,
+                                           TRIM(N40.N40STTP) AS N40STTP,
+                                           TRIM(N40.N40STNM) AS N40STNM,
+                                           TRIM(N40.N40HOUS) AS N40HOUS,
+                                           TRIM(N40.N40BLDN) AS N40BLDN,
+                                           TRIM(N40.N40APRT) AS N40APRT,
+                                           REPLACE(REPLACE(REPLACE(TRIM(N40.N40NPAD),' ',' $'),'$ '),'$') AS N40NPAD /*Неразборный адрес импортируемый из BackOffice*/
+                               FROM N40 
+                               LEFT OUTER JOIN B78 ON N40.N40CNTR=B78.B78CNTR 
+                               WHERE N40.N40ADRT=(
+                                                                      SELECT 
+                                                                                  T39.T39ADRT 
+                                                                      FROM T39
+                                                                      WHERE T39.T39MBST IN (
+                                                                                                                SELECT  
+                                                                                                                            T80.T80CNMK 
+                                                                                                                FROM T80 
+                                                                                                                WHERE T80CLDS='Физическое лицо' 
+                                                                                                                ) 
+                                                                                   AND T39.T39ATNM='Адрес прописки'
+                                                                        ) AND N40.N40MBST IN (
+                                                                                                                 SELECT  
+                                                                                                                             T80.T80CNMK 
+                                                                                                                 FROM T80 
+                                                                                                                 WHERE T80CLDS='Физическое лицо'
+                                                                                                                 ) 
+                                 ) N401 ON N401.N40MBID=N31.N31CLID  
+LEFT OUTER JOIN (
+                                SELECT 
+                                             N37.N37CLID,
+                                             N37.N37PSER,
+                                             N37.N37PNUM,
+                                             N37.N37PDAT,
+                                             N37.N37PORG,
+                                             N37.N37DEPC,
+                                             N301.T80CLDS 
+                                FROM N37 LEFT OUTER JOIN (
+                                                                                  SELECT 
+                                                                                             T80.T80CLDS,T80.T80CNMK
+                                                                                  FROM T80
+                                                                                  WHERE T80.T80CTYP=5
+                                                                                 ) N301 ON N37.N37DCTP=N301.T80CNMK
+                                WHERE N37.N37DCTP=(
+                                                                       SELECT 
+                                                                                  MIN(N37.N37DCTP)
+                                                                       FROM N37 
+                                                                       WHERE N37.N37DCTP>0
+                                                                        ) 
+                                ) N37 ON N31.N31CLID=N37.N37CLID  
+INNER JOIN (
+                                SELECT 
+                                             N30.N30CLID,
+                                             N30.N30DTST, /*Дата опердня заключения договора*/
+                                             N30.N30AGCD, /*Номер договора в кодировке кредитной организации*/
+                                             N32.N67ACCN,
+                                             N32.N67ACNC,
+                                             N32.N67ACCNS
+                                FROM N30
+                                INNER  JOIN (   
+                                                                 SELECT 
+                                                                             N32.N32AGID, /*Идентификатор договора*/
+                                                                             N671.N67ACNC, /*Идентификатор счета, используется для связи N32 - Договора+счета и N67-Аналитические и сводные счета */
+                                                                             N671.N67ACCN, /*Номер счета */
+                                                                             N671.N67ACCNS /*Сводный счет*/
+                                                                FROM N32                                                    /* Используем внутреннее обьединение, так как мы отобрали только нужные счета*/
+                                                                INNER JOIN       (                                         /*Выбираем только основные счета договоров для физических лиц кроме закрытых счетов и счетов помеченных на удаление*/
+                                                                                               SELECT 
+                                                                                                          N67.N67ACNC,
+                                                                                                          N67.N67ACCN,
+                                                                                                          N6711.N67ACCN N67ACCNS /*Сводный счет*/
+                                                                                               FROM N67 INNER JOIN (SELECT N67.N67ACCN, N67.N67ACNC FROM N67 ) N6711 ON N67.N67SANM=N6711.N67ACNC /*Извлекаем сводные счета*/
+                                                                                               WHERE N67.N67ACGN IN(
+                                                                                                                                          SELECT 
+                                                                                                                                                    N66.N66ACGN
+                                                                                                                                          FROM N66
+                                                                                                                                          WHERE N66.N66DSAG='Основной счёт договора' AND N66.N66MBST=(
+                                                                                                                                                                                                                                                                 SELECT  
+                                                                                                                                                                                                                                                                            T80.T80CNMK 
+                                                                                                                                                                                                                                                                 FROM T80 
+                                                                                                                                                                                                                                                                 WHERE T80CLDS='Клиентский договор' AND T80.T80CTYP=6 
+                                                                                                                                                                                                                                                               )
+                                                                                                                                        )
+                                                                                                AND N67.N67STCD IS NOT NULL 
+                                                                                                AND N67.N67ACST IN(
+                                                                                                                                       SELECT 
+                                                                                                                                                   T80.T80CNMK 
+                                                                                                                                       FROM T80
+                                                                                                                                       WHERE T80.T80CLDS IN (
+                                                                                                                                                                                 'заведенный счет','открытый счет','заблокированный счет' 
+                                                                                                                                                                                )
+                                                                                                                                        AND T80.T80CTYP=10                                             
+                                                                                                                                     )
+                                                                                                AND N67.N67MBST IN ( 
+                                                                                                                                       SELECT  
+                                                                                                                                                   T80.T80CNMK 
+                                                                                                                                        FROM T80 
+                                                                                                                                        WHERE T80CLDS='Клиентский договор' AND T80.T80CTYP=6
+                                                                                                                                    )
+                                                                                            ) N671 ON N671.N67ACNC=N32.N32ACNC
+                                                                    WHERE N32.N32ACGN=(
+                                                                                                              SELECT 
+                                                                                                                          N66.N66ACGN
+                                                                                                                          FROM N66
+                                                                                                                          WHERE N66.N66DSAG='Основной счёт договора' AND N66.N66MBST=(
+                                                                                                                                                                                                                                                SELECT  
+                                                                                                                                                                                                                                                            T80.T80CNMK 
+                                                                                                                                                                                                                                                 FROM T80 
+                                                                                                                                                                                                                                                 WHERE T80CLDS='Клиентский договор' AND T80.T80CTYP=6 
+                                                                                                                                                                                                                                                )
+                                                                                                            )             
+                                                     ) N32 ON N30.N30AGID=N32.N32AGID
+                              WHERE N30.N30SCDE IN ( /*Выбираем только "рабочие договора" */
+                                                                         SELECT 
+                                                                                    T80.T80CNMK
+                                                                          FROM T80
+                                                                          WHERE T80.T80CLDS IN (
+                                                                                                                    'новый','действующий','переоформляемый'
+                                                                                                                   ) 
+                                                                          AND T80.T80CTYP=12
+                                                                          )    
+                               AND N30.N30MBST IN ( /*Выбираем только договора "Физических лиц" */
+                                                                     SELECT  
+                                                                                 T80.T80CNMK 
+                                                                     FROM T80 
+                                                                     WHERE T80CLDS='Клиентский договор' AND T80.T80CTYP=6
+                                                                    )                         
+                              ) N32 ON N32.N30CLID=N31.N31CLID                                                                                     
+ORDER BY FC,IC,OC;                                

@@ -1,0 +1,20 @@
+file Bnk0 (bankdprt) key 1;
+file BnkSpr() txt;
+
+Const
+   strLim="#",	
+   strPathFile="..\\TXTFILE\\",
+   strFileName="BnkCN.txt";
+
+Rewind(Bnk0);
+ClearRecord(Bnk0);
+
+SetOutput(strPathFile+strFileName,false);
+While (next(Bnk0))
+  Message("Подождите... Идет выгрузка: "+Bnk0.MFO_Depart);
+  println(Trim(Bnk0.MFO_Depart)+strLim+Trim(Bnk0.Corr_Acc)+strLim+Trim(Bnk0.Name_Depart)+strLim+Trim(Bnk0.Address_Depart)+strLim);	
+End;
+
+Close(Bnk0);
+Close(strPathFile+strFileName);
+SetOutput(Null,True);

@@ -1,0 +1,291 @@
+/*
+Макрос формирования дополнительных соглашений по iBank2
+developer Polyakov S.George 03.12.2012
+edit Polyakov S.George 12.12.2012
+edit Polyakov S.George 10.06.2013
+	Добавлены 2 новых дополнительных соглашения (Валютные операции)
+edit Polyakov S.George 27.06.2013
+       Добавлен новый договор на подключение к системе ДБО iBank 2
+edit Polyakov S.George 17.09.2013
+	Добавлено 3 новых доп. соглашние на отказ от USB, OTP, мн. аутентификации
+*/
+
+import "..\\mac\\bfsofia\\WordLib.mac";
+import "..\\mac\\bfsofia\\UtlLib.mac";
+import "..\\mac\\bfsofia\\ClnLib.mac";
+import "..\\mac\\bfsofia\\AccLib.mac";
+import ClnInter;
+
+const 
+     S_LOC_DIR:string="RSDOCS", //папка для локального хранения щаблонов
+     S_SRV_DIR:string="iBNK";
+
+array 
+      arrDot, //файлы шаблонов
+      arrVal,
+      arrMenu;  
+
+//участок заполнения массивов с начальными установками
+ 
+arrDot(0)="iBnk_notsec.doc"; 
+arrDot(1)="iBnk_notSMS.doc"; //заявление на открытие
+arrDot(2)="iBnk_ovk.doc";
+arrDot(3)="iBnk_ovkd.doc";
+arrDot(4)="iBnk_main.doc";
+arrDot(5)="iBnk_notUSB.doc";
+arrDot(6)="iBnk_notManyAuth.doc";
+arrDot(7)="iBnk_notOTP.doc";
+arrDot(8)="iBnk_soglAs.doc";
+                              
+arrMenu(0)="Отказ об использовании средств защиты";
+arrMenu(1)="Об обмене сообщениями средствами SMS-Банкинга";
+arrMenu(2)="Об установлении порядка по операциям валютного контроля";
+arrMenu(3)="Об установлении порядка по операциям валютного контроля (к Доп. соглашению)";
+arrMenu(4)="Основной пакет документов для подключение к системе iBank2";
+arrMenu(5)="Доп. соглашение об отказе использования USB-токена iBank2Key";
+arrMenu(6)="Доп. соглашение об отказе использования Многофакторной аутентификации";
+arrMenu(7)="Доп. соглашение об отказе использования OTP-токена";
+arrMenu(8)="Соглашение о предоставления услуг Банковский Ассистент";
+         
+bY=true;
+bWhat=false;
+
+//замена текста в открытом документе
+macro macReplace(obW:object,fnd:string,rep:string)
+  obW.FindAndReplace(fnd,rep);
+end;
+
+//передача значений для замены
+macro macGetArr(obW:object,arrVal:arrayref)
+  var
+     iC:integer;
+
+  iC=aSize(arrVal);
+  while((iC-1)>=0)
+    macReplace(obW,"##"+string(iC-1)+"##",arrVal(iC-1));
+   iC=iC-1;
+  end
+end;
+
+//обработка шаблона
+macro macToW(sPath:string)
+  var 
+     obW:ToWord;
+  if (ValType(sPath)==V_STRING)
+    if (sPath!="");
+      obW.CreateWordDocument(sPath,true); //сначала не визуализируем
+      macGetArr(obW,arrVal);
+      obW.ShowDocument;
+    end;
+  end;
+end;
+
+//основной макрос управления
+
+macro macMain() 
+//при возможности переделать передачу параметров, что бы скрыть 
+//меню выбора типа поиска, а точно передавать тип в параметре
+//при поиске по коду клиента заполняются только реквизиты клиента
+//так как у одного клиента может быть несколько счетов
+//для работы со счетом необходимо указать именно НОМЕР СЧЕТА
+  var 
+     iK:integer,
+     sSign:string,
+     bEnd:bool,
+     iDprt:integer,
+     bPere:bool,
+     {curdate},
+     {operdprt},
+     bK:bool,
+     sPathDot:string;
+
+  sSign="";
+  sPathDot="";
+  bY=true;
+  bK=false;
+  iDprt=-2;
+
+  while (bY)
+    bY=false;
+    iK=macULRetMenu(arrMenu,"Выбор необходимого документа","Укажите необходимый Пакет Документов");
+    if (iK>=0)
+      //arrVal(0)="40702810602000000004";
+      if (GetString(arrVal(0),"Укажите номер счета клиента",20))
+        if (
+            (macALLenAcc(arrVal(0))) and
+            (macULIsNum(arrVal(0)))   
+           )
+          iDprt=macALGetDprtAcc(arrVal(0));
+          arrVal(2)=macCLGetNameClnAcc(arrVal(0),true);
+          arrVal(1)=macULGetOneT(string(arrVal(2)),false,"^"); //код клиента
+          arrVal(2)=macULGetOneT(string(arrVal(2)),true,"^");; //наименование клиента
+          if (
+              (string(arrVal(1))!="") and
+              (string(arrVal(2))!="")    
+             )
+            sPathDot=macULServTempl();
+            sSign=macULSign();
+            if (
+                (sSign!="") and 
+                (sPathDot!="")
+               )
+               arrVal(3)=macCLGetFIOFirstPer(int(arrVal(1))); //представитель клиента
+               arrVal(4)=macCLGetNumContr(int(arrVal(1)))+"/1";
+               if (iK!=3) //для iK==3 эти данные не нужны
+                 if (getstring(arrVal(4),"Укажите номер договора на iBank 2"))
+                   if (getdate(arrVal(5),"Укажите дату договора на iBank 2"))
+                     if (
+                         (StrLen(trim(arrVal(4)))!=0) and
+                         (macULGetDateStr(arrVal(5))!=Date(0,0,0))
+                        )
+                         bK=true;
+                     else
+                       msgbox("Ошибка при указании номера договора по iBank 2 или даты договора ");
+                     end;
+                   end;
+                 end;
+               else
+                 bK=true;
+               end;
+               if (bK)
+                 //формируем информацию по старому номеру договора на iBank 2
+                 bK=false;
+                 arrVal(33)="";
+                 arrVal(34)="";
+                 bPere=false;
+                 if (gettrue(bPere,"Договор ПЕРЕЗАКЛЮЧАЕТСЯ?"))
+                   //запрашиваем данные по предыдушему договору
+                   if (getstring(arrVal(33),"Укажите номер ранее заключенного договора по iBank 2"))
+                     if (getdate(arrVal(34),"Укажите дату ранее заключенного договора по iBank2"))
+                       if (
+                           (strlen(trim(arrVal(33)))!=0) and
+                           (macULGetDateStr(arrVal(34))!=Date(0,0,0))
+                          )
+                           bK=true;
+                       else
+                         msgbox("Ошибка при указании ранее заключенного номера договора по iBank 2 или даты договора ");
+                       end;
+                     end;
+                   end;
+                 else
+                   bK=true;
+                 end;
+                 if (
+                     (iK!=4) or
+                     (bPere)
+                    )
+                   arrVal(14)="";
+                   if (getint(arrVal(14),"Укажите № Соглашения или Доп. Соглашения"))
+                     bK=false;
+                     if (iK==3)
+                       if (getdate(arrVal(28),"Укажите дату Доп. Соглашения"))
+                         if (arrVal(28)!=Date(0,0,0))
+                           arrVal(28)=macULGetStrDate(arrVal(28));
+                           if (getint(arrVal(26),"Укажите № ДопСоглашения,\n к которому вы формируете текущее ДопСоглашение"))
+                             if (arrVal(26)!=0)
+                               if (getdate(arrVal(27),"Укажите дату ДопСоглашения,\n к которому вы формируете текущее ДопСоглашение"))
+                                 if (arrVal(27)!=Date(0,0,0))
+                                   arrVal(27)=macULGetStrDate(arrVal(27));
+                                   bK=true;
+                                 else
+                                   msgbox("Некорректная дата исходного Доп. Соглашения!");
+                                 end;
+                               end;
+                             else
+                               msgbox("Некорректный номер исходного Доп. Соглашения!");
+                             end;
+                           end;
+                         else
+                           msgbox("Некорректная дата Доп. Соглашения!");
+                         end;
+                       end;
+                     else
+                       bK=true;
+                     end;
+                     if (bK)
+                       if (arrVal(14)==0)
+                         bK=false;
+                         msgbox("Некорректный номер Доп. Соглашения!");
+                       end;
+                     end;
+                     arrVal(29)="Операционный офис 'Балаково' филиала 'Поволжский' Юр. Лица";
+                     if (SubSTR(arrVal(0),10,4) == "0203")
+                       arrVal(29)="Письма клиентам";
+                     end;
+                     if (bK)
+                       if (
+                           (iK!=5) and
+                           (iK!=6) and
+                           (iK!=7)
+                          )
+                         if (getstring(arrVal(29),"Укажите почтовый ящик iBank2 для клиентских сообщений"))
+                           if (StrLen(trim(arrVal(29)))==0)
+                             msgbox("Не указан ящик для клиентских сообщений!");
+                             bK=false;
+                           end;
+                         end;
+                       end;
+                     end;
+                   else
+                     bK=false
+                   end;
+                 end;
+                 if (bK)
+                     DateSplit(macULGetDateStr(arrVal(5)),arrVal(6),arrVal(7),arrVal(8));
+                     arrVal(5)=macULGetStrDate(arrVal(5));
+                     arrVal(6)=macUlSetAddSpace(arrVal(6),2,"0");
+                     arrVal(7)=macULGetMonR(int(int(arrVal(7))));
+                     DateSplit({curdate},arrVal(9),arrVal(10),arrVal(11));
+                     arrVal(10)=macULGetMonR(int(arrVal(10)));
+                     arrVal(9)=macUlSetAddSpace(arrVal(9),2,"0");
+                     arrVal(12)=macULGetOneT(sSign,true,"+"); //подразделение должность
+                     arrVal(13)=macULGetFamIO(macULGetOneT(macULGetOneT(sSign,false,"+"),true,"+")); //фио руководителя подразделения
+                     arrVal(15)=GetClientInn(arrVal(1));
+                     arrVal(17)=macCLGetUrAddr(int(arrVal(1)));
+                     arrVal(16)=macCLGetKPP(int(arrVal(1)));
+                     arrVal(18)=macULGetFamIO(macCLGetFIOFirstPer(int(arrVal(1))));
+                     arrVal(35)=macCLGetFIOSecPer(int(arrVal(1)));
+                     arrVal(36)=macULGetFamIO(macCLGetFIOSecPer(int(arrVal(1))));
+                     arrVal(19)=macCLGetPostFirstPer(int(arrVal(1)));
+                     arrVal(20)=macULGetOneT(arrVal(20),true,"+");
+                     arrVal(22)=macCLGetUstav(int(arrVal(1)));
+                     arrVal(23)=macULGetTeliBnk({operdprt});
+                     arrVal(24)=macULGetOneT(macULGetOneT(sSign,false,"+"),false,"+");
+                     sSign=macULGetOneT(macULGetOneT(arrVal(24),false,"+"),false,"+");
+                     arrVal(24)=macULGetOneT(sSign,true,"+");
+                     sSign=macULGetOneT(sSign,false,"+");
+                     arrVal(25)=macULGetOneT(sSign,true,"+");
+                     sSign=macULGetOneT(sSign,false,"+");
+                     arrVal(28)=macULGetDprtTown(iDprt);
+                     arrVal(29)=macCLGetOGRN(int(arrVal(1)));
+                     arrVal(30)=macCLGetPhone1(int(arrVal(1)));
+                     arrVal(31)=macCLGetEmail(int(arrVal(1)));
+                     arrVal(32)=macCLGetFactAddr(int(arrVal(1)));
+                     arrVal(20)=macULGetOneT(sSign,true,"+");
+                     arrVal(21)=macULGetOneT(sSign,false,"+");
+                     macToW(macCopyDot(sPathDot+S_SRV_DIR+"\\",arrDot(iK),S_LOC_DIR));
+                     bY=true;
+                 end;
+               end;  
+            end;
+          else
+            msgbox("Указанный счет не найден!");
+          end;
+        else
+           msgbox("Параметры счета ошибочны!");
+        end;
+      end;
+    end;
+    if (not bY)
+      if (gettrue(true,"Формирование документов не выполнено! "+"Повторить?"))
+        bY=true;
+      end;
+    else
+      bY=false;     
+    end;
+  end;
+  exit(1);
+end;
+
+//вызов основного макроса программы
+macMain();

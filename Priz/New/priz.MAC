@@ -1,0 +1,305 @@
+/* Модуль проверки и выгрузки документов */                                                    
+
+file post (document) write;
+file Extgnd (extgnd) key 0; 
+
+var {curdate},{oper},s,kol,kol1,Kol_doc,Summa,id,sess,gr,INN_Receiver,INN_Payer,kod="6359826000";
+
+sess=0;
+
+array Ошибка,ArrGr;
+  Ошибка(0)="неизвестная ошибка";
+  Ошибка(1)="длина ИНН получателя больше 12 символов";
+  Ошибка(2)="длина ИНН плательщика больше 12 символов";
+  Ошибка(3)="не верна очередность платежа";
+  Ошибка(4)="не верна дата документа";
+  Ошибка(5)="не указан получатель средств";
+  Ошибка(6)="не указано основание платежа";
+  Ошибка(7)="не верно указан ИНН плательщика";
+  Ошибка(8)="не верно указан ИНН получателя";
+  Ошибка(9)="не верно указан номер п/п";
+  Ошибка(10)="БИК отправителя равен БИК получателя";
+  Ошибка(11)="БИК получателя принадлежит другому региону";
+  Ошибка(12)="документ - дебетовый";
+  Ошибка(13)="указаны БИКи и плателельщика и получателя";
+  Ошибка(14)="внутренний документ";
+  Ошибка(15)="код отправки не соответствует коду РКЦ";
+  Ошибка(16)="длина счета плательщика не равна 20 знакам";
+  Ошибка(17)="длина счета получателя не равна 20 знакам";
+  Ошибка(18)="БИК получателя не найден в справочнике МФО";
+  Ошибка(19)="коррсчет банка получателя не найден в справочнике МФО";
+  Ошибка(20)="не указан коррсчет банка получателя";
+  Ошибка(21)="Не допустимый символ в наименовании плательщика *[]░▀ЁёЄєЇїЎў°∙·√№¤■";
+  Ошибка(22)="Не допустимый символ в наименовании получателя *[]░▀ЁёЄєЇїЎў°∙·√№¤■";
+  Ошибка(23)="Не допустимый символ в основании платежа *[]░▀ЁёЄєЇїЎў°∙·√№¤■";
+  Ошибка(24)="Неверный шифр для межрегиональной операции";
+  Ошибка(25)="Неверный шифр для внутререгиональной операции";
+  
+
+/*Процедура вычисления следующего номера рейса*/
+
+macro GetSessionNumba (sess)
+      file docs (document); 
+      rewind(docs);
+      while (next(docs))
+        if (int(docs.UserField3)>sess)
+           sess=int(docs.UserField3); 
+        end;
+      end;
+     return sess+1;
+end;
+
+/* Процедура проверки наличия ТОЛЬКО ЦИФРОВЫХ символов в строке */
+macro CheckNum(Str)
+
+var
+   i=1,
+   flg=True;
+   Str=String(str);
+         
+   while ((flg) and (StrLen(str)>=i))
+                
+        if (SubStr(str,i,1)=="0")
+           i=i+1
+        else
+      
+           if (int(SubStr(str,i,1)))
+              i=i+1;
+           else
+              flg=False
+           end; 
+        end; 
+   end;
+  
+   if (flg)
+      Return True
+   else
+      Return False
+   end;
+
+end; 
+
+
+
+macro AddLeft (str,len,simv);
+      s=String(str);
+      While (Len-StrLen(s)>0)
+       s=Simv+s 
+      end;
+      return s
+end;
+ 
+macro Proverka_megreg
+
+/*Проверка документов перед выгрузкой на правильность данных*/
+
+var error2=0,
+    pos,
+    nomdoc,
+    summai=0,
+    Допуст_символ="*[]░▀ЁёЄєЇїЎў°∙·√№¤■";
+
+rewind(post);
+
+while (next(post))
+
+message("Проверка документа N ",post.Numb_document);
+  
+ if ((trim(post.MFO_Receiver)!="") and (int(post.Post_Sun)==0))
+ 
+    if (SubStr(trim(post.MFO_Receiver),1,4)=="0463") /*Проверка на региональность документа*/
+    
+       if ((trim(post.Shifr_Oper)!="01") and (trim(post.Shifr_Oper)!="06") and (trim(post.Shifr_Oper)!="16")) 
+          println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(25));
+          error2=error2+1
+       end;
+   
+    else
+
+       if (post.Shifr_Oper!="01")
+          println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(24));
+          error2=error2+1
+       end; 
+   
+    end;
+
+    if (StrLen(post.OKPO_Payer)>12)
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(2));
+       error2=error2+1
+    end;
+
+    if (StrLen(post.OKPO_Receiver)>12)
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(1));
+       error2=error2+1
+    end;
+    
+    if (post.OKPO_Receiver=="")
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(8));
+       error2=error2+1;
+    end;
+
+    /*Номер документа*/
+    
+    Pos=StrLen(post.Numb_Document)-3;
+    if (Pos<=0)
+       NOMDOC=AddLeft(post.Numb_Document,4,"0");
+    else
+       NOMDOC="0"+SubStr(post.Numb_Document,Pos+1,3);
+    end;                                                          
+    
+    if ((int(NOMDOC)==0) or not CheckNum(Trim(post.Numb_Document)))
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(9));
+       error2=error2+1;
+    end;
+
+    /*Признак очередности и приоритета платежа*/
+    
+    if ((post.Payment==0) or (post.Payment>6))
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(3));
+       error2=error2+1
+    end;
+
+    /*Дата документа*/
+    
+    if (post.Date_Document>date)
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(4));
+       error2=error2+1
+    end;
+
+    /*Получатель*/
+    
+    if (post.Receiver=="")
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(5));
+       error2=error2+1;
+    end;
+
+    /*Недопустимые символы в наименовании плательщика*/
+   
+    if (strbrk(post.Payer,Допуст_символ)!=0)
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(21));
+       error2=error2+1;
+    end;
+   
+    /*Недопустимые символы в наименовании получателя*/
+
+    if (strbrk(post.Receiver,Допуст_символ)!=0)
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(22));
+       error2=error2+1;
+    end;
+
+    /*Недопустимые символы в основании платежа*/
+    
+    if (strbrk(post.Ground,Допуст_символ)!=0)
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(23));
+       error2=error2+1;
+    end;
+
+    /*Основание платежа*/
+    
+    if (post.Ground=="")
+       println("Исправьте документ N ",post.Numb_Document," Сумма=",post.Sum," ",Ошибка(6));
+       error2=error2+1;
+    end;
+
+    summai=summai+post.Sum;
+ end;
+end;
+
+if (summai==0)  
+   msgbox("Нет документов для выгрузки");
+   exit(0);
+elif (error2!=0)
+   msgbox("Проверьте документы");
+   exit(0);
+end;
+
+if (not GetTrue(id,"Ошибок нет! Итоговая сумма: "+summai+" Выгрузить?")) 
+   exit(0)
+end;
+
+end;
+
+
+
+
+/*---------------------------Точка входа--------------------*/
+                   
+Proverka_megreg;
+  
+rewind (post);
+kol=0;       
+Summa=0; 
+sess=GetSessionNumba(sess);
+
+[
+Балаковский Филиал АКБ"СОФИЯ"
+#         ,#
+
+Код формы документа по ОКУД № 01407
+                                        РЕЕСТР НАЧАЛЬНЫХ ПРОВЕДЕННЫХ В РКЦ/ГРКЦ
+                                ЭЛЕКТРОННЫХ ПЛАТЕЖНЫХ ДОКУМЕНТОВ КРЕДИТНОЙ ОРГАНИЗАЦИИ
+                                                 ЗА #
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+| № |Порядк.|   Дата   | Уник.ид  |  №   |    Дата   |    |       Лицевой      | БИК банка |     Корсчет КО     |    Лицевой счёт    |Оч.|     Сумма   |
+|пос| номер |   сост.  | сост.ЭД  | док. |    док.   | ВО |        счёт        |  получа-  |     получателя     |     получателя     |пл.|             |
+|   |  ЭД   |    ЭД    |          |      |           |    |     плательщика    |   теля    |                    |                    |   |             |
+-------------------------------------------------------------------------------------------------------------------------------------------------------]
+(date:l,time:l,date:l);
+
+while (next(post))
+   if ((trim(post.MFO_Receiver)!="") and (int(post.Post_Sun)==0)) 
+      message("Документ на выгрузку N ",post.Numb_document);
+      kol=kol+1;
+      if (post.OKPO_Receiver!="")
+         INN_Receiver=Trim(post.OKPO_Receiver)+" "+Trim(post.Receiver)
+      else
+         INN_Receiver=Trim(post.Receiver)
+      end;
+      
+      if (post.OKPO_Payer!="")
+         INN_Payer=Trim(post.OKPO_Payer)+" "+Trim(post.Payer)
+      else
+         INN_Payer=Trim(post.Payer)
+      end;
+      
+      Extgnd.AppKind=post.iApplicationKind;
+      Extgnd.AppKey=post.ApplicationKey;
+      if (GetEq(Extgnd))
+         gr=Extgnd.ExtendedGround;
+      else
+         gr=""      
+      end;
+              
+      StrSplit(Trim(post.Ground+gr),ArrGr,131,0,4);
+      If  ((post.oper!=102) or (post.oper!=104)) 
+          post.Control="X";
+          post.ControlDate=date;
+          post.Controltime=time;
+          post.OperControl={oper};
+          post.UserField3=string(sess);
+          Update(post);          
+      end;	
+
+[|#  |      #|#         |#         |     #|#          |   #|#                   |          #|#                   |#                   |  #|            #|
+|Плательщик ИНН #
+|Получатель ИНН #
+|Назначение платежа #
+|#
+|#
+]   
+      (sess:l,kol:r,date:l,kod:l,post.Numb_document:r,post.Date_Document:l,post.Shifr_Oper:r,post.Account_Payer:l,post.MFO_Receiver:r,post.CorAcc_Receiver:l,post.Account_Receiver:l,post.Payment:r,post.Sum:r,
+      INN_Payer,
+      INN_Receiver,
+      ArrGr(1),ArrGr(2),ArrGr(3));  
+      Summa=Summa+post.Sum; 
+    end;
+end;    
+println();
+println("-------------------------------------------------------------------------------------------------------------------------------------------------------");
+[ Итого по реестру:                                                                    Кол-во документов:    #,               Сумма:                   #]
+(kol:r,Summa:r);
+println();
+println();
+println("                                    Подпись бухгалтерского работника _________________________")                                     
+

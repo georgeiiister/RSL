@@ -1,0 +1,67 @@
+/*Макропрограмма для работы с остатками на счетах 7010?*/
+/* Developed Polyakov*/ 
+
+file acc(account) sort 0;
+
+var 
+   {curdate},
+   Curmon, 
+   Curyear,
+   NumSh,
+   Itog,
+   i=0,
+   j=0,
+   N,PaySh,RecSh,SumOth,
+   NR;
+
+
+/****************** Форма отчёта *******************/
+
+[Отчёт по закрытию остатков  на ##########
+----------------------------------------------------------------
+  N    Счёт плательщика      Счёт получателя         Сумма
+----------------------------------------------------------------]
+({curdate});
+
+
+/*********** Процедура формирования отчёта **********/
+
+macro Otch(N,PaySh,RecSh,SumOth,Itog)
+println(N:c:3,PaySh:c:22,RecSh:c:22,SumOth:a:15);
+End;
+
+
+/************* Точка входа в программу *************/
+
+DateSplit({curdate},null,curmon,curyear); 
+
+If ((Curmon==1) or (Curmon==2) or (Curmon==3)) 
+   NumSh="70301810301000000004";
+Elif ((Curmon==4) or (Curmon==5) or (Curmon==6))
+   NumSh="70301810601000000005";
+Elif ((Curmon==7) or (Curmon==8) or (Curmon==9))
+   NumSh="70301810901000000006";
+Else 
+   NumSh="70301810201000000007";
+End;
+
+rewind(acc);
+clearrecord(acc);
+Itog=Money(0);
+NR=NRecords(acc);
+InitProgress(NR,"Подсчёт","Обработано строк");
+while(next(acc))
+  i=i+1;
+  UseProgress(i); 
+    If ((SubStr(trim(acc.balance),1,3)=="702") and 
+         acc.R0!=Money(0))  
+         j=j+1;
+         Itog=Itog+(acc.R0*(-1));
+         Otch(j,NumSh,acc.account,(acc.R0*(-1)),Itog);
+    End;                      
+End; 
+println("--Итого по расчёту--":c:47,Itog:a:15);
+RemProgress;
+
+/**************** Конец программы *****************/
+End;

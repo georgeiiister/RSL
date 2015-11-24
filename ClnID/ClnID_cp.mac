@@ -1,0 +1,511 @@
+/*
+developer Polyakov S.George
+Макрос слияния данных - параметров клиентов
+v. 1.00-02.05.2012
+*/
+
+//не забыть поменять
+import "..\\mac\\bfsofia\\clnid.mac";
+import "..\\mac\\bfsofia\\contclnlib.mac";
+
+//не забыть поменять
+const
+      S_PTH:string="\\\\192.168.111.110\\server-rs-E\\rsbank.Samara_svodn\\DBFILE\\",
+      I_START1:integer=200000, //начало диапазона Ю
+      I_END1:integer=220000, //конец диапазон Ю
+      I_START2:integer=250000, //начало диапазона Ф
+      I_END2:integer=270000, //конец даиапазона
+      I_CLN_DOWN:integer=73; //клиенты, которых игнорируем, т.к. они уже есть
+
+macro macCPDown(sTbl:string,j:integer,k:integer)
+  println(sTbl+" Добавлено: "+j+" Пропущено: "+k);
+  println();
+end;
+
+macro macCPHead()
+  println("- - -");
+  println("ИТОГО ДОБАВЛЕНИЙ ПО ВТОРОСТЕПЕННЫМ СПРАВОЧНИКАМ:");
+  println();
+end;
+
+//проверка - был ли добавлен клиент или нет?
+//существует ли клиент в основном справочнике?
+//return true - не существует или не добавлен 
+macro macIsCheckID(clnID:integer):bool
+  var 
+     bRet:bool,
+     tbTblI:object,
+     btTblO:object;
+   
+  tbTblI=TBFile("notClnID.dbt","r",1,"notClnId.dbt","bfsofia1.def");
+  btTblO=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  bRet=false;
+  rewind(tbTblI);
+  tbTblI.item("ClnID")=clnID;
+  if (geteq(tbTblI))
+    bRet=true; //клиент в исключениях, т.е. не добавлен в основной справ-к  
+  end;
+  //проверка - существует ли клиент в основном справочнике
+  //может не существовать и его не пропустили при добавлении
+  //если нарушение ссылочной целостности
+  //таких надо тоже отсеивать
+  if (not bRet)
+    rewind(btTblO);
+    btTblO.item("Client")=clnID;
+    if (not getEQ(btTblO))
+       bRet=true;
+    end;
+  end;
+  close(tbTblI);
+  return bRet;
+end;
+
+//поиск таблицы для обработки
+macro macFindtbl(sTbl:string):bool
+  var
+     bRet:bool,
+     sPth:string,
+     i:integer;
+  bRet=true;
+  i=int(0);
+  while (i<=1)
+    if (i==0)
+      sPth="..\\dbfile\\"  
+    else
+      sPth=S_PTH;
+    end;
+    if (strlen(FindPath(sTbl,sPth))==0)
+      bRet=false;
+    end;
+    i=i+1;
+  end;
+  return bRet;
+end;
+
+//макрос проверки кода клиента на принадлежность к портируемому диапазону
+//важный и динамически изменяемый участок :)
+//для каждого филиала индивидуальный
+macro macCheckRange(iClnID:integer):bool
+  var
+    bRet:bool;
+    bRet=false;
+    if (
+        ((iClnID>I_START1) and (iClnID<I_END1)) or 
+        ((iClnID>I_START2) and (iClnID<I_END2))
+       )  
+      bRet=true;
+    end;
+    return bRet;
+end;
+
+//макрос переноса данных из client.dbt
+macro macCPInsCln(clnid):bool
+  var
+    btTblO:Object,
+    btTblN:Object,
+    tbTblI:Object,
+    bRet:bool,
+    i:integer;
+  
+  bRet=false;
+  btTblN=TBFile("client.dbt","w",0,S_PTH+"client.dbt",S_PTH+"bank.def");
+  btTblO=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  tbTblI=TBFile("notClnID.dbt","w",0,"notClnId.dbt","bfsofia1.def");
+  i=int(0);
+
+  rewind(btTblO);
+  btTblO.item("Client")=clnid;
+  if (geteq(btTblO))
+    rewind(btTblN);
+    btTblN.item("Client")=clnid;
+    if (not getEQ(btTblN))
+       clearrecord(btTblN);
+       while (i<fldnumber(btTblO))
+         btTblN.item(i)=btTblO.item(i);
+         i=i+1;
+       end;
+       if (insert(btTblN))
+         bRet=true;
+       else
+         println("Ошибка добавления клиента с кодом: "+clnid+" возможно нарушение уникальности индексов");
+       end;
+    else
+      println("Код клиента: "+clnid+" уже присутствует в основном справочнике клиентов");
+    end;
+  else
+     println("Код клиента: "+clnid+" не найден в исходной БД");
+  end;
+  if (not bRet) 
+    clearrecord(tbTblI);
+    tbTblI.item("ClnID")=clnid;
+    insert(tbTblI);
+  end;
+  close(btTblN);
+  close(btTblO);
+  return bRet;
+end;
+
+//макрос просмотра исходной client.dbt и вызова процедур переноса данных по клиенту
+macro macCPReadCln()
+  var
+    btTblO:Object,
+    tbTblN:Object,
+    i:integer,
+    j:integer;
+
+  j=int(0);
+  i=int(0);
+  btTblO=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  //создание таблицы исключений для ID не прошедших добавления
+  tbTblN=TBFile("notClnID.dbt","p+",0,"notClnId.dbt","bfsofia1.def");
+  initprogress(nrecords(btTblO),"Идет Обработка основного справочника client.dbt","Обработано строк");
+  while(next(btTblO))
+    i=i+1;
+    useprogress(i);
+    if (macCheckRange(btTblO.item("Client")))
+      if (macCPInsCln(btTblO.item("Client")))
+        j=j+1;
+      end;
+    end;
+  end;
+  remprogress(i);
+  close(btTblO);
+  println("- - -");
+  println("ПРОСМОТРЕНО КЛИЕНТОВ В ОСНОВНОМ СПРАВОЧНИКЕ: "+i+" УДАЧНО ПЕРЕНЕСЕНО: "+j);
+end;
+
+//макрос обработки ctgval
+macro macCPInsMainAdd2(bCheck:bool)
+  var
+     sTbl:string,
+     sFld:string,
+     sDef:string,
+     bNext:bool,
+     bYes:bool,
+     s0:string,
+     iID:integer,
+     j:integer,
+     n:integer,
+     k:integer,
+     m:integer,
+     btTblN:Object,
+     btTblO:Object;
+
+  sTbl="ctgval.dbt";
+  sFld="Client";
+  sDef="bank.def";
+  btTblN=TBFile(sTbl,"w",0,S_PTH+sTbl,S_PTH+sDef);
+  btTblO=TBFile(sTbl,"r",3,sTbl,sDef);
+  j=int(0);
+  k=int(0);
+  rewind(btTblO);
+  btTblO.item("ObjectType")=int(3);
+  s0=macAddSpace("0",10,"0");
+  btTblO.item("Object")=s0;
+  btTblO.item("Sort")=int(0);
+  btTblO.item("CtgID")=int(0);
+  if (getGE(btTblO))
+    bNext=true;
+    m=int(0);
+    while (bNext)
+      if (btTblO.item("ObjectType")==int(3))
+        message("Идет добавление данных в структуру: "+sTbl+" Всего просмотрено: "+m);
+        m=m+1;
+        iID=macAccLast(s0+btTblO.item("Object"));  //извлекаем чистый код клиента
+        if (macCheckRange(iID))
+          bYes=true;
+          if (bCheck)
+            if (macIsCheckID(iID))
+              bYes=false;
+            end;
+          end;
+          if (bYes)
+            n=int(0);
+            clearrecord(btTblN);
+            while (n<fldnumber(btTblO))
+              btTblN.item(n)=btTblO.item(n);     
+              n=n+1;
+            end;
+            if (insert(btTblN))
+              j=j+1;
+            else
+              k=k+1;
+            end;
+          else
+            k=k+1;    
+          end;
+        end;
+        bNext=next(btTblO);
+      else
+        bNext=next(btTblO);
+      end;
+    end;
+    close(btTblN);
+    close(btTblO);
+    macCPDown(sTbl,j,k);
+  end;
+end;
+
+//макрос переноса данных, для которых нужен контроль по 2-м столбцам
+//независимо и без дублирования
+macro macCPInsMainAdd1(bCheck:bool)
+
+var
+   i:integer,
+   j:integer,
+   k:integer,
+   n:integer,
+   m:integer,
+   bYes:bool,
+   btTblN:Object,
+   btTblO:Object,
+   sTbl:string,
+   sDef:string,
+   sFld1:string,
+   sFld2:string;
+array 
+     aT1;
+
+  aT1(0)="dovopnac.dbt/Client/Dover/clients.def";
+  aT1(1)="vygoda.dbt/Client/Vig/clients.def";
+  aT1(2)="officer.dbt/Client/PersonID/bank.def";
+  i=int(0);
+  while(i<asize(aT1))
+    sTbl=macGetOneT(aT1(i),true);
+    sDef=macGetOneT(aT1(i),false);
+    sFld1=macGetOneT(sDef,true);
+    sDef=macGetOneT(sDef,false);
+    sFld2=macGetOneT(sDef,true);
+    sDef=macGetOneT(sDef,false);
+    btTblN=TBFile(sTbl,"w",0,S_PTH+sTbl,S_PTH+sDef);
+    btTblO=TBFile(sTbl,"r",0,sTbl,sDef);
+    j=int(0);
+    k=int(0);
+    m=int(0);
+    rewind(btTblO);
+    while (next(btTblO))
+      m=m+1;
+      message("Идет добавление данных в структуру: "+sTbl+" Всего просмотрено:"+m);
+      //выполянем проверку, необходимо, что бы все значения идентификаторов клиента 
+      //лежали в зарезервированном диапазоне
+      //будем переносить, только тех, кого переименовали
+      //возможно потеряем тех, кто не перименован, но есть в этих структурах
+      //но таково распоряжение руководства
+      //в перспективе, если они понадобятся, надо просто независимо просмотреть
+      //2 поля fld и заполнить clnid и запустить скрипт перименования, а потом этот
+      if ((macCheckRange(btTblO.item(sFld1))) and (macCheckRange(btTblO.item(sFld2))))
+        bYes=true;
+        if (bCheck)
+          if (
+              (macIsCheckID(btTblO.item(sFld1)))
+                                                    or 
+              (macIsCheckID(btTblO.item(sFld2)))
+             )
+            bYes=false;
+          end;
+        end;
+        if(bYes)
+          n=int(0);
+          clearrecord(btTblN);
+          while (n<fldnumber(btTblO))
+            if ((sTbl=="officer.dbt") and (fldname(btTblO,n)=="AutoKey"))
+            else
+              btTblN.item(n)=btTblO.item(n);     
+            end;
+            n=n+1;
+          end;
+          if (insert(btTblN))
+            j=j+1;
+          else
+            k=k+1;
+          end;
+        else
+          k=k+1; 
+        end;
+      end;
+    end;
+    macCPDown(sTbl,j,k);
+    i=i+1;
+  end;
+end;
+
+macro macCPInsMain(bCheck:bool,bAll:bool)
+//bCheck - true проверять по таблице исключений не добавленных клиентов  
+  var
+     btTblN:object,
+     btTblO:object,
+    // tbTblI:object,
+     i:integer,
+     j:integer,
+     k:integer,
+     n:integer,
+     m:integer,
+     sTbl:string,
+     sFld:string,
+     sDef:string,
+     bYes:bool;
+
+array arrM;
+
+  arrM(0)="clients1.dbt/Client/clients.def";
+  arrM(1)="clients2.dbt/Client/clients.def";
+  arrM(2)="clients3.dbt/Client/clients.def";
+  arrM(3)="clorgfio.dbt/Client/clients.def";
+  //arrM(4)="nal_izv.dbt/Client/sofia.def"; для объединения неактуально
+  //arrM(5)="nal_out.dbt/Client/sofia.def"; для объединения неактуально
+  arrM(4)="claddfrm.dbt/Client/bank.def";
+  arrM(5)="clshname.dbt/Client/bank.def";
+  //arrM(8)="limit.dbt/Client/bank.def";  не переносим, так как можно проставить с журнала
+  arrM(6)="opcntrpt.dbt/Client/bank.def";
+  arrM(7)="persn.dbt/ClientID/bank.def";
+  arrM(8)="clhist.dbt/Client/clients.def";
+  //arrM(9)="clkaslim.dbt/Client/clients.def";  //в Самаре не тот
+  //arrM(10)="clkasnar.dbt/Client/clients.def";  //в Самаре не тот
+  arrM(9)="clkasprv.dbt/Client/clients.def";
+  arrM(10)="cltosk.dbt/Client/clients.def";
+  arrM(11)="clved.dbt/Client/clients.def";
+  arrM(12)="valnarus.dbt/Client/clients.def";  //в Самаре нет совсем
+  arrM(13)="characnt.dbt/Client/bank.def";
+  arrM(14)="clatrcor.dbt/Client/bank.def";
+  arrM(15)="clnote.dbt/Client/bank.def";
+  //arrM(21)="clntacc.dbt/Client/bank.def";
+  arrM(16)="pmfpost.dbt/Client/bank.def";
+  //arrM(23)="account$.dbt/Client/bank.def";
+  //arrM(24)="account.dbt/Client/bank.def";
+  arrM(17)="address.dbt/Client/bank.def";
+  //arrM(26)="obacnt.dbt/Client/bank.def";
+  //arrM(27)="obacnt$.dbt/Client/bank.def";
+  //arrM(28)="stop_op.dbt/Client/bank.def";   //в Самаре не тот (пока не переносим)
+  arrM(18)="clidnt.dbt/Client/bank.def";
+  arrM(19)="cntragnt.dbt/Client/bank.def";
+  arrM(20)="regdoc.dbt/Client/bank.def";
+  arrM(21)="service.dbt/Client/bank.def";
+  arrM(22)="reqhist.dbt/ClientID/bank.def";
+  arrM(23)="partyown.dbt/ClientID/bank.def";
+  arrM(24)="clconfrm.dbt/ClientID/bank.def";
+  //arrM(36)="notblnc$.dbt/Client/bank.def";
+  //arrM(37)="notblnc.dbt/Client/bank.def";
+
+  //add polyakov S.George 23.05.2012
+  
+  if (not bAll)
+    i=menu(arrM,"Выбор","Выберите таблицу для слияния из схемы");
+    if (i>=0)
+      sTbl=arrM(i);
+      aSize(arrM,0);
+      arrM(0)=sTbl;
+      macCPHead();
+    else
+      aSize(arrM,0);
+    end;
+  end;
+
+  i=int(0);
+
+  while (i<asize(arrM))
+    sTbl=macGetOneT(arrM(i),true);
+    sFld=macGetOneT(arrM(i),false);
+    sDef=macGetOneT(sFld,false);
+    sFld=macGetOneT(sFld,true);
+    j=int(0);
+    k=int(0);
+    if (macFindtbl(sTbl))
+      btTblN=TBFile(sTbl,"w",0,S_PTH+sTbl,S_PTH+sDef);
+      btTblO=TBFile(sTbl,"r",0,sTbl,sDef);
+      rewind(btTblO);
+      m=int(0);
+      while (next(btTblO))
+        m=m+1;
+        message("Идет добавление данных в структуру: "+sTbl+" Всего просмотрено: "+m);
+        if (macCheckRange(btTblO.item(sFld)))
+          bYes=true;
+          if (bCheck)
+             if (macIsCheckID(btTblO.item(sFld)))
+               bYes=false; //клиент в исключениях, т.е. не добавлен в основной справ-к или не существует 
+             end;
+          end;
+          if (bYes)
+            n=int(0);
+            clearrecord(btTblN);
+            while (n<fldnumber(btTblO))
+              //раздел дополнительной обработки
+              if ((sTbl=="nal_izv.dbt") and (fldname(btTblO,n)=="ID"))
+                //пропускаем поле, так как ID - счетчик
+              elif ((sTbl=="nal_out.dbt") and (fldname(btTblO,n)=="ID"))
+              elif ((sTbl=="limit.dbt") and (fldname(btTblO,n)=="IdLimit"))
+              elif ((sTbl=="clntacc.dbt") and (fldname(btTblO,n)=="ID"))
+              elif ((sTbl=="pmfpost.dbt") and (fldname(btTblO,n)=="PMF_AutoKey"))
+              elif ((sTbl=="address.dbt") and (fldname(btTblO,n)=="ID"))
+              elif ((sTbl=="stop_op.dbt") and (fldname(btTblO,n)=="ID"))
+              elif ((sTbl=="reqhist.dbt") and (fldname(btTblO,n)=="ID"))
+              else
+                btTblN.item(n)=btTblO.item(n);
+              end;
+              n=n+1;
+            end;
+            if (insert(btTblN))
+              j=j+1;
+            else
+              k=k+1;
+            end;
+          else
+            k=k+1;
+          end;
+        end
+      end;
+      macCPDown(sTbl,j,k);
+      close(btTblN);
+      close(btTblO);
+    else
+      println("!!! Структура "+sTbl+" Не найдена во внутреннем или локальном источнике");
+      println();
+    end; 
+    i=i+1;
+  end;
+end;
+
+//сгруппированные макросы для ПОЛНОГО слияния
+macro macCPMain(bCheck:bool)
+    //вызываем макросы для слияние
+    macCPReadCln();
+    macCPInsMain(bCheck,true);
+    macCPInsMainAdd1(bCheck);
+    macCPInsMainAdd2(bCheck);
+end;
+
+//основное меню макроса
+macro macCPMainMenu()
+  var 
+     bCheck:bool,
+     i:integer ;
+
+  array arrM;
+
+  bCheck=false;
+  arrM(0)="Выполнить СЛИЯНИЕ ВСЕХ справочников";
+  arrM(1)="Выполнить слияние ТОЛЬКО Client.dbt";
+  arrM(2)="Выполнить слияние ТОЛЬКО второстепенных справочников (без Client.dbt)";
+  arrM(3)="Выполнить слияние ТОЛЬКО dovopnac.dbt, vygoda.dbt, officer.dbt";
+  arrM(4)="Выполнить слияние ТОЛЬКО ctgval.dbt";
+  i=menu(arrM,"Выбор","Варианты слияния");
+  if (i>=0)
+    if (i!=1)
+      if (gettrue(true,"Выполнять проверку по таблице исключений?"))
+        bCheck=true;
+      end;
+    end;
+    if (i==0)
+      macCPMain(bCheck)
+    elif (i==1)
+      macCPReadCln();
+    elif (i==2)
+      macCPInsMain(bCheck,false);
+    elif (i==3)
+      macCPInsMainAdd1(bCheck)
+    elif (i==4)
+      macCPInsMainAdd2(bCheck);
+    end;
+  end;
+end;
+
+//macCPMainMenu()

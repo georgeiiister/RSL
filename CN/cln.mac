@@ -1,0 +1,50 @@
+file cln0 (client) key 0;
+file acc4 (account) key 4;
+file cln3 (clients3,"sofia.def") key 0;
+Var
+   lngClient=0,
+   i=0,
+   strINN="";	
+
+Const
+   strLim="#",	
+   strPathFile="..\\TXTFILE\\",
+   strFileName="ClnCN.txt";
+
+SetOutput(strPathFile+strFileName,false);
+
+Rewind(acc4);
+ClearRecord(acc4);
+
+While (next(acc4))
+  i=i+1;
+  Message("Подождите... Идет просмотр счетов: "+i);
+  If (
+      
+       (acc4.Open_Close!="З") And (
+                                   (Acc4.Balance=="40502") Or (Acc4.Balance=="40602") Or (Acc4.Balance=="40702") Or (Acc4.Balance=="40802")
+                                  ) 
+                              
+       And (Acc4.Client!=lngClient)
+     )	
+     Rewind(cln0);
+     ClearRecord(cln0);
+     lngClient=acc4.Client;
+     cln0.Client=lngClient;
+     cln3.Client=lngClient;
+     If (Geteq(cln0))
+         Rewind(cln3);
+         ClearRecord(cln3);
+         If (GetEQ(cln3)) 
+            strINN=cln3.INNKey
+         End;
+         println(cln0.Client+strLim+Trim(cln0.Name_Client)+strLim+strLim+strLim+strLim+strLim+strLim+strINN+strLim+strLim+strLim+strLim+strLim);
+     End;
+  End;	
+End;
+
+Close(acc4);
+Close(cln3);
+Close(Cln0);
+Close(strPathFile+strFileName);
+SetOutput(Null,True);

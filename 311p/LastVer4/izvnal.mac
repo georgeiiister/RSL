@@ -1,0 +1,158 @@
+/* Макрофункции работы с базами ведения порядковых номеров открытых счетов
+   и сообщений в налоговую об открытии/закрытии счетов.
+   автор - Кир 27.02.2007___12:34:00
+*/
+import globals;
+
+file izv10 (izvnal1,"sofia.def") key 0 write;
+file izv11 (izvnal1,"sofia.def") key 1 write;
+file izv2 (izvnal2,"sofia.def") key 0 write;
+
+
+
+macro IsIzvAccount(acc, ctype)
+ var bal3, bal5;
+ if(SubStr(acc,14,1) != "0")
+  return false; // Не берем транзитные, спецтранзитные и т.д. счета
+ end;
+ bal3 = SubStr(acc,1,3);
+ bal5 = SubStr(acc,1,5);
+ if((bal5 == "30109") OR (bal5 == "30112") OR (bal5 == "30231"))
+  return true;
+ end;
+
+ if(SubStr(acc,1,2) == "40")
+  if((bal5 == "40803") OR ((bal5 == "40806") AND (Index(ctype,"Ф") > 0)) OR
+     ((bal5 == "40809") AND (Index(ctype,"Ф") > 0)) OR
+     (bal5 == "40810") OR ((bal5 == "40812") AND (Index(ctype,"Ф") > 0)) OR
+     (bal5 == "40813") OR ((bal5 == "40814") AND (Index(ctype,"Ф") > 0)) OR
+     ((bal5 == "40815") AND (Index(ctype,"Ф") > 0)) OR
+     (bal5 == "40817") OR ((bal5 == "40819") AND (Index(ctype,"Ф") > 0)) OR
+     (bal5 == "40820") OR (bal3 == "409")
+    )
+   return false;
+  else
+   return true;
+  end;
+ end;
+ if(SubStr(acc,1,2) == "41")
+  return true;
+ end;
+ if(SubStr(acc,1,2) == "42")
+  if((bal3 == "423") OR (bal3 == "426"))
+   return false;
+  else
+   return true;
+  end;
+ end;
+
+ return false;
+end;
+
+macro IzvGetDepartment()
+// 28.02.2007___11:59:02 Лобачева сказала, что нумерация будет сквозная
+ if(({Oper} >= 22) AND ({Oper} <= 25))
+  return 1; // Кунцево
+ else
+  return 1;
+ end;
+end;
+
+
+macro GetLastAccountNumPor()
+// Получает порядковый номер счета с начала года (для нового счета)
+ var yy, yy2;
+ var Dep = IzvGetDepartment();
+ datesplit({curdate},null,null,yy);
+ 
+ rewind(izv11);
+ ClearRecord(izv11);
+ izv11.Department = Dep;
+ izv11.Date = {curdate};
+ izv11.NumPor = 9999;
+ if(GetLE(izv11) AND (izv11.Department == Dep))
+  datesplit(izv11.Date,null,null,yy2);
+  if(yy == yy2) // Не перешли через год
+   return izv11.NumPor + 1;
+  end;
+ end;
+ return 1;
+end;
+
+macro GetAccountNumPor(acc)
+// Получает порядковый номер счета с начала года (для существующего счета). Если не найден такой счет - возвращает текущий порядковый
+ rewind(izv10);
+ ClearRecord(izv10);
+ izv10.Account = acc;
+ if(GetEQ(izv10) AND (izv10.Account == acc))
+  return izv10.NumPor;
+ else
+  return GetLastAccountNumPor();
+ end;
+end;
+
+
+macro izvGetNumBlank(NumPor, DateOpen, acc, iNumBlank)
+/* Формирует длинный номер бланка.
+   iNumBlank - для возврата интового номера сообщения о данном счете 
+*/
+ var s,yy,syy,s2;
+ s = String(NumPor);
+ while(strlen(s) < 6)
+  s = "0"+s;
+ end;
+ datesplit(DateOpen,null,null,yy);
+ syy = SubStr(String(yy),3,2); // В номере бланка участвуют последние 2 цифры года
+
+ s = "28670000"+syy+s+"/";
+
+ rewind(izv2);
+ ClearRecord(izv2);
+ izv2.Account = acc;
+ izv2.Num = 999;
+ if(GetLE(izv2) AND (izv2.Account == acc))
+  NumPor = izv2.Num + 1;
+ else
+  NumPor = 1;
+ end;
+ SetParm(3, NumPor);
+ s2 = String(NumPor);
+ while(strlen(s2) < 3)
+  s2 = "0"+s2;
+ end;
+
+ return s + s2;
+end;
+
+macro izvSetNumBlank(acc, Num, Comment, NumBlank)
+// Должна вызываться после успешной печати бланка 
+ rewind(izv2);
+ ClearRecord(izv2);
+ izv2.Account = acc;
+ izv2.Num = Num;
+ izv2.Date = date;
+ izv2.Time = time;
+ izv2.Oper = {oper};
+ izv2.Comment = Comment;
+ izv2.NumBlank = NumBlank;
+ if(not Insert(izv2))
+  MsgBox("Ошибка вставки в БД номеров бланков!");
+ end;
+end;
+
+
+macro SetNumPor(acc,numpor,NumBlank)
+ var Dep = IzvGetDepartment();
+ rewind(izv11);
+ ClearRecord(izv11);
+ izv11.Account = acc;
+ izv11.Date = {curdate};
+ izv11.NumPor = NumPor;
+ izv11.Department = Dep;
+ izv11.NumBlank = NumBlank;
+ izv11.Oper = {oper};
+ if(not Insert(izv11))
+  MsgBox("Ошибка вставки в БД порядковых номеров счетов!");
+ end;
+end;
+

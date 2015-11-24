@@ -1,0 +1,279 @@
+/*
+  Макрос импорта документов из системы "Контакт" и записи данных в структуру
+  contpaym.dbt (alex1.def)
+  Челбухов А.А. 18.10.2010
+*/
+
+
+file contpaym ("contpaym.dbt", "contact.def") key 0 write;
+file contact() txt;
+var myF1, i,myDate, myStr;
+//var {curdate}, {oper};
+var myFIO;
+myFIO = "";
+
+myDate 	= {curdate};
+myStr	= "";
+i = 0;
+
+
+
+macro GetMyDate(StrDate)
+// получаем дату из строки формата "ГГГГММДД"
+ StrDate = Trim(StrDate);
+  if (Strlen(StrDate) != 10)
+	myDate = Date(SubStr(StrDate,7,2)+"."+SubStr(StrDate,5,2)+"."+SubStr(StrDate,1,4));
+  else
+        myDate = Date(0,0,0);
+  end;
+ Return myDate;
+end;
+
+
+macro GetMyClientName();
+/*
+процедура получения ФИО клиента для заполнения поля списка
+если Bank_Payer = нашей точке Контакта, значит клиент - отправитель
+иначе - получатель
+*/
+// const myFilial = "TZJS";
+
+
+  if (myFilial == Trim(contpaym.Bank_Payer))
+  //клиент - отправитель
+	myFIO = contpaym.P_SurName;
+	  if (StrLen(Trim(contpaym.P_Name)) > 0)
+		  myFIO = myFIO +" "+Trim(contpaym.P_Name);
+	  end;
+
+	  if (StrLen(Trim(contpaym.P_MiddleName)) > 0)
+		  myFIO = myFIO +" "+Trim(contpaym.P_MiddleName);
+	  end;
+  else
+  //клиент - получатель
+	myFIO = contpaym.R_SurName;
+	  if (StrLen(Trim(contpaym.R_Name)) > 0)
+		  myFIO = myFIO +" "+Trim(contpaym.R_Name);
+	  end;
+
+	  if (StrLen(Trim(contpaym.R_MiddleName)) > 0)
+		  myFIO = myFIO +" "+Trim(contpaym.R_MiddleName);
+	  end;
+
+  end;
+ Return myFIO;
+end;
+
+
+
+
+macro AddRecordContact(contact)
+// процедура добавляет запись в базу contpaym.dbt
+
+  if ((myFilial != ToOEM(contact(4))) and (myFilial != ToOEM(contact(5))))
+        Msgbox("Это чужой перевод - файл не загружен");
+	Return;	
+  end;
+myStr = String (String(contact(0)) + contact(1));
+ClearRecord(contpaym);
+contpaym.Doc_ID = Trim(myStr);
+if (GetEQ (contpaym))
+	msgbox ("Данный перевод уже есть в базе данных!");
+else
+
+
+contpaym.Payment_Date 	= GetmyDate(contact(0));
+contpaym.Payment_Number = contact(1);
+
+if (contact(2) == "RUR")
+	contpaym.Currency = 0;
+elif (contact(2) == "USD")
+	contpaym.Currency = 840;
+elif (contact(2) == "EUR")
+	contpaym.Currency = 978;
+end;
+
+contpaym.Sum 		= Money (contact(3));
+contpaym.Bank_Payer 	= ToOEM(contact(4));
+contpaym.Bank_Receiver 	= ToOEM(contact(5));
+contpaym.P_SurName 	= ToOEM(contact(6));
+contpaym.P_Name 	= ToOEM(contact(7));
+contpaym.P_MiddleName 	= ToOEM(contact(8));
+contpaym.P_BirthDay 	= GetMyDate(contact(9));
+contpaym.P_Country	= ToOEM(contact(10));
+contpaym.P_Index	= ToOEM(contact(11));
+contpaym.P_Region	= ToOEM(contact(12));
+contpaym.P_City		= ToOEM(contact(13));
+contpaym.P_Address	= ToOEM(contact(14));
+contpaym.P_Phone	= ToOEM(contact(15));
+contpaym.P_Doc_Type	= ToOEM(contact(16));
+// для паспорта РФ убираем все пробелы, а потом делим в отношении 4-6
+if (contpaym.P_Doc_Type == "ПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ")
+contpaym.P_Doc_Num	= StrSubst(ToOEM(contact(17))," ","");
+contpaym.P_Doc_Num	= SubStr(contpaym.P_Doc_Num,1,4) + " " + SubStr(contpaym.P_Doc_Num,5,6);
+else
+contpaym.P_Doc_Num	= ToOEM(contact(17));
+end;
+contpaym.P_Doc_Date	= GetMyDate(contact(18));
+contpaym.P_Doc_Kem	= ToOEM(contact(19));
+contpaym.P_Doc_End_Date = GetMyDate(contact(20));
+contpaym.P_Country2	= ToOEM(contact(21));
+contpaym.P_Country_BirthDay	= ToOEM(contact(22));
+contpaym.P_City_BirthDay	= ToOEM(contact(23));
+contpaym.R_SurName	= ToOEM(contact(24));
+contpaym.R_Name		= ToOEM(contact(25));
+contpaym.R_MiddleName	= ToOEM(contact(26));
+contpaym.R_BirthDay	= GetMyDate(contact(27));
+contpaym.R_Country	= ToOEM(contact(28));
+contpaym.R_Index	= ToOEM(contact(29));
+contpaym.R_Region	= ToOEM(contact(30));
+contpaym.R_City		= ToOEM(contact(31));
+contpaym.R_Address	= ToOEM(contact(32));
+contpaym.R_Phone	= ToOEM(contact(33));
+contpaym.R_Doc_Type	= ToOEM(contact(34));
+// для паспорта РФ убираем все пробелы, а потом делим в отношении 4-6
+if (contpaym.R_Doc_Type == "ПАСПОРТ ГРАЖДАНИНА РОССИЙСКОЙ ФЕДЕРАЦИИ")
+contpaym.R_Doc_Num	= StrSubst(ToOEM(contact(35))," ","");
+contpaym.R_Doc_Num	= SubStr(contpaym.R_Doc_Num,1,4) + " " + SubStr(contpaym.R_Doc_Num,5,6);
+else
+contpaym.R_Doc_Num	= ToOEM(contact(35));
+end;
+contpaym.R_Doc_Date	= GetMyDate(contact(36));
+contpaym.R_Doc_Kem	= ToOEM(contact(37));
+contpaym.R_Doc_End_Date	= GetMyDate(contact(38));
+contpaym.Add_Info	= ToOEM(contact(39));
+contpaym.R_RealDoc_Type	= ToOEM(contact(40));
+contpaym.R_RealDoc_Num	= ToOEM(contact(41));
+contpaym.R_Account	= ToOEM(contact(42));
+contpaym.R_Type_Account	= ToOEM(contact(43));
+contpaym.Bank		= ToOEM(contact(44));
+contpaym.Filial		= ToOEM(contact(45));
+contpaym.Address_Bank	= ToOEM(contact(46));
+contpaym.Service_Code	= ToOEM(contact(47));
+contpaym.Rate		= contact(48);
+contpaym.Tax_Rur	= Money(contact(49));
+contpaym.Tax_Cur	= Money(contact(50));
+contpaym.Term_Number	= ToOEM(contact(51));
+contpaym.R_email	= ToOEM(contact(52));
+contpaym.P_Resident	= ToOEM(contact(53));
+contpaym.R_Resident	= ToOEM(contact(54));
+contpaym.P_Agent_Code	= ToOEM(contact(55));
+contpaym.Client_Tax_Currency	= ToOEM(contact(56));
+contpaym.Insert_Currency	= ToOEM(contact(57));
+contpaym.Insert_Sum	= Money(contact(58));
+contpaym.P_Country_Cit	= ToOEM(contact(59));
+contpaym.R_Country_Cit	= ToOEM(contact(60));
+contpaym.Tax_to_send	= Money(contact(61));
+contpaym.Tax_to_receive	= Money(contact(62));
+contpaym.Symb_cash_prihod	= ToOEM(contact(63));
+contpaym.Symb_cash_rashod	= ToOEM(contact(64));
+contpaym.P_Country_Filial	= ToOEM(contact(65));
+contpaym.R_Country_Filial	= ToOEM(contact(66));
+contpaym.Contact_Oper	= ToOEM(contact(67));
+contpaym.Cont_Status 	= contact(68);
+contpaym.RS_Account	= "";
+contpaym.RS_Account_status	= "нет счета";
+contpaym.RS_Client_code	= 0;
+contpaym.RS_Client_Name = GetMyClientName();
+//contpaym.RS_Open_Date		
+//contpaym.RS_Close_Date	
+contpaym.RS_Date_to_load	= Date();
+contpaym.RS_Time_to_load	= Time();
+contpaym.RS_Oper	= {Oper};
+
+ if (insert(contpaym));
+     msgbox ("Документ успешно загружен в базу данных");
+ else
+     msgbox ("Ошибка при записи в БД. Обратитесь к Администратору !!!");
+ end;
+end;
+OnError
+msgbox("Ошибка при загрузке файла. Обратитесь к администратору");
+end;             
+
+
+macro Import_contact()
+
+/*
+для примера
+   if (IsStandalone ())
+     Command = "copy /y "+DocDogStr+" "+DocDog2Str;
+     Run(GetEnv("COMSPEC"),"/c "+Command,null,null);
+   else
+     if(not lgServTerm (DocDogStr, DocDog2Str))
+       MsgBox("Не удалось скопировать | "+DocDogStr+ " в | "+DocDog2Str);
+       exit(1);
+     end;
+   end;
+*/
+
+var myArcDir, myF1, myF2, myName, myExt, myInputDir;
+var mySourceFile, myDestFile;
+
+
+   // готовим файл для загрузки - копируем в каталог S:\RS50\IN
+   if(IsStandAlone) /* Двухзвенка */
+	myArcDir = "C:\\Contact\\ARC\\";
+	myInputDir ="C:\\Contact\\";
+	myF1 = "C:\\Contact\\*.txt";
+
+   else
+
+	mySourceFile 	= "$C:\\Contact\\import.txt";
+	myDestFile	= "..\\In\\CNT\\contact" + {oper} + ".txt";
+
+	myF1 = "..\\In\\CNT\\contact" + {oper} + ".txt";
+
+	// копируем файл с удаленной машины оператора из C:\Contact
+	if ( CopyFile (mySourceFile, myDestFile, True, "...Копируется файл перевода Контакт..."))
+	    //Если копирование завершено успешно - удаляем исходный файл	
+		RemoveFile (mySourceFile);
+	else
+	    msgbox("Копирование не удалось");
+	end;
+   end;
+
+if(not SelectFile ( myF1, myF1,"Выберите файл системы \"Контакт\""));
+	return;
+//	exit(1);
+end;
+
+if (not open (contact, myF1))
+	println ("Не удалось открыть файл ", myF1);
+	exit (0);
+end;
+
+SetDelim ("\t", true);
+next(contact);
+AddRecordContact(contact);
+
+close (contact);
+
+//удаляем загруженный файл
+      if( ExistFile(myF1) )
+          if( GetTRUE(TRUE, "Удалить исходный файл ?") )
+
+	      //копируем в архив - только для двухзвенки
+	   if(IsStandAlone) /* Двухзвенка */
+	      SplitFile(myF1, myName, myExt);
+              myF2 = myArcDir+myName+myExt;
+//		msgbox(myF2);
+              if (NOT CopyFile (myF1, myF2))
+                  msgbox("Ошибка при копировании в архив - файл не удален");
+	      else
+	      //удаляем
+              DelFile(myF1);
+	      end;
+	   else
+              DelFile(myF1);
+	   end;
+
+	  end;
+      end;
+
+
+return;
+end;
+
+
+

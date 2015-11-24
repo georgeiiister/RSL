@@ -1,0 +1,676 @@
+/*
+Макрос формирования договоров по счетам для клиентов
+developer Polyakov S.George 14.09.2011
+*/
+
+import "..\\mac\\bfsofia\\ToWord.mac";
+import lgs;
+import BankInter;
+import ClnInter;
+
+file r_acc0(account,"bank.def") key 0;
+file r_accv0("account$","bank.def") key 0;
+file r_cln0(client,"bank.def") key 0;
+
+record cont (contcln,"..\\lbr\\bfsofia\\bfsofia1.lbr") dialog;
+
+var dbAccCln:btFileRef, //таблица лицевых счетов (нац. валюта и не нац.) или таблица клиентов
+    bY:bool,bWhat:bool,
+    sAccOld:string,  //храним что передал пользователь, при длине счета !=20
+    sPathDot:string, 
+    sTypeCln:string; //тип клиента Ю, Ф, ИП
+
+const 
+     I_VAL:integer=int(810), //константа национальной валюты
+     S_LOC_DIR:string="RSDOCS"; //папка для локального хранения щаблонов
+
+array 
+      arrDotO, //файлы шаблонов о
+      arrDotC, //файлы шаблонов з
+      arrCont, //данные для шаблонов
+      arrMenu, //основное меню
+      arrOpen, //документы для закрытия
+      arrClose, //документы для открытия
+      arrMenu2; //подписи
+//участок заполнения массивов с начальными установками
+ 
+arrDotO(1)="oContAcc.doc"; //договор счета
+arrDotO(2)="oZOpenAcc.doc"; //заявление на открытие 
+arrDotO(3)="oList.doc";
+arrDotO(4)="oCallNote.doc";
+arrDotO(5)="oFolder.doc";
+arrDotO(6)="oRasOZ.doc";
+arrDotO(7)="oCallOpenAcc.doc";
+
+arrDotC(1)="zZCloseAcc.doc"; 
+arrDotC(2)="zList.doc";
+arrDotC(3)="zCallCloseAcc.doc";
+//add Polyakov S.George 31.01.2012
+arrDotC(4)="zOrderCloseAcc.doc";
+arrDotC(5)="zCallCloseAccNotOperat.doc";
+//
+                               
+arrMenu(0)="<<Документы для ОТКРЫТИЯ банковского счета>>";
+arrMenu(1)="<<Документы для ЗАКРЫТИЯ банковского счета>>";
+
+arrOpen(0)="<<Полный комплект документов>>";
+arrOpen(1)="Договор банковского счета";
+arrOpen(2)="Заявление на открытие банковского счета";
+arrOpen(3)="Лист согласований на открытие счетов клиента";
+arrOpen(4)="Обращение к новому клиенту";
+arrOpen(5)="Обложка на папку (Юридическое дело)";
+arrOpen(6)="Распоряжение на закрепление счета за операционистом";
+arrOpen(7)="Уведомление об открытии счета";
+
+arrClose(0)="<<Полный комплект документов>>";
+arrClose(1)="Заявление на закрытие банковского счета";
+arrClose(2)="Лист согласований на закрытие счетов клиента";
+arrClose(3)="Уведомление о закрытие счета";
+//add Polyakov S.George 31.01.2012
+arrClose(4)="Распоряжение на закрытие счета";
+arrClose(5)="Уведомление о закрытие счета (При длительном неиспользовании)";
+//
+          
+bY=true;
+sAccOld="";
+sTypeCln="";
+bWhat=false;
+
+if (IsStandAlone)
+  sPathDot="\\\\SERVER-RS\\DISK_H\\RS431W69\\TEMPLS\\BFSOFIA\\OZACC\\";
+else
+  sPathDot="..\\TEMPLS\\BFSOFIA\\OZACC\\";
+end;
+
+//получение -хвостика- счета
+macro macAccLast(sAcc:string):string
+  var
+    iI:integer=int(1),
+    iL:integer;
+  if (trim(sAcc)!="")
+    if (StrLen(trim(sAcc))==20)
+      sAcc=SubStr(sAcc,14);
+      iL=StrLen(sAcc);
+      while (iI<=iL)
+        if (SubStr(sAcc,iI,1)!="0")
+          return SubStr(sAcc,iI);
+        else
+          iI=iI+1;
+        end;
+      end;
+    end;
+  end;
+  return sAcc;
+end;
+
+//макрос получения строки до "/" и после
+macro macGetOneT(sPam:string,bDo:bool):string
+//bDo-true строка до "/"
+//bDo-false строка после "/"
+  var
+    iT:integer;
+  iT=0;
+  iT=index(sPam,"/");
+  if (iT!=0)
+    if (bDo)
+      sPam=trim(SubStr(sPam,1,iT-1));  
+    else
+      sPam=trim(SubStr(sPam,iT+1));
+    end;
+  end;
+  return sPam
+end;
+
+//название месяца в родительном падеже
+macro macMonR(iM:integer):string
+  var
+    sR:string;
+  array aM;
+  sR="";
+  aM(0)="января";
+  aM(1)="февраля";
+  aM(2)="марта";
+  aM(3)="апреля";
+  aM(4)="мая";
+  aM(5)="июня";
+  aM(6)="июля";
+  aM(7)="августа";
+  aM(8)="сентября";
+  aM(9)="октября";
+  aM(10)="ноября";
+  aM(11)="декабря";
+  if ((iM>=1) and (iM<=12))
+    sR=aM(iM-1);
+  end;
+  return sR;
+end;
+
+//возврат значения Фамилия И.О. (Иванов Иван Иванович -> Иванов И.И.)
+macro macGetFamIO(sFIO:string):string
+  var
+    sR:string,
+    iC:integer,
+    iK:integer;
+  sR=sFIO;
+  iC=Index(sFIO," ");
+  if (iC!=0)
+    iK=Index(SubStr(sFIO,iC+1)," ");
+    if (iK!=0)
+      sR=SubStr(sFIO,1,iC-1);
+      sR=StrUpr(SubStr(sR,1,1))+StrLwr(SubStr(sR,2));
+      sR=sR+" "+StrUpr(SubStr(sFIO,iC+1,1));
+      sR=sR+". "+StrUpr(SubStr(SubStr(sFIO,iC+1),iK+1,1))+".";
+    end;
+  end;
+  return sR;
+end;
+
+//процедура возвращаяющая тип или ФИО ИПП/Главы КФХ/Адв. кабинет...
+macro macNoU(sName:string,bType):string
+//bType=0 return Тип
+//bType=1 return Фамилия И.О.
+  var 
+     iI:integer,
+     iCnt:integer,
+     sT:string,
+     sR:string;
+  array 
+      aName;
+  iCnt=int(0);
+  sR=sName;
+  sName=strlwr(sName);
+  iI=int(0);
+  aName(0)="индивидуальный предприниматель";
+  aName(1)="инд. предпр-ль";
+  aName(2)="инд пр-ль";
+  aName(3)="инд. пр-ль";
+  aName(4)="ичп ";
+  aName(5)="пбюл";
+  aName(6)="ип ";
+  aName(7)="нотариус";
+  aName(8)="глава кфх";
+  aName(9)="глава крестьянского (фермерского) хозяйства";
+  while (iCnt<asize(aName))
+    iI=index(sName,aName(iCnt));
+    if (iI>0)
+      if (bType)
+        if (trim(StrSubst(sName,iI+StrLen(aName(iCnt)+1),1))=="") //Праверка на пробел после типа
+          sR=Substr(sName,iI+StrLen(aName(iCnt)+1));
+        end;
+      else
+        sR=Substr(sName,iI,StrLen(aName(iCnt)));
+        sR=StrUpr(Substr(sR,1,1))+StrLwr(Substr(sR,2));
+      end;
+      iCnt=asize(aName);
+    else
+      iCnt=iCnt+1;
+    end;
+  end;
+  return sR;
+end;
+  
+//формирование фактического адреса
+macro macGetFactAddr(iClient):string
+  var 
+    sAddr:string;
+  file r_cln11(clients1,"sofia.def") key 0; 
+  sAddr="";
+  rewind(r_cln11);
+  r_cln11.Client=iClient;
+  if (geteq(r_cln11))
+    sAddr=trim(r_cln11.FactAddrRegion);
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrRaion),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrTown),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrNas),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrIndex),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrStreet),", , ",", ");
+    if (trim(r_cln11.FactAddrHouse)!="")
+      sAddr=sAddr+", д. "+trim(r_cln11.FactAddrHouse);
+    end;
+    if (trim(r_cln11.FactAddrKorpus)!="")
+      sAddr=sAddr+", корпус "+trim(r_cln11.FactAddrKorpus);
+    end;
+    if (trim(r_cln11.FactAddrStr)!="")
+      sAddr=sAddr+", строение "+trim(r_cln11.FactAddrStr);
+    end;
+    if (trim(r_cln11.FactAddrKvart)!="")
+      sAddr=sAddr+", кв. "+trim(r_cln11.FactAddrKvart);
+    end;  
+  end;
+  return sAddr;
+end;
+
+//формирование юридического адреса
+macro macGetUrAddr(iClient):string
+  var 
+    sAddr:string;
+  file r_cln11(clients1,"sofia.def") key 0; 
+  sAddr="";
+  rewind(r_cln11);
+  r_cln11.Client=iClient;
+  if (geteq(r_cln11))
+    sAddr=trim(r_cln11.FactAddrRegion);
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrRaion),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrTown),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrNas),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrIndex),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrStreet),", , ",", ");
+    if (trim(r_cln11.UrAddrHouse)!="")
+      sAddr=sAddr+", д. "+trim(r_cln11.UrAddrHouse);
+    end;
+    if (trim(r_cln11.UrAddrKorpus)!="")
+      sAddr=sAddr+", корпус "+trim(r_cln11.UrAddrKorpus);
+    end;
+    if (trim(r_cln11.UrAddrStr)!="")
+      sAddr=sAddr+", строение "+trim(r_cln11.UrAddrStr);
+    end;
+    if (trim(r_cln11.UrAddrKvart)!="")
+      sAddr=sAddr+", кв. "+trim(r_cln11.UrAddrKvart);
+    end;
+  end;
+  return sAddr;
+end;
+
+//формирование меню
+macro macRetMenu(arrMen:arrayref,sDown:string,sTop:string):integer
+  var
+     iK:integer;
+     iK=-1;
+  iK=menu(arrMen,sDown,sTop);
+  return iK;
+end;
+
+//формирование подписи
+macro macSign():string
+  var
+     iK:integer,
+     sR:string;
+  sR="";
+  //формируем меню для пользователей
+  arrMenu2(0)="Управляющий/Солодских Г.Н.";
+  arrMenu2(1)="Заместитель управляющего/Садовова Л.А.";
+  iK=-1;
+  iK=macRetMenu(arrMenu2,"Выбор","Подпись за банк");
+  if (iK>=0)
+    sR=arrMenu2(iK);
+  end;
+  return sR;
+end; 
+
+//Поиск счета
+macro macGetAccCln(sAcc:string,iClient:string,bWhat:bool):integer
+//bWhat==false - поиск по номеру счета
+//bWhat==true - поиск по номеру клиента
+  var  
+     iR:integer,  //всегда вернет iR=int(?)
+     iVal:integer;
+  iR=int(0);
+  if (bWhat)
+    if (iClient==0)
+     getint(iClient,"Укажите код клиента!");
+    end;
+    if (iClient!=0)
+      if (iClient>0)
+        dbAccCln=r_cln0;
+        rewind(dbAccCln);
+        dbAccCln.client=iClient;
+        if (geteq(dbAccCln))
+          iR=dbAccCln.Client;
+        else
+          MsgBox("Клиент не найден")
+        end;
+      else
+        msgbox("Код клиента не может быть меньше или равен нулю!");
+      end;
+    end; 
+  else
+    sAcc=trim(sAcc);
+    if (sAcc=="")
+      if (strLen(sAccOld)>=1)
+        sAcc=sAccOld;
+      end;
+      getstring(sAcc,"Введите номер счета",20);
+    end;
+    if (strlen(sAcc)>=1)
+      if (strlen(sAcc)==20)
+        dbAccCln=r_acc0;
+        iVal=substr(sAcc,6,3);
+        if (iVal!=I_VAL)
+          dbAccCln=r_accv0;
+        end;
+        //что-то ищем
+        rewind(dbAccCln);
+        dbAccCln.account=sAcc;
+        dbAccCln.Code_Currency=iVal;
+        if (geteq(dbAccCln))
+          iR=dbAccCln.client;
+        else
+          msgbox("Счет не найден!");
+        end;
+      else
+        sAccOld=sAcc;
+        msgbox("Неверная длина счета!");
+      end;
+    end;
+  end;
+  return iR; //iR=0 счет/клиент не найден или отмена пользователем
+end;
+
+//Формирование массива со значениями
+macro macSetArr(sSign:string):bool
+  file r_cln0(client,"bank.def") key 0;
+  file r_cln30(clients3,"sofia.def") key 0;
+  file r_cln10(clients1,"sofia.def") key 0;
+  var 
+     bN:bool,
+     iD:integer,
+     iM:integer,
+     {Name_Bank},
+     iY:integer;
+  bN=false;
+  rewind(r_cln0);
+  r_cln0.Client=dbAccCln.Client;
+  if (geteq(r_cln0))
+    sTypeCln=r_cln0.szUserType; //тип клиента
+    arrCont(0)=string(dbAccCln.Client); //код клиента = номер договора (см. исх. код ниже)
+    if (not bWhat)
+      DateSplit(dbAccCln.Open_Date,iD,iM,iY);  //дата открытия счета
+    else
+      DateSplit(dbAccCln.bdStartDate,iD,iM,iY); //дата принятия клиента на обслуживание
+    end;
+    arrCont(1)=string(iD); //день открытия счета/начала обслуживания клиента
+    if (StrLen(arrCont(1))==1)
+      arrCont(1)="0"+arrCont(1);
+    end;   
+    arrCont(2)=macMonR(iM); //месяц прописью открытия счета/начала обслуживания клиента
+    arrCont(3)=string(iY); //год открытия счета//начала обслуживания клиента
+    arrCont(4)=trim(r_cln0.Name_Client);  //полное наименование клиента
+    if (not bWhat)
+      arrCont(5)=trim(dbAccCln.Account); //номер счета или " " если по клиенту
+    else
+      arrCont(5)="_____________________________";
+    end;
+    arrCont(26)=macAccLast(arrCont(5)); //-хвост- счета для папок
+    arrCont(27)={Name_Bank};
+    arrCont(6)=macGetUrAddr(dbAccCln.Client); //юридический адрес
+    arrCont(7)=macGetFactAddr(dbAccCln.Client); //фактический адрес
+    arrCont(8)=GetClientInn(dbAccCln.Client); //ИНН
+    rewind(r_cln10);
+    r_cln10.Client=dbAccCln.Client;
+    if (geteq(r_cln10))
+      arrCont(9)=trim(r_cln10.GosRegNum); //ОГРН
+      arrCont(10)=string(r_cln10.RegDate); //Дата регистрации
+      arrCont(11)=trim(r_cln10.bdCharterPlace); //место регистрации
+      arrCont(12)=trim(r_cln10.Email); //E-mail
+      arrCont(20)=trim(r_cln10.KPP); //KПП
+	//+++++++++++++++++++++++++++++++++++
+	//add Polyakov S. George 07.02.2012
+	//в связи с объединением филиалов замена номера договора (кода клиента)
+	//на специальное поле в структуре clients1 voc sofia.def
+	//если поле заполнено, то проставляется, иначе используется константа
+	if (StrLen(trim(r_cln10.DOGNum))>0)
+	  arrCont(0)=trim(r_cln10.DOGNum); //код клиента = номер договора
+	else
+	  arrCont(0)="НЕ УКАЗАН !!!";
+      end;
+	//+++++++++++++++++++++++++++++++++++
+    else
+      arrCont(9)="";  //ОГРН
+      arrCont(10)=""; //Дата регистрации
+      arrCont(11)=""; //место регистрации
+      arrCont(12)=""; //E-mail
+      arrCont(20)=""; //KПП
+    end;
+    rewind(r_cln30);
+    r_cln30.Client=dbAccCln.Client;
+    if (geteq(r_cln30))
+      arrCont(13)=trim(r_cln30.szPhoneNumber); //телефон 1
+      arrCont(14)=trim(r_cln30.szPhoneNumber2);//телефон 2
+      arrCont(15)=trim(r_cln30.szTelexNumber); //факс
+      if (index(strUpr(sTypeCln),"Ю")>0)
+        arrCont(16)=StrUpr(SubStr(trim(r_cln30.szFace1Post),1,1))
+                    +StrLwr(SubStr(trim(r_cln30.szFace1Post),2)); //должность первого лица
+        arrCont(17)=macGetFamIO(trim(r_cln30.szFace1)); //Фамилия И.О. первого лица
+        arrCont(29)="Руководителю "+r_cln30.ShortName;
+        arrCont(30)=StrUpr(SubStr(trim(r_cln30.szFace2Post),1,1))
+                    +StrLwr(SubStr(trim(r_cln30.szFace2Post),2)); //должность второго лица
+        arrCont(31)=macGetFamIO(trim(r_cln30.szFace2)); //Фамилия И.О. второго лица 
+      else
+        arrCont(16)="";
+        arrCont(17)="";
+        arrCont(29)=arrCont(4);
+        arrCont(30)="";
+        arrCont(31)="";
+      end;
+    else
+      arrCont(13)=""; //телефон 1
+      arrCont(14)=""; //телефон 2
+      arrCont(15)=""; //факс
+      arrCont(16)=""; //должность первого лица
+      arrCont(17)=""; //ФИО первого лица
+    end;
+    arrCont(18)=GetClientWeb(dbAccCln.Client); //http
+    arrCont(19)=macGetOneT(sSign,false); //подпись от банка
+    if (arrCont(20)=="0")
+      arrCont(20)="";
+    else
+      arrCont(20)="КПП "+arrCont(20);
+    end;
+    arrCont(23)=macGetOneT(sSign,true); //должность подписи за банк
+    bN=true;
+  end;
+  return bN;
+end;
+
+//замена текста в открытом документе
+macro macReplace(obW:object,fnd:string,rep:string)
+  obW.FindAndReplace(fnd,rep);
+end;
+
+//передача значений для замены
+macro macGetArr(obW:object,arrVal:arrayref)
+  var
+     iC:integer;
+
+  iC=aSize(arrVal);
+  while((iC-1)>=0)
+    macReplace(obW,"##"+string(iC-1)+"##",arrVal(iC-1));
+   iC=iC-1;
+  end
+end;
+
+//обработка шаблона
+macro macToW(sPath:string)
+  var 
+     obW:ToWord;
+  if (ValType(sPath)==V_STRING)
+    if (sPath!="");
+      obW.CreateWordDocument(sPath,true); //сначала не визуализируем
+      macGetArr(obW,arrCont);
+      obW.ShowDocument;
+    end;
+  end;
+end;
+
+//макрос работы с меню
+macro macDlg(cont:StrucRef,cmd:integer,id:integer,key:integer)
+  var
+     sMes:string,
+     sD:string,
+     sN:string;
+     sMes="~F9~-сформировать документы ~ESC~-отменить";
+     sD="";
+     sN="";
+  if (cmd==DLG_INIT)
+    //начальная инициализация
+      message(sMes);
+      cont.f0=arrCont(0);
+      cont.f1=arrCont(1);
+      cont.f2=arrCont(2);
+      cont.f3=arrCont(3);
+      cont.f4=arrCont(4);
+      cont.f5=arrCont(5);
+      cont.f6=arrCont(6);
+      cont.f7=arrCont(7);
+      cont.f8=arrCont(8);
+      cont.f9=arrCont(9);
+      cont.f10=arrCont(10);
+      cont.f11=arrCont(11);
+      cont.f12=arrCont(12);
+      cont.f13=arrCont(13);
+      cont.f14=arrCont(14);
+      cont.f17=strlwr(arrCont(16))+" "+arrCont(17);
+      cont.f20=arrCont(20);
+      updatefields(cont);
+  elif (cmd==DLG_SAVE)
+    //сохранения значений
+    if (index(strUpr(sTypeCln),"Ю")>0)
+      if (trim(cont.f17)=="")
+        msgbox("Заполните поле должность и " +
+               "ФИО руководителя в родительном падеже!");
+        return CM_CANCEL;
+      else
+        if (trim(cont.f17)==strlwr(arrCont(16))+" "+arrCont(17))
+          if (
+              gettrue(false,"Вы не изменили должность и ФИО руководителя! " +
+                            "Хотите все равно продолжить?")
+             )
+          else
+            return CM_CANCEL;
+          end;
+        end;
+        arrCont(21)="в лице "+trim(cont.f17); //дописываем в родительном падеже
+        arrCont(22)="действующего на основании устава";
+        arrCont(24)="";
+        arrCont(25)=arrCont(4);
+        arrCont(28)=arrCont(25);
+      end;
+    elif (index(StrUpr(sTypeCln),"ФИ")>0)
+      //если не Юридическое Лицо, а ИП
+      arrCont(21)="";
+      arrCont(22)="действующий на основании свидетельства";
+      sD=macNoU(arrCont(4),false);
+      sN=macGetFamIO(macNoU(arrCont(4),true));
+      if ((sD==arrCont(4)) or (sN==arrCont(4)))
+        if (
+            gettrue(false,"Ошибка в указании наименования клиента как ИП!"+
+                    " Продолжить формирование документов?")
+           )
+          return CM_CANCEL;
+        end;
+      end;
+      arrCont(16)=sD;
+      arrCont(17)=sN;
+      arrCont(24)=strupr(sD); // ИП
+      arrCont(25)=strupr(macNoU(arrCont(4),true)); // ФИО ИП
+      arrCont(28)="";
+    else
+    //скорее всего ФЛ
+    arrCont(21)="";
+    arrCont(22)="";
+    arrCont(16)="";
+    arrCont(17)=macGetFamIO(arrCont(4)); //Фио ФЛ
+    arrCont(24)="";
+    arrCont(25)=arrCont(4);
+    arrCont(28)="";
+    end;
+  elif (cmd==DLG_DESTROY)
+  elif (cmd==DLG_KEY)
+    if (key==27) //esc
+       if (not (gettrue(false,"Хотите прервать формирование документов?")))
+         return CM_IGNORE; 
+       end;
+    end;
+  end;
+end;
+
+//основной макрос управления
+macro macMain(sAcc:string,iClient:integer) 
+//при возможности переделать передачу параметров, что бы скрыть 
+//меню выбора типа поиска, а точно передавать тип в параметре
+//при поиске по коду клиента заполняются только реквизиты клиента
+//так как у одного клиента может быть несколько счетов
+//для работы со счетом необходимо указать именно НОМЕР СЧЕТА
+  var 
+     iK:integer,
+     sTop:string,
+     sDown:string,
+     sSign:string;
+
+  array arrTmp;
+
+  sTop="";
+  sDown="";
+  sSign="";
+  while (bY)
+    arrTmp(0)="Известен НОМЕР СЧЕТА";
+    arrTmp(1)="Известен КОД клиента";
+    iK=macRetMenu(arrTmp,"Выбор критерия поиска","Сделайте выбор:");
+    if (iK>=0)
+      bWhat=false;
+      bWhat=iK;
+      asize(arrTmp,0);
+      iK=int(0);
+      if (macGetAccCln(sAcc,iClient,bWhat)>0)
+        //*****************
+        iK=macRetMenu(arrMenu,"Выбор категории","Категория документов");
+        if (iK>=0)
+          sDown="Выбор документов";
+          sTop="ОТКРЫТИЕ БАНКОВСКОГО СЧЕТА";
+          if (iK==0)
+            iK=-1;
+            iK=macRetMenu(arrOpen,sDown,sTop);
+            if (iK>=0)
+              arrTmp=arrDotO;
+           end;
+          elif (iK==1)
+            sTop="ЗАКРЫТИЕ БАНКОВСКОГО СЧЕТА";
+            iK=-1;
+            //закрытие
+            iK=macRetMenu(arrClose,sDown,sTop);
+            if (iK>=0)
+              arrTmp=ArrDotC;
+            end;
+          end;
+          if ((asize(arrTmp)>0) and (iK>=0))
+            //если iK==0 - полный комплект документов
+            sSign=macSign();
+            if (sSign!="")
+              if (macSetArr(sSign))
+                if (asize(arrCont)>0)
+                  if (RunDialog(cont,"macDlg")) //запускаем меню и ждем реакции
+                    if (iK==0)
+                      while ((iK+1)<asize(arrTmp))
+                        iK=iK+1;
+                        macToW(macCopyDot(sPathDot,arrTmp(iK),S_LOC_DIR));
+                      end;
+                    else
+                      //неочень изящно, так как повтор, потом продумать
+                      macToW(macCopyDot(sPathDot,arrTmp(iK),S_LOC_DIR));
+                    end;
+                  end;
+                else
+                  msgbox("Ошибка! Массив значений для шаблона пустой!");
+                end;
+              else
+                msgbox("Ошибка формирования массива данных для замены в шаблоне");
+              end;
+            end;
+          end;
+        end;
+        bY=false;
+      else
+        if (not gettrue(true,"Формирование документов не выполнено! "+
+                           "Хотите продолжить?")
+           )
+          bY=false;
+        end;
+      end;
+    else
+      bY=false;
+    end;
+  end;
+  exit(1);
+end;
+
+//macMain("",0);

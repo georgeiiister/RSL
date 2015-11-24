@@ -1,0 +1,209 @@
+file  snd5 (nal_izv,  "sofia.def") key 5;
+file  tax  (taxrecvs) key 0;
+file  soun ("..\\OBJ\\soun1.dbf") DBF;
+
+file d ("..\\Nalogi\\nal_izv.dbf") DBF write;
+file tmp ("sountmp.txt") TXT write;
+
+array Dep;                
+Dep(0)  = "АКБ СОФИЯ (ЗАО)";
+Dep(1)  = "ДОПЛОЛНИТЕЛЬНЫЙ ОФИС";
+
+macro EdStr(InStr,FStr,CStr)
+// MsgBox("!");
+ N1 = 1;
+ OuStr = "";
+ while(N1 <= StrLen(InStr))
+   if(Index(SubStr(InStr,N1,1),FStr) > 0)
+      OuStr = OuStr + CStr;
+   else
+      OuStr = OuStr + SubStr(InStr,N1,1);
+   end;
+   N1 = N1 + 1;
+ end;
+ return OuStr;
+end;
+
+macro NameF(kpp)
+   KPPStr = kpp;
+   nF = "";
+   rewind(soun);
+   flagSOUN = true;
+   iSoun = 0;
+   SetDelim(",");
+   while((next(soun)) AND flagSoun)
+    iSoun = iSoun + 1;
+    message(iSoun);
+    if((Trim(String(Soun.KOD)) == SubStr(KPPStr,1,4)) AND (Trim(Soun.DATAK) == ""))
+     nF = Soun.NAIMK;
+     flagSoun = false;
+    end;
+   end;
+   return nF;
+end;
+
+
+macro AdrF(kpp)
+   /* Обработка справочника СОУН */
+   KPPStr = kpp;
+   addrF = "";
+   rewind(soun);
+   flagSOUN = true;
+   iSoun = 0;
+   SetDelim(",");
+   while((next(soun)) AND flagSoun)
+    iSoun = iSoun + 1;
+    message(iSoun);
+    if((Trim(String(Soun.KOD)) == SubStr(KPPStr,1,4)) AND (Trim(Soun.DATAK) == ""))
+     tmp.str = Soun.Adres;
+//     addrF = addrF + tmp(1);
+//     addrF = addrF + tmp(2);
+//     addrF = addrF + tmp(3);
+//     addrF = addrF + tmp(4);
+//     addrF = addrF + tmp(5);
+//     addrF = addrF + tmp(6);
+//     addrF = addrF + tmp(7);
+//     addrF = addrF + tmp(8);
+//     addrF = addrF + tmp(9);
+     addrF = Soun.Adres;
+     if(SubStr(Trim(addrF),1,1) == ",")
+       addrF = SubStr(addrF,2,StrLen(Trim(addrF)));
+     end;
+     flagSoun = false;
+    end;
+   end;
+   return addrF;
+end;
+
+
+macro PrnBlank(dpr,acc,dch,snn)
+ flag = 0;
+ rewind(snd5);
+ ClearRecord(snd5);
+ snd5.Departament = dpr;
+ snd5.Account     = acc;
+// snd5.Date_Change = dch;
+// snd5.Type_Change = "";
+// snd5.Oper        = 0;
+//MsgBox("!");
+ flag = (GetGE(snd5));
+ if(flag)
+   while(flag)
+     if(snd5.Account == acc)
+        if((StrLen(Trim(snd5.Send_Numb)) == StrLen(Trim(snn))) And (Index((Trim(snd5.Send_Numb)),(Trim(snn))) > 0))
+         if((snd5.Type_Change == "0") Or (snd5.Type_Change == "2"))
+//        MsgBox("",snd5.ID," ",snd5.Send_Numb);
+          d.numsend  = snd5.NumSend;
+//          d.namenob  = "МИФНС России N 50 по г. Москве";
+          d.namenob  = NameF(snd5.KPPBank);
+          d.codenob  = snd5.CodeNal;
+          d.adrnob   = AdrF(snd5.KPPBank);
+//          d.adrnob   = "125373,Москва г,, Походный проезд, 3,А";
+          d.nameko   = snd5.NameBank;
+          d.adrko    = snd5.AdrBank;
+          d.regnumko = snd5.RegNumBank;
+          if(StrLen(Trim(snd5.FilNum)) == 0)
+            d.numfil   = "0000"
+          else
+            d.numfil   = snd5.FilNum;
+          end;
+          d.bic      = snd5.BIC;
+          d.innko    = snd5.INNBank;
+          d.kppko    = snd5.KPPBank;
+          d.ogrnko   = snd5.OGRNBank;
+          d.namenp   = snd5.CltName;
+          if((StrLen(Trim(snd5.GosReg)) == 1) And (Index(Trim(snd5.GosReg),",")>0))
+            d.svidgrnp = "";
+          else
+            d.svidgrnp = snd5.GosReg;
+          end;
+          if((StrLen(Trim(snd5.SvedNU)) == 1) And (Index(Trim(snd5.SvedNU),",")>0))
+            d.svidnunp = "";
+          else
+            d.svidnunp = snd5.SvedNU;
+          end;
+          d.innnp    = snd5.inn;
+          d.kppnp    = snd5.CltKPP;
+          d.ogrnnp   = snd5.CltOGRN;
+          if(snd5.Type_Change == "0")
+            d.zakldog  = "X"; //String(snd5.DateDog);
+            d.rastdog  = "";
+            d.openacc  = "X";
+            d.closeacc = "";
+          elif(snd5.Type_Change == "2")
+            d.zakldog  = "";
+            d.rastdog  = "X"; //String(snd5.DateDog);
+            d.openacc  = "";
+            d.closeacc = "X";
+          end;
+          if(snd5.CodeCurr == "0")
+            d.ruracc   = "X";
+            d.curacc   = "";
+          elif(snd5.CodeCurr == "1")
+            d.ruracc   = "";
+            d.curacc   = "X";
+          end;
+          d.typeacc    = snd5.VidAccount;
+          d.dateacc    = String(snd5.DateAccount);
+          d.numdog     = snd5.NumDog;
+          d.account    = snd5.Account;
+          d.wrksender  = snd5.WrkCreator;
+          d.fiosender  = EdStr(snd5.FIOSender,","," ");
+//          d.fiosender  = snd5.FIOSender;
+          d.dates      = String(snd5.DateSoob);
+          tpko         = "";
+          tpko         = EdStr(snd5.TPBank,"-","");
+          tpko         = EdStr(tpko,"(","");
+          d.tpko       = EdStr(tpko,")","");
+//          d.tpko       = snd5.TPBank;
+          d.datedog    = snd5.DateDog;
+          insert(d);
+
+          close(d);
+          if(IsStandAlone) /* Двухзвенка */
+             Run(GetEnv("COMSPEC"),"/c mycopy.bat ..\\Nalogi\\nal_izv.dbf",null,null);
+//             Run(GetEnv("COMSPEC"),"/c start excel.exe c:\\RSDocs\\nal_izv.dbf",null,null);
+//             MsgBox("Данные готовы!!!");
+             Run(GetEnv("COMSPEC"),"/c mycopy.bat ..\\Nalogi\\nalog_oz.xls",null,null);
+             Run(GetEnv("COMSPEC"),"/c start c:\\RSDocs\\nalog_oz.xls",null,null);
+          end;
+         end;
+        flag = 0;
+        end;
+     else
+        flag = 0;
+     end;
+     next(snd5);
+   end;
+ end;
+end;
+
+macro main()
+ if(not open(d,"..\\Nalogi\\nal_izv.dbf"))
+    MsgBox("Не могу открыть dbf-файл! Возможно, уже запущен Word!");
+    exit(1);
+ end;
+ rewind(d);
+ while(next(d))
+   delete(d);
+ end;
+
+ Departament = 0;
+ Menu_Change = menu(Dep);
+ if(Menu_change == 0)
+     Departament = 1; //"АКБ СОФИЯ (ЗАО)"
+ elif(Menu_change == 1)
+     Departament = 2; //"ДОПЛОЛНИТЕЛЬНЫЙ ОФИС"
+ end;
+ Account   = "0000000000000000";
+ GetString(Account,"Введите номер СЧЕТА",20);
+// DateCh    = {curdate};
+// GetDate(DateCh,"Введите ДАТУ ИЗМЕНЕНИЯ",10);
+ SendNum   = "001";
+ GetString(SendNum,"Введите номер СООБЩЕНИЯ о данном счете",3);
+ SendNum   = String(Int(SendNum));
+
+ PrnBlank(Departament,Account,DateCh,SendNum);
+end;
+
+main();

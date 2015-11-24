@@ -1,0 +1,8 @@
+/*
+Макрос работы с макропрограммами из 322lib.mac и 322elib.mac
+developer Polyakov S.George 24.02.2010
+*/
+import "..\\mac\\bfsofia\\322lib.mac";
+import "..\\mac\\bfsofia\\322elib.mac";
+
+macMain("",false,false);

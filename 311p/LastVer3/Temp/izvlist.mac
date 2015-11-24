@@ -1,0 +1,55 @@
+/* */
+
+import globals;
+
+file  izv (nal_out,"sofia.def") key 0 write;
+
+array Open_change;                
+Open_change(0)  = "’Š›’ˆ… ‚ƒ ‘—…’€";
+Open_change(1)  = "’Š›’ˆ… ‘—…’€ ˆ ˆ‡Œ……ˆˆ Œ…€ ‘—…’€";
+array Close_change;                
+Close_change(0)  = "‡€Š›’ˆ… ‘—…’€";
+Close_change(1)  = "‡€Š›’ˆ… ‘—…’€ ˆ ˆ‡Œ……ˆˆ Œ…€ ‘—…’€";
+
+macro WriteBase_NalOut(acc, clt, typechange, dateoper, operator)
+        AccSm = "";
+        if (typechange == 2)
+	 Menu_change = menu(Open_change);
+         if(Menu_change == 0)
+          typechange = 0;		//âªàë«¨ 
+         elif(Menu_change == 1)
+          typechange = 10;		//âªàë«¨ ¢§ ¬¥­ ‘’€ƒ ‘—…’€
+	  GetString(AccSm, "‚¢¥¤¨â¥ ‘’€›‰ ‘—…’", 20);
+	 end;
+	end;
+        if (typechange == 3)
+	 Menu_change = menu(Close_change);
+         if(Menu_change == 0)
+          typechange = 2;		//‡ ªàë«¨
+         elif(Menu_change == 1)
+          typechange = 12;		//‡ ªàë«¨ ¯®á«¥ ®âªàëâ¨ï ‚ƒ ‘—…’€
+	  GetString(AccSm, "‚¢¥¤¨â¥ ‚›‰ ‘—…’", 20);
+         end;
+        end;
+	clearrecord(izv);
+	izv.Account = acc;
+	izv.Client  = clt;
+	izv.Type_Change = typechange;
+	izv.Date_Change = dateoper;
+	izv.Code_Currency = SubStr(acc,6,3);
+	izv.Balance = SubStr(acc,1,5);
+	izv.Oper = operator;
+	if((operator == 22) or
+           (operator == 23) or
+           (operator == 24) or
+           (operator == 25) 
+	  )
+	  izv.Departament = 2;
+	else
+	  izv.Departament = 1;
+	end;
+	izv.Account_SM = AccSm;
+	insert(izv);
+	close(izv);
+end;
+

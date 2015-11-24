@@ -1,0 +1,176 @@
+/* Макрос для загрузки данных со сканера BiPrint, выгруженных программной
+   в файл формата R-макет
+   Автор - Несвижский Кирилл 26.03.2002
+   BiPrint установлен на компьютере в оперзале у Улановой Светы
+   в каталоге C:\biprintb
+
+   21.05.2003 Кир переделано под новый формат платежки (с налоговыми полями)
+              вступающий в силу 01.06.2003
+   */              
+
+import BankInter;
+
+
+file post (postdoc) key 0 write;
+
+file f ("C:\\BP01TAXB\\EXPORT\\bprmak.r") txt;
+
+array acc, accsum;
+
+var N, Sum, i, flag, Rest, Acci;
+var str,{curdate};
+var Сумма;
+
+N = 0;
+Sum = 0;
+
+rewind(f);
+while(next(f))
+
+ ClearRecord(post);
+ post.Oper = 216;
+ post.Result_Carry = 113; /* BiPrint */
+
+
+ post.Numb_Document = trim(f.str);
+ next(f);
+ post.Date_Document = {curdate};
+/*		      date(int( substr( f.str, 7, 2 ) ),
+                           int( substr( f.str, 5, 2 ) ),
+                           int( substr( f.str, 1, 4 ) )  );*/
+ post.Date_Value = {curdate};
+ post.Pay_Date =  date(int( substr( f.str, 7, 2 ) ),
+                           int( substr( f.str, 5, 2 ) ),
+                           int( substr( f.str, 1, 4 ) )  );
+
+ next(f);
+ if(StrLwr(trim( f.str)) == "электронно")
+  post.UserTypeDocument = "Э";
+ else
+  post.UserTypeDocument = "П";
+ end;
+ next(f);
+ post.Account_Payer = trim(f.str);
+ next(f);
+ post.OKPO_Payer = trim(f.str);
+ next(f);
+ post.KPP_Payer = trim(f.str);
+ next(f);
+ post.Payer = Trim(f.str);
+ next(f);
+ post.MFO_Payer = "";
+ next(f);
+ post.CorAcc_Payer = "";
+ next(f);
+ post.Bank_Payer = GetBankName( "046359826", "30101810600000000826" );
+ post.Real_Payer = post.Account_Payer;
+
+ next(f);
+ post.Account_Receiver = trim(f.str);
+ next(f);
+ post.OKPO_Receiver = trim(f.str);
+ next(f);
+ post.KPP_Receiver = trim(f.str);
+ next(f);
+ post.Receiver = Trim(f.str);
+ next(f);
+ post.MFO_Receiver = Trim(f.str);
+ next(f);
+ post.CorAcc_Receiver = Trim(f.str);
+ next(f);
+ post.Bank_Receiver = GetBankName( post.MFO_Receiver, post.CorAcc_Receiver );
+ if ((post.MFO_Receiver == "000000000") OR (post.MFO_Receiver == "046359826"))
+  post.MFO_Receiver = "";
+  post.CorAcc_Receiver="";
+  post.Real_Receiver = post.Account_Receiver;
+  post.Number_Pack = 2;
+ else
+  if(post.CorAcc_Receiver == "00000000000000000000")
+   post.CorAcc_Receiver = "";
+  end;
+  post.Real_Receiver = "30101810600000000826";
+  post.Number_Pack = 507;
+ end;
+
+ next(f);
+ Сумма = trim(f.str);
+ post.Sum = money( double( Сумма ) * 1,00);
+ next(f);
+ post.Kind_Oper = trim(f.str);
+ post.Shifr_Oper = post.Kind_Oper;
+ post.Symbol_Cach = "  0";
+ post.SymbNotBal  = "  0";
+
+ next(f);
+ next(f);
+ next(f);
+
+ post.Payment = int(trim(f.str));
+
+ next(f);
+ next(f);
+ next(f);
+ next(f);
+
+ post.ComposerStatus = trim(f.str);
+ next(f);
+ post.BudjClassifCode = SubStr(trim(f.str),1,20);
+/* post.BudjClassifCode2 = SubStr(trim(f.str),20,1);*/
+ next(f);
+ post.OKATO = trim(f.str);
+ next(f);
+ post.TaxGround = trim(f.str);
+ next(f);
+ post.TaxPeriod = trim(f.str);
+ next(f);
+ post.TaxNumber = trim(f.str);
+ next(f);
+ post.TaxDate = trim(f.str);
+ next(f);
+ post.TaxPaymentType = trim(f.str);
+ next(f);
+
+ post.Ground = trim(f.str);
+
+ /* Проверка того, хватает ли остатка на эти платежи */
+
+ i = 0;
+ flag =  false;
+ while((i<asize(acc)) AND (not flag))
+  if(post.Account_Payer == acc(i))
+   accsum(i) = accsum(i) + post.Sum;
+   flag = true;
+   acci = i;
+  end;
+  i=i+1;
+ end;
+ if(flag == false)
+  acci = asize(acc);
+  acc(acci) = post.Account_Payer;
+  accsum(acci) = post.Sum;
+ end;
+
+ Rest = RestA(acc(acci));
+ if(Rest < accsum(acci))
+  str = "Ошибка! Не хватает остатка на счете "+acc(acci)+", равного "+String(Rest)+",\n";
+  str = str + "для оплаты документа номер "+post.Numb_Document+" на сумму "+String(post.Sum)+",\n";
+  str = str + "так как сумма документов от этого клиента уже составляет "+String(accsum(acci))+"!";
+  MsgBox(str);
+ end;
+
+ /* Конец проверки остатка */
+
+ if(not Insert(post))
+  str = "Ошибка! Не загружен документ N "+post.Numb_Document+" на сумму "+String(post.Sum);
+  MsgBox(str);
+ else
+  N = N + 1;
+  Sum = Sum + post.Sum;
+ end;
+
+end;
+
+str = "Загрузка завершена. Загружено документов "+String(N)+" на сумму "+String(Sum);
+MsgBox(str);
+
+

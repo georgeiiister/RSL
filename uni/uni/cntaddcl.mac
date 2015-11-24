@@ -1,0 +1,52 @@
+//тестовый макрос изучение работы макроса clients.mac
+
+//ContactAddClient = true;
+import clientsmain;
+
+macro CntAddClient(myFIO, paymID)
+
+
+Create(clnxtmp,getWorkFileName("clnxtmp"),true);
+Create(Mytypeac,getWorkFileName("mytypeac"),true);
+Create(klimtmp,getWorkFileName("klimtmp"),true);
+Create(kprvtmp,getWorkFileName("kprvtmp"),true);
+Create(orgftmp,getWorkFileName("orgftmp"),true);
+
+
+rewind(passp);
+while(next(passp))
+ PassportMenu(asize(PassportMenu)) = passp.Name;
+end;
+
+rewind(users);
+while(next(users))
+ if(users.UserClosed == "")
+  i1 = Index(users.Name," ");
+  str1 = SubStr(users.Name,i1+1);
+  i2 = Index(str1," ");
+  if(i1 == 0)
+   OtherMenu(asize(OtherMenu)) = String(users.Oper)+" "+users.Name;
+  else
+   if(i2 == 0)
+    OtherMenu(asize(OtherMenu)) = String(users.Oper)+" "+SubStr(users.Name,1,i1+1)+".";
+   else
+    OtherMenu(asize(OtherMenu)) = String(users.Oper)+" "+SubStr(users.Name,1,i1+1)+"."+SubStr(str1,i2+1,1)+".";
+   end;
+  end;
+ end;
+end;
+
+
+SetScroll0(client,"NUM","Client","NAME","Name_Client");
+ContactAddClient = 1;
+ContactAddClientFIO = myFIO;
+ContactDocID = paymID; // передаем в макрос clntscr DocID перевода
+/*
+В переменной paymID содержится уникальный номер в структуре contpaym.dbt
+по которому будем вытаскивать реквизиты клиента
+*/
+RunDialog(scroll,"ScrollMes0");
+//msgbox(ContactClientID);
+Return 0;
+end;
+

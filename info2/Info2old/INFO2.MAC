@@ -1,0 +1,96 @@
+file ac (account) key 0;
+file cl (client);
+file cl1 ("clients1.dbt","..\\DBFILE\\clients.def");
+file clv ("clved.dbt","..\\DBFILE\\clients.def");
+file cls (clspher) key 0;
+file v (valdat) key 0;
+
+var db,de,mn,mo,m,dpp,d1o,flag;
+ setoutput("..\\obj\\acc_info.txt");
+ db=date(01,01,1997);
+ GetDate(db, "Введите дату begin");
+ de=date(1,1,2010);
+ GetDate(de, "Введите дату end");
+ println("        Клиенты, открывшие счета в период с ",db:10," по ",de:10);
+ println;
+ ac.account="40205810000000000000";
+ rewind(ac);
+ getGE(ac);
+/*
+ println("---------------------------------------------------------------------------");
+ println("|№ кл.|               Наименование                  |Д.открытия|Д.закрытия|");
+ println("|-----|---------------------------------------------|----------|----------|");
+*/
+ println("ac.client|ac.account|cl.name_client|cl1.RegDate|ac.open_date|ac.close_date|dat_posled|cl.szOkpo|cl1.GosRegNum"+
+         "|cl1.FactAddrObl cl1.FactAddrRaion cl1.FactAddrTown cl1.FactAddrStreet cl1.FactAddrHouse cl1.FactAddrKorpus cl1.FactAddrStr cl1.FactAddrKvart"+
+         "|cl.szPhoneNumber cl.szPhoneNumber2|cl.szFace1Post cl.szFace1 cl.szFace2Post cl.szFace2|clv.Code"+
+         "|cl1.DateEnd1|cl.INN|cls.szname|cl1.UrRiska");
+ while (next(ac))                    
+   message(ac.account);
+   if (ac.balance>"40803") 
+/*     println("---------------------------------------------------------------------------");*/
+     exit;
+   end;
+   if ((ac.open_date>=db) and (ac.open_date<=de) and (substr(ac.account,6,3)=="810"))
+     cl.client=ac.client;
+     cl1.client=ac.client;
+     clv.client=ac.client;
+     getEQ(cl);
+     if (not getEQ(cl1))
+       cl1.GosRegNum="";
+       cl1.FactAddrObl="";
+       cl1.FactAddrRaion="";
+       cl1.FactAddrTown="";
+       cl1.FactAddrStreet="";
+       cl1.FactAddrHouse="";
+       cl1.FactAddrKorpus="";
+       cl1.FactAddrStr="";
+       cl1.FactAddrKvart="";
+       cl1.DateEnd1=date(0,0,0);
+       cl1.RegDate=date(0,0,0);
+     end;
+     if (not getEQ(clv))
+       clv.Code="";
+     end;
+     cls.iActivitiesSphere=cl.iActivitiesSphere;
+     if (not getEQ(cls))
+       cls.szname="";
+     end;
+
+     v.account=ac.account;
+     v.Code_currency=0;
+     v.date_value==date(0,0,0);
+     d1o=date(0,0,0);
+     getGE(v);
+     flag=True;
+     while ((v.account==ac.account) and (flag))                    
+       if(v.rest!=0)
+         d1o=v.date_value;
+         flag=false;
+       end;
+       next(v);
+     end;
+     if(d1o!=date(0,0,0))
+       v.account=ac.account;
+       v.Code_currency=0;
+       v.date_value=de;
+       getLE(v);
+       dpp=v.date_value;
+     else
+       dpp=date(0,0,0);
+     end;
+
+     println(ac.client:5,"|",ac.account,"|",cl.name_client:150,"|",cl1.RegDate:10,"|",ac.open_date:10,"|",ac.close_date:10,"|",dpp:10,"|",cl.szOkpo,"|",cl1.GosRegNum:10,
+             "|",cl1.FactAddrObl," ",cl1.FactAddrRaion," ",cl1.FactAddrTown," ",cl1.FactAddrStreet," ",cl1.FactAddrHouse," ",cl1.FactAddrKorpus," ",cl1.FactAddrStr," ",cl1.FactAddrKvart,
+             "|",cl.szPhoneNumber," ",cl.szPhoneNumber2,"|",cl.szFace1Post," ",cl.szFace1," ",cl.szFace2Post," ",cl.szFace2,"|",clv.Code,
+             "|",cl1.DateEnd1,"|",cl.INN,"|",cls.szname,"|",cl1.UrRiska);
+   end;
+ end;                        
+end;                        
+
+
+
+
+
+
+

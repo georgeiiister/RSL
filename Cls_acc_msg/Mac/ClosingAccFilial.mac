@@ -1,0 +1,247 @@
+/* Макрос написан для формирования писем клиентам о закрытии счетов
+   23/05/2012
+*/
+import 
+      BankInter, 
+      or_rep_h, 
+      "..\\mac\\bfsofia\\CliBnk.mac",
+      "..\\mac\\bfsofia\\ContClnLib.mac";
+
+file a (account) key 0;
+file c (client) key 0;
+file c1 (clients1,"clients.def") key 0;
+file c3 (clients3,"clients.def") key 0;
+
+//file out ("..\\mac\\closeac.dbf") DBF write;
+
+var DatemSG, dd, mm, yyyy;
+var i=0, n=0, FlagBadRub;
+var nn= 1;                //начальный номер исходящего документа
+var acc_old, acc_new;
+var sFIO:string;
+
+macro MakeAdress()
+ var str = "";
+
+ if (Trim(c1.UrAddrStreet) != "")
+  str = str + "ул." + substr(c1.UrAddrStreet, 1, strlen(c1.UrAddrStreet) - 3) + " ";
+//  str = str + c1.UrAddrStreet + " ";
+ end;
+ if(Trim(c1.UrAddrHouse) != "")
+  str = str + "д." + c1.UrAddrHouse + " ";
+ end;
+ if(Trim(c1.UrAddrKorpus) != "")
+  str = str + "корп." + c1.UrAddrKorpus + " ";
+ end;
+ if(Trim(c1.UrAddrStr) != "")
+  str = str + "стр." + c1.UrAddrStr + " ";
+ end;
+ if(Trim(c1.UrAddrKvart) != "")
+  str = str + "кв." + c1.UrAddrKvart + " ";
+ end;
+ if (Trim(c1.UrAddrTown)  != "")
+  str = str + "г." + substr(c1.UrAddrTown,  1, strlen(c1.UrAddrTown)  - 2) + " ";
+// str = str + c1.UrAddrTown + " ";
+ end;
+ str = str + c1.UrAddrNas + " ";
+ str = str + c1.UrAddrRaion + " ";
+ str = str + c1.UrAddrRegion + " ";
+ str = str + c1.UrAddrIndex;
+ return str;
+end;
+
+macro MakeAdress_F()
+ var str = "";
+
+ if (Trim(c1.FactAddrStreet) != "")
+  str = str + "ул." + substr(c1.FactAddrStreet, 1, strlen(c1.FactAddrStreet) - 3) + " ";
+// str = str + c1.FactAddrStreet + " ";
+ end;
+ if(Trim(c1.FactAddrHouse) != "")
+  str = str + "д." + c1.FactAddrHouse + " ";
+ end;
+ if(Trim(c1.FactAddrKorpus) != "")
+  str = str + "корп." + c1.FactAddrKorpus + " ";
+ end;
+ if(Trim(c1.FactAddrStr) != "")
+  str = str + "стр." + c1.FactAddrStr + " ";
+ end;
+ if(Trim(c1.FactAddrKvart) != "")
+  str = str + "кв." + c1.FactAddrKvart + " ";
+ end;
+ if (Trim(c1.FactAddrTown)  != "")
+  str = str + "г." + substr(c1.FactAddrTown,  1, strlen(c1.FactAddrTown)  - 2) + " ";
+// str = str + c1.FactAddrTown + " ";
+ end;
+ str = str + c1.FactAddrNas + " ";
+ str = str + c1.FactAddrRaion + " ";
+ str = str + c1.FactAddrRegion + " ";
+ str = str + c1.FactAddrIndex;
+ return str;
+end;
+
+macro MakeAdress_P()
+ var str = "";
+
+ if (Trim(c3.GOAddrStreet) != "")
+  str = str + "ул." + substr(c3.GOAddrStreet, 1, strlen(c3.GOAddrStreet) - 3) + " ";
+// str = str + c3.GOAddrStreet + " ";
+ end;
+ if(Trim(c3.GOAddrHouse) != "")
+  str = str + "д." + c3.GOAddrHouse + " ";
+ end;
+ if(Trim(c3.GOAddrKorpus) != "")
+  str = str + "корп." + c3.GOAddrKorpus + " ";
+ end;
+ if(Trim(c3.GOAddrStr) != "")
+  str = str + "стр." + c3.GOAddrStr + " ";
+ end;
+ if(Trim(c3.GOAddrKvart) != "")
+  str = str + "кв." + c3.GOAddrKvart + " ";
+ end;
+ if (Trim(c3.GOAddrTown)  != "")
+  str = str + "г." + substr(c3.GOAddrTown,  1, strlen(c3.GOAddrTown)  - 2) + " ";
+// str = str + c3.GOAddrTown + " ";
+ end;
+ str = str + c3.GOAddrNas + " ";
+ str = str + c3.GOAddrRaion + " ";
+ str = str + c3.GOAddrRegion + " ";
+ str = str + c3.GOAddrIndex;
+ return str;
+end;
+
+macro FiltrAcc()
+ var iBal;
+ 
+ if(a.Open_Close == "З")
+  return false;
+ end;
+ iBal = Int(SubStr(a.Account,1,5));
+ if(iBal < 40000)
+  return false;
+ end;
+ if(iBal > 40900)
+  return false;
+ end;
+ return true;
+end;
+
+macro FormRecord(acc_new,idx,sa)
+ var Report:CMakeReport = CMakeReport("", SEP_DEFAULT, 99999),
+     RepCnv:CMakeReport = CMakeReport("", SEP_DEFAULT, 99999);
+
+ Report.RegisterForm
+      ( "MessageClosing", "MessageClosing.doc", "MessageClosing"+C.Client+".doc",
+         "Num_Out",
+         "FirmName",
+         "IDX",
+         "Adress_Pst",
+         "Account",
+         "Acc_New",
+         "Adress_Ur",
+         "Adress_Fct",
+         "Date_Msg",
+         "FIOPers"
+      );
+   Report.AddDoc("MessageClosing", "1");
+//   Report.AddDocFields("IDX",idx);
+//   Report.AddDocFields("Adress_Pst",sa);
+   Report.AddDocFields("FirmName",c.Name_Client);
+   if (Index(c.szUserType,"Ю") > 0)
+     sFio=macCBGetFIOFirstPer(c.Client);
+     Report.AddDocFields("FIOPers",sFio);
+   else
+     sFio=macCBFirstSymUpFIO(macNoU(c.Name_Client,true));	
+     Report.AddDocFields("FIOPers",sFio);
+   end;
+   Report.AddDocFields("Acc_New",acc_new);
+// Report.AddDocFields("Num_Out",nn);
+//   Report.AddDocFields("Dogov_Numb",c1.DOGNum);
+//   Report.AddDocFields("Dogov_Date",a.Open_Date);
+//   if  (Index(trim(a.UserTypeAccount), "A"))
+//     Report.AddDocFields("DBO","X");
+//   else
+//     Report.AddDocFields("DBO","");
+//   end;
+// Report.AddDocFields("Account",a.Account);
+// Report.AddDocFields("Adress_Ur",MakeAdress());
+// Report.AddDocFields("Adress_Fct",MakeAdress_F());
+// Report.AddDocFields("Date_Msg",DateMsg);
+   Report.CreateTemplateData();
+   Report.ShowTemplateRep();
+end;
+
+
+DateMsg = string(date(dd,mm,yyyy));
+
+FILE closeacc("..\\mac\\closeacc.txt") txt 1024; 
+InitProgress(NRecords(closeacc));
+SetDelim("  ");
+while (next(closeacc))
+  acc_old=trim(closeacc(0));
+if (
+     macCBClnAccU(Acc_old)  
+   )
+  acc_old= substr(acc_old,1,5) + substr(acc_old,7,3) + substr(acc_old,11,1) + substr(acc_old,13);
+  acc_new=trim(closeacc(1));
+  acc_new= substr(acc_new,1,5) + substr(acc_new,7,3) + substr(acc_new,11,1) + substr(acc_new,13);
+  i= i +1;
+  rewind(a);
+  ClearRecord(a);
+  a.account = acc_old;
+  if (GetEQ(a))
+    if (FiltrAcc)
+      rewind(c);
+      ClearRecord(c);
+      c.Client = a.Client;
+      if(GetEQ(c))
+        rewind(c1);
+        ClearRecord(c1);
+        c1.Client = a.Client;
+        if(GetEQ(c1))        
+          if (Index(c.szUserType,"Ю") > 0)
+            FormRecord(acc_new, c1.FactAddrIndex, MakeAdress_F());
+            nn= nn+1;
+            n= n+1;
+          elif (Index(c.szUserType,"И") > 0)
+            rewind(c3);
+            ClearRecord(c3);
+            c3.Client = a.Client;
+            if(GetEQ(c3))
+              FormRecord(acc_new, c3.GOAddrIndex, MakeAdress_P());
+              nn= nn+1;
+              n= n+1;
+            end;
+          else
+            [у клиента ####### - отсутствует признак Ю,И] (a.client);
+          end;
+        end;
+      end;
+    else
+      [#################### - не удовлетворяет условиям] (a.account);
+    end;
+  end;
+
+  if (((SubSTR(string(n),strlen(string(n)))) == "3") or ((SubSTR(string(n),strlen(string(n)))) == "0"))
+    if (not gettrue(True,"Обработано " + n + " Продолжать?"))
+[
+ Успешно обработано счетов ######## из ########
+
+](n, i);
+
+Close(closeacc); 
+      exit;
+    end;
+  end;
+end;
+end;
+
+RemProgress();
+
+[
+ Успешно обработано счетов ######## из ########
+
+](n, i);
+
+Close(closeacc); 
+

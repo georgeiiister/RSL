@@ -1,0 +1,295 @@
+/*
+Œ ªà®á ¤«ï àãç­®£® § ¯®«­¥­¨ï ¦ãà­ «  à¥£¨áâà æ¨¨ ¯à¨®áâ ­®¢«¥­¨©
+developer Polyakov S.George 12.02.2010 
+edit Polyakov S.George 01.09.2011
+*/
+
+array arrTypeKind;
+array arrStopReas;
+
+//file acc(account, "bank.def") key 0;
+file r_acc0(account,"bank.def") key 0;
+file r_accv0("account$","bank.def") key 0;
+file stop(stop_op,"bank.def") write;
+file stop5(stop_op,"bank.def") key 5;
+file ac_ar(ac_arest,"bank.def") write;
+file cln(client,"bank.def") key 0;
+file reg(regdoc,"bank.def") key 0; 
+file sn ("..\\obj\\soun1.dbf") dbf;
+
+//
+macro macInsMan()
+
+id="";
+flg=0;
+flgRet=false;
+strAcc="";
+intCode_Cur=0;
+acc="";
+
+const I_VAL=int(810); //ª®­áâ ­â  ­ æ¨®­ «ì­®© ¢ «îâë
+
+if (GetString(id,"‚¢¥¤¨â¥ ­®¬¥à áç¥â ",20))
+  if (StrLen(Trim(id))!=0)
+     //áç¥â ¢ ª ª®© ¢ «îâ¥?
+     if (substr(id,6,3)==I_VAL)
+       acc=r_acc0;
+     else
+       acc=r_accv0;
+     end;
+     rewind(acc);
+     acc.account=id;
+     acc.code_currency=substr(id,6,3);
+     if (getEQ(acc))
+       flg=1; 
+       strAcc=Trim(acc.Account);
+       intCode_Cur=acc.Code_Currency;
+     else
+       MsgBox("“Š€‡€›‰ ‘—…’ … €‰„…!");
+     end
+  end;                   
+end;
+
+if (flg==1)
+  //‚¢¥¤¥­­ë© áç¥â ­ ©¤¥­
+  //msgbox("!");
+  arrTypeKind(0)="…˜…ˆ…  ’Œ……";
+  arrTypeKind(1)="…˜…ˆ…  ˆ‘’€‚‹…ˆˆ";
+  intTypeKind=menu(arrTypeKind,"“ª ¦¨â¥ â¨¯ á®®¡é¥­¨ï","“ª ¦¨â¥ â¨¯ á®®¡é¥­¨ï");
+  if ((intTypeKind==1) or (intTypeKind==0))
+     //msgbox(intTypeKind);
+   flgFind=false;
+   if (flg==1)
+     cln.Client=acc.Client;
+     flgFind=true;
+   end;
+   if (flgFind)
+     flgFind=false;
+     if (getEQ(cln))
+        // ©¤¥­ ª«¨¥­â ¢ â ¡«¨æ¥ client.dbt
+        flgFind=true;
+        reg.Client=cln.Client;
+        reg.RDKind=100; //!!! ˆ§¢«¥ª ¥¬ ˆ
+        if (getEQ(reg))
+          //MsgBox("!");
+          strRegNum=SubStr(Trim(reg.RegNum),1,4);
+          flgwh=true;
+          while(flgwh)
+            if (getString(strRegNum,"‚¢¥¤¨â¥ ­®¬¥à ",5))
+              if (StrLen(Trim(strRegNum))!=0)
+                strRegNum=Trim(strRegNum);
+                flgwh=false;
+              end;    
+            end;
+          end;
+          flgSn=false;
+          lngCnt=0;
+          rewind(sn);
+          while((not flgSn) and (next(sn)))
+            lngCnt=lngCnt+1;
+            message("ˆ„…’ ‘Œ’ ‘€‚—ˆŠ€ ‘“:"+lngCnt);
+            if ((strRegNum==Trim(sn.KOD)) and (Trim(sn.DATAK)==""))
+               flgSn=true;
+            end;
+          end;
+          if (flgSn)
+             //MsgBox("!");
+             //   ©¤¥­:
+             strStopNum="";
+             if (intTypeKind==0)
+               GetStringR(strStopNum,"Œ… …˜…ˆŸ  ’Œ……",21);
+             elif (intTypeKind==1)
+               GetStringR(strStopNum,"Œ… …˜…ˆŸ  ˆ‘’€‚‹…ˆˆ",21);
+             end;
+             if (StrLen(Trim(strStopNum))!=0)
+               //MsgBox(strStopNum);
+               //®«ãç¨«¨ ­®¬¥à
+               //******************************************************************
+               dteStopDate=Date(0,0,0);
+               flg=0;
+               if (intTypeKind==0)
+                 if (GetDate(dteStopDate,"„€’€ …˜…ˆŸ  ’Œ……"))
+                   if (dteStopDate>Date(0,0,0))
+                     flg=1;
+                   end;
+                 end;
+               elif (intTypeKind==1)
+                 if (GetDate(dteStopDate,"„€’€ …˜…ˆŸ  ˆ‘’€‚‹…ˆˆ"))
+                   if (dteStopDate>Date(0,0,0))
+                     flg=1;
+                   end;
+                 end;
+               end;
+               if (flg==1)
+                 flg=0;
+                 mneRecSum=Moneyl(0);
+                 //msgbox("!");
+                 if (intTypeKind==1)
+                   arrStopReas(0)="…ˆ‘‹…ˆ… ’…‚€ˆŸ  “‹€’… €‹ƒ€, ‘€, …ˆ, ˜’€”€ (. 2 ‘’. 76 Š ”)";
+                   arrStopReas(1)="……„‘’€‚‹…ˆ… €‹ƒ‚‰ „…Š‹€€–ˆˆ ‚ €‹ƒ‚›‰ ƒ€ ‚ ’…—…ˆ… 10 „…‰  ˆ‘’…—…ˆˆ “‘’€‚‹…ƒ ‘Š€ …… …„‘’€‚‹…ˆŸ (. 3 ‘’. 76 Š ”)";
+                   intStopReas=menu(arrStopReas,"“Š€†ˆ’… ˆ—ˆ“ ˆ‘’€‚‹…ˆŸ","“Š€†ˆ’… ˆ—ˆ“ ˆ‘’€‚‹…ˆŸ");
+                   if (intStopReas>=0)
+                     //MsgBox(arrStopReas(intStopReas));
+                     if (GetMoney(mneRecSum,"‘“ŒŒ€ ‚‡›‘Š€ˆŸ (…‘‹ˆ ’‘“’‘’‚“…’ - ‚‚…„ˆ’… 0.00)",15));
+                       //msgbox(mneRecSum);
+                       flg=1;
+                     end;
+                   end;
+                 elif (intTypeKind==0)
+                   strCanStopN="";
+                   GetString(strCanStopN,"Œ… ’Œ…Ÿ…Œƒ …˜…ˆŸ",21);
+                   if (StrLen(Trim(strCanStopN))!=0)
+                     dteCanStopD=Date(0,0,0);
+                     if (GetDate(dteCanStopD,"„€’€ ’Œ…Ÿ…Œƒ …˜…ˆŸ"))
+                       if (dteCanStopD>Date(0,0,0))
+                         strCanKind="1";
+                         GetString(strCanKind,"‚ˆ„ ’Œ…Ÿ…Œƒ …˜…ˆŸ",1);
+                         if (StrLen(Trim(strCanKind))!=0)
+                           flg=1
+                         end;
+                       end;
+                     end;
+                   end;
+                 end;
+                 if (flg==1)
+                   flg=0;
+                   strRecNum=""; //®¬¥à à¥è¥­¨ï ® ¢§ëáª ­¨¨
+                   dteRecDate=Date(0,0,0);
+                   GetString(strRecNum,"Œ… …˜…ˆŸ  ‚‡›‘Š€ˆˆ (…‘‹ˆ ’‘“’‘’‚“…’ €†Œ’… ESC)",21);
+                   if (StrLen(Trim(strRecNum))!=0)
+                   else
+                     strRecNum=Null
+                   end;
+                   GetDate(dteRecDate,"„€’€ …˜…ˆŸ  ‚‡›‘Š€ˆˆ (…‘‹ˆ ’‘“’‘’‚“…’ €†Œˆ’… ESC ˆ‹ˆ ‚‚…„ˆ’… 00.00.0000)");
+                   flg=1;
+                 end;
+                 if (flg==1)
+                  //msgbox("!");
+                  flg=0;
+                  //­¥¤®¯ãáâ¨âì ¤ã¡«¨à®¢ ­¨¥
+                  strFileName="";
+                  strKind="";
+                  intday=0;
+                  intmon=0;
+                  intyear=0;
+                  DateSplit(dteStopDate,intday,intmon,intyear);
+                  strday="";
+                  strmon="";
+                  if (StrLen(String(intday))==1)
+                    strday="0"+String(intday);
+                  else
+                    strday=String(intday);
+                  end;
+                  if (StrLen(String(intmon))==1)
+                    strmon="0"+String(intmon);
+                  else
+                    strmon=String(intmon);
+                  end;
+                  //”®à¬¨àã¥¬ á¨­â¥â¨ç¥áª®¥ ­ ¨¬¥­®¢ ­¨ï ä ©«  ¯à¨ àãç­®¬ ¢¢®¤¥ 
+                  strFileName=Trim(String(sn.KOD))+String(intyear)+strmon+strday+"_"+Trim(strStopNum)+"_Œ";
+                  if (intTypeKind==1)
+                    strKind="";
+                    strFileName="rpo16359826_"+strFileName;
+                    flg=1;
+                  elif (intTypeKind==0)
+                    strKind="";
+                    strFileName="roo16359826_"+strFileName;
+                    flg=1;
+                  end;
+                  if (flg==1)
+                    //msgbox(strFileName);
+                    flg=0;
+                    rewind(stop5);
+                    stop5.Kind=strKind;
+                    stop5.FileName=strFileName;
+                    if (getEQ(stop5))
+                       MsgBox("‚’›‰ ‚‚„! ‡€ˆ‘œ “†… ˆ‘“’‘’‚“…’ ‚ †“€‹…!");
+                    else
+                       flg=1;
+                    end;
+                  end;
+                 end;
+                 if (flg==1)
+                   flg=0;
+                   //********* ins stop_op, ins ac_arest
+                   intID=0;
+                   clearrecord(stop);
+                   rewind(stop);
+                   if (intTypeKind==1) //à¥è¥­¨¥ ® ¯à¨®áâ ­®¢«¥­¨¨
+                     stop.StopReason=arrStopReas(intStopReas);
+                   elif (intTypeKind==0)
+                     stop.CancStopNumber=Trim(strCanStopN);
+                     stop.CancStopDate=dteCanStopD;
+                     stop.CancStopKind=Trim(strCanKind);
+                   end;
+                   stop.Kind=strKind;
+                   stop.FileName=strFileName;
+                   stop.RecoverNumber=Trim(strRecNum);
+                   stop.RecoverDate=dteRecDate;
+                   stop.RecoverSum=mneRecSum;
+                   stop.Client=cln.Client;
+                   stop.CodeNO=Trim(sn.KOD);
+                   stop.NameNO=StrUpr(Trim(sn.NAIMK));
+                   stop.Oper={oper};
+                   stop.DateFormLoad={curdate};
+                   stop.TimeFormLoad=Time();
+                   stop.StopNumber=Trim(strStopNum);
+                   stop.StopDate=dteStopDate;
+                   insert(stop);
+                   intID=stop.ID;
+                   close(stop);
+                   rewind(ac_ar);
+                   clearrecord(ac_ar);
+                   ac_ar.ID=intID;
+                   ac_ar.Code_Currency=intCode_Cur;
+                   ac_ar.Account=strAcc;
+                   ac_ar.DateArest=dteStopDate;
+                   ac_ar.SumArest=mneRecSum;
+                   //** ‚¢®¤¨¬ "ª®­áâ ­âë", ­® ­ ¤® ¯¥à¥á¬®âà¥âì íâ®, â ª ª ª ¨å ¬®¦­® ¢ëç¨á«ïâì
+                   ac_ar.Chapter=1;
+                   ac_ar.KindAcc="€‘—…’›‰";
+                   //** 
+                   insert(ac_ar);
+                   close(ac_ar);
+                   flgRet=true;
+                   MsgBox("‚‚„ „€›• ‚›‹… “‘…˜!");
+                 end;
+               end;
+             end;
+          else
+             MsgBox("‚ ‘€‚—ˆŠ… ‘“ … €‰„… „€›‰ !")
+          end;
+        else
+          MsgBox("… €‰„… ˆ  Š‹ˆ…’“ ‘ Š„Œ: " +cln.Client+"!");
+        end;
+     else
+        MsgBox("Š‹ˆ…’ ‘ „€›Œ ‘—…’Œ … €‰„…!");
+     end;
+   end;
+  end;
+end;
+
+if (flgRet)
+  return true;
+else
+  return false;
+end;
+
+end;
+
+/******************* ’®çª  ¢å®¤  ¢ ¯à®£à ¬¬ã **********************/
+
+blnId=true;
+while (blnId)
+ if (macInsMan);
+   if (GetTrue(blnId,"„‹†ˆ’œ ‚‚„ „€›•?"))
+   else
+      blnId=false;     
+   end;
+ else
+   if (GetTrue(blnId,"„€›… … „€‚‹…›! €—€’œ ‚‚„ ‘‚€?"))
+   else
+      blnId=false;     
+   end 
+ end;
+end;

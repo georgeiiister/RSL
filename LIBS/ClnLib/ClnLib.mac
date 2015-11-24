@@ -1,0 +1,490 @@
+/*
+  Библиотечный макрос для работы с клиентами
+  developer Polyakov S.George
+  v 1.00-06.09.2012
+*/
+
+//процедура возвращаяющая тип или ФИО ИПП/Главы КФХ/Адв. кабинет...
+macro macCLGetNoU(sName:string,bType):string
+//bType=0 return Тип
+//bType=1 return Фамилия И.О.
+  var 
+     iI:integer,
+     iCnt:integer,
+     sT:string,
+     sR:string;
+  array 
+      aName;
+  iCnt=int(0);
+  sR=sName;
+  sName=strlwr(trim(sName));
+  iI=int(0);
+  aName(0)="индивидуальный предприниматель глава крестьянского фермерского хозяйства";
+  aName(1)="индивидуальный предприниматель глава крестьянского (фермерского) хозяйства";
+  aName(2)="индивидуальный предприниматель глава крестьянского (фермерского хозяйства)";
+  aName(3)="индивидуальный предприниматель глава крестьянского(фермерского)хозяйства";
+  aName(4)="индивидуальный предприниматель глава крестьянского(фермерского) хозяйства";
+  aName(5)="индивидуальный предприниматель глава крестьянского(фермерского хозяйства";
+  aName(6)="индивидуальный предприниматель глава крестьянского (фермерского)хозяйства";
+  aName(7)="инд. пр-ль";
+  aName(8)="ичп";
+  aName(9)="пбюл";
+  aName(10)="ип";
+  aName(11)="нотариус";
+  aName(12)="глава кфх";
+  aName(13)="глава крестьянского (фермерского) хозяства";
+  aName(14)="крестьянское (фермерское) хозяйство";
+  aName(15)="индивидуальный предприниматель";
+  aName(16)="инд. предпр-ль";
+  aName(17)="инд пр-ль";
+  aName(18)="крестьянское хозяйство";
+  aName(19)="крестьянско-фермерское хозяйство";
+  aName(20)="глава крестьянского фермерского хозяйства";
+  aName(21)="адвокатский кабинет адвоката";
+  aName(22)="адвокатский кабинет адвокат";
+  aName(23)="адвокатский кабинет";
+  aName(24)="глава крестьянского (фермерского) хозяйтcва";
+  aName(25)="глава крестьянского (фермерского) хозяйства";
+  aName(26)="адвокатский кабинет адвокат";
+    while (iCnt<asize(aName))
+    iI=index(sName,aName(iCnt));
+    if (iI>0)
+      if (bType)
+        if (trim(StrSubst(sName,iI+StrLen(aName(iCnt)+1),1))=="") //Праверка на пробел после типа
+          sR=Substr(sName,iI+StrLen(aName(iCnt)+1));
+        end;
+      else
+        sR=Substr(sName,iI,StrLen(aName(iCnt)));
+        sR=StrUpr(Substr(sR,1,1))+StrLwr(Substr(sR,2));
+      end;
+      iCnt=asize(aName);
+    else
+      iCnt=iCnt+1;
+    end;
+  end;
+  return sR;
+end;
+
+//формирование фактического адреса
+macro macCLGetFactAddr(iClient):string
+  var 
+    sAddr:string;
+  file r_cln11(clients1,"sofia.def") key 0; 
+  sAddr="";
+  rewind(r_cln11);
+  r_cln11.Client=iClient;
+  if (geteq(r_cln11))
+    sAddr=trim(r_cln11.FactAddrRegion);
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrRaion),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrTown),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrNas),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrIndex),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.FactAddrStreet),", , ",", ");
+    if (trim(r_cln11.FactAddrHouse)!="")
+      sAddr=sAddr+", д. "+trim(r_cln11.FactAddrHouse);
+    end;
+    if (trim(r_cln11.FactAddrKorpus)!="")
+      sAddr=sAddr+", корпус "+trim(r_cln11.FactAddrKorpus);
+    end;
+    if (trim(r_cln11.FactAddrStr)!="")
+      sAddr=sAddr+", строение "+trim(r_cln11.FactAddrStr);
+    end;
+    if (trim(r_cln11.FactAddrKvart)!="")
+      sAddr=sAddr+", кв. "+trim(r_cln11.FactAddrKvart);
+    end;  
+  end;
+  return sAddr;
+end;
+
+//формирование юридического адреса
+macro macCLGetUrAddr(iClient):string
+  var 
+    sAddr:string;
+  file r_cln11(clients1,"sofia.def") key 0; 
+  sAddr="";
+  rewind(r_cln11);
+  r_cln11.Client=iClient;
+  if (geteq(r_cln11))
+    sAddr=trim(r_cln11.FactAddrRegion);
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrRaion),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrTown),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrNas),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrIndex),", , ",", ");
+    sAddr=StrSubst(sAddr+", "+trim(r_cln11.UrAddrStreet),", , ",", ");
+    if (trim(r_cln11.UrAddrHouse)!="")
+      sAddr=sAddr+", д. "+trim(r_cln11.UrAddrHouse);
+    end;
+    if (trim(r_cln11.UrAddrKorpus)!="")
+      sAddr=sAddr+", корпус "+trim(r_cln11.UrAddrKorpus);
+    end;
+    if (trim(r_cln11.UrAddrStr)!="")
+      sAddr=sAddr+", строение "+trim(r_cln11.UrAddrStr);
+    end;
+    if (trim(r_cln11.UrAddrKvart)!="")
+      sAddr=sAddr+", кв. "+trim(r_cln11.UrAddrKvart);
+    end;
+  end;
+  return sAddr;
+end;
+
+//макрос возвращающий наименование клиента
+macro macCLGetNameCln(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+
+  sRet="";
+  Tbl=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("Client")=iCln;
+  if (geteq(Tbl))
+     sRet=trim(Tbl.item("Name_Client"));
+  end;
+  return sRet;
+end;
+
+//макрос возвращающий серию и номер документа постановки на учет в налоговый орган
+macro macCLGetNalSvidReg(iCln:integer):string
+ var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("NalogSvSer"))+" "+trim(Tbl.item("NalogSvNum"));
+           
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос возвращающий серию и номер свидетельства о Государственной Регистарции
+macro macCLGetGosReg(iCln:integer):string
+ var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("SerSvidReg"))+" "+trim(Tbl.item("NumSvidReg"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения ОКПО клиента
+macro macCLGetOKPO(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szOKPO"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения КПП клиента
+macro macCLGetKPP(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      if (trim(Tbl.item("KPP"))!="0")
+        sRet=trim(Tbl.item("KPP"));
+      end;
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения fax/telex данных по клиенту
+macro macCLGetFax(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szTelexNumber"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения ОГРН клиента
+macro macCLGetOGRN(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("GosRegNum"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения E-mail клиента
+macro macCLGetEmail(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("Email"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения 1-го контактного телефона клиента
+macro macCLGetPhone1(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szPhoneNumber"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения первого лица (представителя) клиента
+macro macCLGetFIOFirstPer(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szFace1"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения второго лица (представителя) клиента
+macro macCLGetFIOSecPer(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szFace2"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения должности первого лица (представителя) клиента
+macro macCLGetPostFirstPer(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szFace1Post"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения должности второго лица (представителя) клиента
+macro macCLGetPostSecPer(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szFace2Post"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения номера договора клиента
+macro macCLGetNumContr(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("DOGNum"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения кода страны клиента
+macro macCLGetCodeCountry(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("UrAddrCountry"));
+    end;
+    close(Tbl);
+    return sRet;
+end; 
+
+//макрос получения города клиента
+macro macCLGetTown(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("UrAddrTown"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос возвращающий код типа клиента
+macro macCLTypeCln(iCln:integer):integer
+//iRet=0 - err
+//iRet=1 - организация
+//iRet=2 - индивидуальный предприниматель
+//iRet=3 - физическое лицо
+  var
+    iRet:integer,
+    sType:string,
+    Tbl:object;
+
+  iRet=0;
+  Tbl=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("Client")=iCln;
+  if (geteq(Tbl))
+     sType=StrUpr(trim(Tbl.item("szUserType")));
+     if (index(sType,"Ю")>0)
+       iRet=1;
+     elif (index(sType,"И")>0)
+       iRet=2;
+     elif (
+           (index(sType,"Ф")>0)
+                                 and 
+           (index(sType,"И")==0)
+          )
+       iRet=3;
+     end;
+  end;
+  return iRet;
+end;
+
+//макрос вывода устава или свидетельства по типу клиента
+macro macCLGetUstav(iCln:integer):string
+  var
+     iTypeCln:integer,
+     sRet:string;
+  iTypeCln=macCLTypeCln(iCln);  
+  
+  if (iTypeCln==1)
+    sRet="устав";
+  elif (iTypeCln==2)
+    sRet="свидетельство";
+  end;
+  return sRet;
+end;
+
+//макрос проверки корректности парсинга ФИО для клиента
+macro macCLCheckFIO(sName:string):bool
+  var
+    bRet:bool;
+
+  bRet=false;
+  if (macCLGetNoU(sName,true)!=sName) 
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос возвращающий наименования клиента^код клиента по номеру счета
+//макрос пока возвращает только счета с account.dbt и account$.dbt
+//если параметр bClnName==false или не указан
+//то возвращается Наименование счета 
+macro macCLGetNameClnAcc(sAcc:string,bClnName:bool,sNacVal:string):string
+  var
+     oTbl:object,
+     iCode:integer,
+     bVal:bool,
+     sRet:string;
+  sRet="";
+  iCode=-2;
+  bVal=false;
+  oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+  if (ValType(sNacVal)!=V_UNDEF)
+    //передана национальная валюта
+    if (sNacVal!=SubStr(sAcc,6,3))
+      bVal=true;
+      oTbl=TBFile("account$.dbt","r",0,null,"bank.def");
+    end;
+  end;
+  rewind(oTbl);
+  oTbl.rec.Account=sAcc;
+  if (bVal)
+    oTbl.rec.Code_Currency=SubStr(sAcc,6,3);
+  end;
+  if (geteq(oTbl))
+    iCode=oTbl.rec.Client;
+  else
+    //oTbl=TBFile("obacnt.dbt","r",0,null,"bank.def");
+  end;
+  if (iCode!=-2)
+    sRet=oTbl.rec.NameAccount+"^"+string(oTbl.rec.Client);
+    if (ValType(bClnName)!=V_UNDEF)
+      if (ValType(bClnName)==V_BOOL)
+        if (bClnName)
+          sRet=macCLGetNameCln(iCode)+"^"+string(oTbl.rec.Client);
+        end;
+      end;
+    end;
+  end;
+  return sRet; 
+end;

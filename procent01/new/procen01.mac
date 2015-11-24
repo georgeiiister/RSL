@@ -1,0 +1,83 @@
+import "..\\mac\\bfsofia\\procen01lib.mac";
+
+file acc(account);
+file doc(document) key 3;
+file docr(document) key 4;
+
+var izsum,sum001,vost,ssp,bal3r="",bal3p="",bal5r="",bal5p="",ssp50,det=false;
+
+//add Polyakov S.George 11.10.2012
+var mMoney:money,iNumDoc:integer,bPostDoc:bool;
+iNumDoc=0;
+bPostDoc=false;
+
+//GetTrue(det,"Подробно?");
+GetTrue(bPostDoc,"Формировать проводки в отложенные документы?");
+
+acc.account="40500000000000000000";
+
+getge(acc);
+[Комиссия за проведение платежных поручений клиентов и кассовое
+ обслуживание в день зачисления денежных средств за ##########
+---------------------------------------------------------------------]
+(macULGetStrDate({curdate}));
+
+while (acc.account<"40900000000000000000")
+	if ((acc.account!="40802810601000000068") and (acc.account!="40802810301000000070"))
+      if (acc.department==3)
+		vost=acc.R0+acc.D0-acc.K0;
+		if (vost<acc.D0)
+                     mMoney=Money(0);
+			doc.Real_Payer=acc.Account;
+			doc.Sum=0;
+			getge(doc);
+			izsum=0;
+			while (doc.Real_Payer==acc.Account)
+				if (macP01lCheckNotSum(acc.department,
+                                                  doc.Real_Receiver,true,doc.MFO_Receiver)
+                               )
+				  izsum=izsum+doc.Sum;
+				end;
+			  next(doc);
+			end;
+			docr.Real_Receiver=acc.Account;
+			docr.Sum=0;
+			getge(docr);
+			while (docr.Real_Receiver==acc.Account)
+                       if (macP01lCheckNotSum(acc.department,
+                                              docr.Real_Payer,false,docr.MFO_Payer)
+                          )
+                          izsum=izsum+docr.Sum;  
+			  end;
+			  next(docr);
+			end;
+			sum001=acc.D0-vost-izsum-mMoney;
+                     //msgbox(acc.D0+"\n"+vost+"\n"+izsum+"\n"+mMoney);
+			if (sum001>0)
+				ssp=sum001/1000;
+				ssp50=ssp;
+				if(ssp50<$50) ssp50=$50; end;
+                            iNumDoc=iNumDoc+1;
+				[##### ####################  ##############  ##############     (##########)]
+				(iNumDoc,acc.account,sum001,ssp50,ssp);
+                            //add Polyakov S.George 11.10.2012
+                            if (bPostDoc) 
+                              if (not macP01lpostdoc(iNumDoc,ssp50,acc.account)) //add Polyakov S.George 11.10.2012
+                                println("!!! Ошибка формирования ДАННОГО документа для проводки");
+                              end;
+                            end;
+  			  if(det)
+                            println(acc.Account," D0 ",acc.D0:12:2,"-","R0 ",acc.R0:12:2,"+","K0 ",acc.K0:12:2,"-",izsum:12:2," (452,454,454,70601,47422)");
+                          end;
+			end;
+		end;
+      end;
+	end;
+	next(acc);
+end;
+[
+
+Исполнитель                 #]
+(getfiooper({oper}));
+end;
+				

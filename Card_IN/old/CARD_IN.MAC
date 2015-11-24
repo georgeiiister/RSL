@@ -1,0 +1,1195 @@
+/* Программа по загрузке данных из фйла формата UnionCard в RS-Bank */
+/* Изменено 24.05.2012 для филиала "Поволжский" */
+import bankinter;
+
+file doc_vnr("obdocps.dbt") sort 0 write;
+file doc_vnc("obdocps$.dbt") sort 0 write;
+file doc_r("document.dbt") sort 0;
+file doc_c("documnt$.dbt") sort 0;
+file post_r("postdoc.dbt") sort 0 write;
+file post_c("postdoc$.dbt") sort 0 write;
+file acc_r("account.dbt") sort 0;
+file acc_c("account$.dbt") sort 0;
+file acc_r1("account.dbt") sort 4;
+file acc_c1("account$.dbt") sort 4;
+file dates(curdate) key 0;
+file acc_v("obacnt.dbt") sort 0;
+file acc_vc("obacnt$.dbt") sort 0;
+file ob_r("obacnt.dbt") sort 2 write;
+file ob_c("obacnt$.dbt") sort 2 write;
+
+BANK_1 = "Балаковский филиал ЗАО ИШБАНК";
+BANK_2 = "Балаковский филиал ЗАО ИШБАНК";
+b_receiver = BANK_1;
+INN_1 = "7706195570";
+INN_2 = "7706195570";
+OKPO=INN_2;
+OKPO_P=INN_2;
+MFOR = "046359826";
+MFO="";
+CAccR = "30101810600000000826";
+CorAcc="";
+Py = 0;
+KPP="";
+acc_99998 = "99998810701000000001";
+
+date_oper = {curdate};
+date_prov = {curdate};
+date_nazn = {curdate};
+myoper = {oper};
+N_vgr=1;
+/* n_doc = 1; */    /**/
+leftpart = ""; /* Часть строки в номере счетчика (НАЧАЛЬНЫЕ СИМВОЛЫ)*/
+
+file dt ("dcurent.dbf") dbf;        /* указатель на файл СЧЕТЧИК */
+file dtw ("..\\dbfile\\dcurent.dbf") dbf write; /* указатель на файл СЧЕТЧИК */
+dcurent = "";
+ncurent = 0;
+/****************** Изменяем счетчик *********************/
+macro upd()
+ rewind(dtw);
+ next(dtw);
+ dtw.d_curent = dcurent;
+ dtw.n_curent = ncurent;
+ update(dtw);
+end;
+/*********************************************************/
+
+/********** Определяем номер клиента по счету **********/
+macro F_clt(ac)
+ if(SubStr(ac, 6, 3) == "810")
+  rewind(acc_r);
+  ClearRecord(acc_r);
+  acc_r.Account=ac;
+  GetEQ(acc_r);
+  return acc_r.Client;
+ else
+  rewind(acc_c);
+  ClearRecord(acc_c);
+  acc_c.Account=ac;
+  acc_c.Code_Currency=SubStr(ac, 6, 3);
+  GetEQ(acc_c);
+  return acc_c.Client;
+ end;
+end;
+/******************************************************/
+
+/********** Определяем наименование счета Внебаланс **********/
+macro GetAccountName_v(cod,ac)
+ cod=Int(cod);
+ if((cod==0) OR (cod==810))
+  rewind(acc_v);
+  ClearRecord(acc_v);
+  acc_v.Chapter=3;
+  acc_v.Account=ac;
+  GetEQ(acc_v);
+  return acc_v.NameAccount;
+ else
+  rewind(acc_vc);
+  ClearRecord(acc_vc);
+  acc_vc.Chapter=3;
+  acc_vc.Account=ac;
+  acc_vc.Code_Currency=cod;
+  GetEQ(acc_vc);
+  return acc_vc.NameAccount;
+ end;
+end;
+/************************************************************/
+
+/********** Определяем номер счета по клиенту Внебалансовый **********/
+macro GetAccountNumbN(n_clt,code,balance)
+ flag = 0;
+ cod=Int(code);
+ clt=n_clt;
+ bal=balance;
+ if((cod==0) OR (cod==810))
+   rewind(ob_r);
+   ClearRecord(ob_r);
+   ob_r.Chapter=3;
+   ob_r.Open_Close="";
+   ob_r.Client=clt;
+   ob_r.Sort="";
+   flag = GetGE(ob_r);
+   while((flag))
+       if(flag and (ob_r.Open_Close != "З") and (ob_r.Balance == bal) and (SubStr(ob_r.Account,6,3) == "810"))
+         flag=0;
+         return ob_r.Account;
+       else
+         flag=next(ob_r);
+       end;
+   end;
+ else
+   rewind(ob_c);
+   ClearRecord(ob_c);
+   ob_c.Chapter=3;
+   ob_c.Open_Close="";
+   ob_c.Client=clt;
+   ob_c.Sort="";
+   flag = GetGE(ob_c);
+   while((flag))
+       if(flag and (ob_c.Open_Close != "З") and (ob_c.Balance == bal) and (SubStr(ob_c.Account,6,3) == cod) and (ob_c.Code_Currency == cod))
+         flag=0;
+         return ob_c.Account;
+       else
+         flag=next(ob_c);
+       end;
+   end;
+ end;
+end;
+/******************************************************/
+
+/********** Определяем номер счета по клиенту Балансовый **********/
+macro GetAccountNumb(n_clt,code,balance)
+ flag = 0;
+ cod=Int(code);
+ clt=n_clt;
+ bal=balance;
+ if((cod==0) OR (cod==810))
+   rewind(acc_r1);
+   ClearRecord(acc_r1);
+   acc_r1.Open_Close="";
+   acc_r1.Client=clt;
+   acc_r1.Sort="";
+   flag = GetGE(acc_r1);
+   while((flag))
+       if(flag and (acc_r1.Open_Close != "З") and (acc_r1.Balance == bal) and (SubStr(acc_r1.Account,6,3) == "810"))
+         flag=0;
+         return acc_r1.Account;
+       else
+         flag=next(acc_r1);
+       end;
+   end;
+ else
+   rewind(acc_c1);
+   ClearRecord(acc_c1);
+   acc_c1.Open_Close="";
+   acc_c1.Client=clt;
+   acc_c1.Sort="";
+   flag = GetGE(acc_c1);
+   while((flag))
+       if(flag and (acc_c1.Open_Close != "З") and (acc_c1.Balance == bal) and (SubStr(acc_c1.Account,6,3) == cod) and (acc_c1.Code_Currency == cod))
+         flag=0;
+         return acc_c1.Account;
+       else
+         flag=next(acc_c1);
+       end;
+   end;
+ end;
+end;
+/******************************************************/
+
+/********** Определяем наименование счета Рубли и Валюта **********/
+macro GetAccountName(cod,ac)
+ cod=Int(cod);
+ if((cod==0) OR (cod==810))
+  rewind(acc_r);
+  ClearRecord(acc_r);
+  acc_r.Account=ac;
+  GetEQ(acc_r);
+  return acc_r.NameAccount;
+ else
+  rewind(acc_c);
+  ClearRecord(acc_c);
+  acc_c.Account=ac;
+  acc_c.Code_Currency=cod;
+  GetEQ(acc_c);
+  return acc_c.NameAccount;
+ end;
+end;
+/**************************************************/
+
+/********** Insert_Doc Рубли и Валюта *************/
+macro Insert_Doc(bas,accp,accr,sum,num,ground,balsym,shifr,
+		 vid,pachka,slozhprov,uf3,uf4,code,payer,receiver,uf1,uf2,
+		 dd1,dd2,dd3,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py)
+/* -------------val_doc------------ */
+ if(Money(sum)==Money(0))
+  return;
+ end;
+ if(code==810)
+  code=0;
+ end;
+ clearrecord(bas);
+ bas.oper = myoper;
+ bas.Kind_Oper=vid;
+ bas.Shifr_Oper=shifr;
+ bas.Dispatch=0;
+ bas.account_payer = Trim(accp);
+ bas.real_payer = Trim(accp);
+ bas.account_receiver = Trim(accr);
+ bas.real_receiver = Trim(accr);
+ bas.sum = sum;
+ bas.code_currency = code;
+ bas.number_pack = pachka;
+ bas.date_value = dd2;		 /* date provodki */
+ bas.date_document = dd1; 	 /* date_oper */
+ bas.pay_date = dd3;             /* date_oper */
+ bas.numb_document = Trim(num);
+ bas.bank_payer = "Балаковский филиал ЗАО ИШБАНК г.Балаково";
+ bas.bank_receiver = b_receiver;         /*"Балаковский филиал ЗАО ИШБАНК";*/
+ bas.Payer = payer; 		 /*GetAccountName(code,bas.Account_Payer);*/
+ bas.Receiver = receiver;	 /*GetAccountName(code,bas.Account_Receiver);*/
+ bas.OKPO_Payer = OKPO_P; /*"ИНН 7706195570";*/
+ bas.KPP_Payer = "643902001";
+ bas.OKPO_Receiver = OKPO; /*"ИНН 7706195570";*/
+ bas.MFO_Receiver = MFO;
+ bas.CorAcc_Receiver = CorAcc;
+ bas.KPP_Receiver = KPP;
+ bas.Payment = Py; 
+ bas.ground= Trim(ground);
+ bas.Symbol_Cach = balsym;
+ bas.SymbNotBal ="  0";
+ bas.Kind_Carry=slozhprov;
+ bas.UserField1=uf1;
+ bas.UserField2=uf2;
+ bas.UserField3=uf3;
+ bas.UserField4=uf4;
+ bas.iApplicationKind = 8;
+ bas.ApplicationKey = GetApplicationKey();
+ insert(bas);
+end; /* Окончание INSERT_DOC() */
+/**************************************************/
+
+
+/********** Insert_Doc_130 Рубли и Валюта для 130 макета *************/
+macro Insert_Doc_130(bas,accp,accr,accr_real,sum,num,ground,balsym,shifr,
+		 vid,pachka,slozhprov,uf3,uf4,code,payer,receiver,uf1,uf2,
+		 dd1,dd2,dd3,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py)
+/* -------------val_doc------------ */
+ if(Money(sum)==Money(0))
+  return;
+ end;
+ if(code==810)
+  code=0;
+ end;
+ clearrecord(bas);
+ bas.oper = myoper;
+ bas.Kind_Oper=vid;
+ bas.Shifr_Oper=shifr;
+ bas.Dispatch=0;
+ bas.account_payer = Trim(accp);
+ bas.real_payer = Trim(accp);
+ bas.account_receiver = Trim(accr);
+ bas.real_receiver = Trim(accr_real);
+ bas.sum = sum;
+ bas.code_currency = code;
+ bas.number_pack = pachka;
+ bas.date_value = dd2;		 /* date provodki */
+ bas.date_document = dd1; 	 /* date_oper */
+ bas.pay_date = dd3;             /* date_oper */
+ bas.numb_document = Trim(num);
+ bas.bank_payer = "Балаковский филиал ЗАО ИШБАНК г.Балаково";
+ bas.bank_receiver = b_receiver;         /*"Балаковский филиал ЗАО ИШБАНК";*/
+ bas.Payer = payer; 		 /*GetAccountName(code,bas.Account_Payer);*/
+ bas.Receiver = receiver;	 /*GetAccountName(code,bas.Account_Receiver);*/
+ bas.OKPO_Payer = OKPO_P; /*"ИНН 7706195570";*/
+ bas.KPP_Payer = "643902001"; 
+ bas.OKPO_Receiver = OKPO; /*"ИНН 7706195570";*/
+ if(MFO!="046359826")    /*Внутрибанковский платеж поля не заполняем для исключения ошибки в RS*/
+ 	bas.MFO_Receiver = MFO;
+ 	bas.CorAcc_Receiver = CorAcc;
+ end; 
+ bas.KPP_Receiver = KPP;
+ bas.Payment = Py; 
+ bas.ground= Trim(ground);
+ bas.Symbol_Cach = balsym;
+ bas.SymbNotBal ="  0";
+ bas.Kind_Carry=slozhprov;
+ bas.UserField1=uf1;
+ bas.UserField2=uf2;
+ bas.UserField3=uf3;
+ bas.UserField4=uf4;
+ bas.iApplicationKind = 8;
+ bas.ApplicationKey = GetApplicationKey();
+ insert(bas);
+end; /* Окончание INSERT_DOC_130() */
+/**************************************************/
+
+
+
+
+
+/*********** Insert_Doc_V Внебаланс ***************/
+macro Insert_Doc_v(bas,accp,accr,sum,num,ground,balsym,shifr,
+		   vid,pachka,slozhprov,uf3,uf4,code,payer,receiver,dd1,dd2)
+/* -------------vn_doc------------ */
+ if(Money(sum)==Money(0))
+  return;
+ end;
+ if(code==810)
+  code=0;
+ end;
+ clearrecord(bas);
+ bas.oper = myoper;
+ bas.Kind_Oper=vid;
+ bas.account_payer = Trim(accp);
+ bas.account_receiver = Trim(accr);
+ bas.sum = sum;
+ bas.code_currency = code;
+ bas.number_pack = pachka;
+ bas.date_value = dd1;
+ bas.date_document = dd2; /*date_oper*/
+ bas.numb_document = Trim(num);
+ bas.Payer=payer; /*GetAccountName(code,bas.Account_Payer);*/
+ bas.Receiver=receiver; /*GetAccountName(code,bas.Account_Receiver);*/
+/* bas.INN_Payer="7706195570";
+ bas.INN_Receiver="7706195570"; */
+ bas.ground= Trim(ground);
+ bas.Kind_Carry=slozhprov;
+ bas.UserField3=uf3;
+ bas.UserField4=uf4;
+/* bas.Reserve=String(n_opb);*/
+ bas.Chapter = 3;
+ if (not(insert(bas)))
+    msgbox("S2",status);
+ end;
+/* insert(bas);*/
+end;
+/***********************************************/
+
+/********** Insert_Doc_OUT *************/
+macro Insert_Doc_out(bas,accp,accr,sum,num,ground,balsym,shifr,
+		 	vid,pachka,slozhprov,uf3,uf4,code,payer,receiver,uf1,uf2,
+			dd1,dd2,dd3)
+/* -------------val_doc------------ */
+ if(Money(sum)==Money(0))
+  return;
+ end;
+ if(code==810)
+  code=0;
+ end;
+ clearrecord(bas);
+ bas.oper = myoper;
+ bas.Kind_Oper=vid;
+ bas.Shifr_Oper=shifr;
+ bas.Dispatch=0;
+ bas.account_payer = Trim(accp);
+ bas.real_payer = Trim(accp);
+ bas.account_receiver = Trim(accr);
+ bas.real_receiver = Trim(accr);
+ bas.sum = sum;
+ bas.code_currency = code;
+ bas.number_pack = pachka;
+ bas.date_value = dd2;		 /* date provodki */
+ bas.date_document = dd1; 	 /* date_oper */
+ bas.pay_date = dd3;             /* date_oper */
+ bas.numb_document = Trim(num);
+ bas.bank_payer = BANK_1;
+ bas.bank_receiver = BANK_2;
+ bas.Payer = payer; 		 /*GetAccountName(code,bas.Account_Payer);*/
+ bas.Receiver = receiver;	 /*GetAccountName(code,bas.Account_Receiver);*/
+ bas.OKPO_Payer = INN_1;
+ bas.OKPO_Receiver = INN_2;
+ bas.ground= Trim(ground);
+ bas.Symbol_Cach = balsym;
+ bas.SymbNotBal ="  0";
+ bas.Kind_Carry=slozhprov;
+ bas.UserField1=uf1;
+ bas.UserField2=uf2;
+ bas.UserField3=uf3;
+ bas.UserField4=uf4;
+/* bas.MFO_Receiver=MFOR; */
+ bas.CorAcc_Receiver=CAccR;
+/* bas.Reserve=String(n_point);*/
+ insert(bas);
+end; /* Окончание INSERT_DOC_OUT() - Внебаланс */
+/**************************************************/
+
+
+
+/********** Обработка операций КОД 14 *************/
+macro f_14(str_in)
+     str_1 = str_in;
+     array aa;
+     asize(aa, 17);
+     k = 0;
+     while(k < 17)
+	aa(k) = "";
+	k = k + 1;
+     end;
+     i = 0;
+     j = 0;
+     str_e = "";
+     l = StrLen(str_1);
+     while(i < l)
+	if(SubStr(str_1, i, 1) != "^")
+	   str_e = str_e + SubStr(str_1, i, 1);
+	   i = i + 1;
+	else
+           aa(j) = str_e;
+	   str_e = "";
+	   i = i + 1;
+	   j = j + 1;
+	end;
+     end; /* while i */
+	/* Конвертация средств от физического лица */
+     if((SubStr(aa(6), 1, 8) == "42301840") AND (SubStr(aa(10), 1, 8) == "42301810"))
+           ncurent = ncurent + 1;
+           ground = "Конвертация средств согласно распоряжения от " + String(date_oper);
+	   Insert_Doc(post_c,aa(6),aa(10),(Money(aa(7))),leftpart + String(Int(ncurent)),
+        	      ground,"  0","09"," ","318","129","xxx",String(Money(aa(11))),aa(9),
+		      GetAccountName( aa(9),aa(6)),
+                      GetAccountName(aa(13),aa(10)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+return 1;
+	/*Для данного документа в сложной проводке сумма и счета доходов
+	  и расходов определяются по номеру операциониста, номеру сл. пров.
+	  и UserField-3 (сумма = String(Money(aa(11)) = UserField-4)
+	*/
+	   upd();
+     elif((SubStr(aa(6), 1, 8) == "42301810") AND (SubStr(aa(10), 1, 8) == "42301840"))
+          ncurent = ncurent + 1;
+          ground = "Конвертация средств согласно распоряжения от " + String(date_oper);
+	  Insert_Doc(post_c,aa(6),aa(10),(Money(aa(11))),leftpart + String(Int(ncurent)),
+                     ground,"  0","09"," ","318","1121","","",aa(13),
+		     GetAccountName( aa(9),aa(6)),
+                     GetAccountName(aa(13),aa(10)),
+		     "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	  upd();
+return 1;
+	/* Конвертация средств от юридического лица */
+     elif((SubStr(aa(6), 1, 5) == "40702") AND (SubStr(aa(10), 1, 5) == "47407"))
+           n_clt = F_clt(aa(6));
+	   code = "810";
+	   balance = 47408;
+           acc_47408 = GetAccountNumb(n_clt,code,balance);
+
+           ncurent = ncurent + 1;
+           ground = "Списание денежных средств согласно распоряжения от " + String(date_oper);
+	   Insert_Doc(post_r,aa(6),acc_47408,(Money(aa(7))),leftpart + String(Int(ncurent)),
+                      ground,"  0","09"," ","317","","","",aa(9),
+		      GetAccountName( aa(9),aa(6) ),
+                      GetAccountName( 810,  acc_47408),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+
+           ncurent = ncurent + 1;
+           ground = "Конвертация средств согласно распоряжения от " + String(date_oper);
+	   Insert_Doc(post_c,acc_47408,aa(10),(Money(aa(11))),leftpart + String(Int(ncurent)),
+        	      ground,"  0","09"," ","318","1121","","",aa(13),
+		      GetAccountName( 810  ,acc_47408),
+                      GetAccountName(aa(13),aa(10)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	  upd();
+return 1;
+     end;
+end;	/* f_14 */
+/**************************************************/
+
+/********** Обработка операций КОД 11 *************/
+macro f_11(str_in)
+     str_1 = str_in;
+     array aa;
+     asize(aa, 21);
+     k = 0;
+     pak="317";
+     while(k < 21)
+	aa(k) = "";
+	k = k + 1;
+     end;
+     i = 0;
+     j = 0;
+     str_e = "";
+     l = StrLen(str_1);
+     while(i < l)
+	  if(SubStr(str_1, i, 1) != "^")
+	    str_e = str_e + SubStr(str_1, i, 1);
+         i = i + 1;
+       else
+         aa(j) = str_e;
+	    str_e = "";
+	    i = i + 1;
+	    j = j + 1;
+	  end;
+     end;/* while i */
+     i=1;
+     l = StrLen(aa(1));
+     nnomdoc=substr(aa(1),l-2,3);
+     aa(1)=nnomdoc;
+/*-----Удалено Перов 29,03,06 Работаем со счетами межфилиальных расчетов--------
+
+     if((SubStr(aa(5), 1, 5) == "47422") AND (SubStr(aa(6), 1, 5) == "30301"))
+           if(SubStr(aa(6), 6, 3) == "810")
+		bas = post_r;
+		pak = "317";
+*/
+/*	slg_prov="115"; Для московского корсчета добавляем урегулирование сл.пров 115   */
+/*        else
+		bas = post_c;
+		pak = "318";
+	   end;
+           ncurent = aa(3);
+           ground = " " + String(date_oper);
+	   Insert_Doc(bas,aa(5),aa(6),(Money(aa(7))),aa(3),
+                      aa(9),"  0","09"," ",pak,"","","",aa(8),
+		      GetAccountName(aa(8),aa(5)),
+                      GetAccountName(aa(8),aa(6)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;
+*/
+/*-------------- Предоставление овердрафта---------------- */
+     if(SubStr(aa(3), 1, 5) == "45509")
+        n_clt = F_clt(aa(3));
+	   code = Trim(aa(6));
+	   balance = 91309;
+	   acc_91309 = "";
+        acc_91309 = GetAccountNumbN(n_clt,code,balance);
+	   balance = 99998;
+        if(SubStr(aa(4), 6, 3) == "810")
+ 	     bas = post_r;
+          pak="317";
+ 	       if(aa(4)=="40817810002021000002")
+                  pak = "614";
+               elif(aa(4)=="40817810702021000001")
+                  pak = "615";     
+               end;
+		 basv = doc_vnr;
+		 slogn = "";
+	   else
+		bas = post_c;
+		pak = "320";
+		basv = doc_vnc;
+		slogn = "144";
+	   end;
+           ncurent = ncurent + 1;
+           ground = aa(8);
+	   Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),
+                      aa(8),"  0","11"," 1",pak,"","","",aa(6),
+		      GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+           ncurent = ncurent + 1;
+/*           ground = "Использование овердрафтного кредита согласно распоряжения от " + String(date_oper);
+	   Insert_Doc_v(basv,acc_91309,acc_99998,(Money(aa(7))),aa(3),
+		      aa(9),"  0","09","09",pak,slogn,"","",aa(8),
+                      GetAccountName_v(aa(8),acc_91309),
+                      GetAccountName_v("810",acc_99998),
+		      date_prov,date_oper); /*,date_oper);   */ */
+
+return 1;
+     end;
+
+/*-------------- Пополнение картсчета через кассу ---------------------*/
+     if((SubStr(aa(3), 1, 5) == "20202") AND (SubStr(aa(4), 1, 5) == "40817"))
+        n_clt = F_clt(aa(3));
+        if(SubStr(aa(4), 6, 3) == "810")
+		bas = post_r;
+		pak = "205";
+		balsym=" 31";
+		basv = doc_vnr;
+		slogn = "";
+	   else
+		bas = post_c;
+		pak = "318";
+		basv = doc_vnc;
+		slogn = "144";
+	   end;
+	 Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),
+                      aa(8),balsym,"09"," 3",pak,"","","",aa(6),
+		    /*  GetAccountName(aa(8),aa(5))*/
+			"Физические лица",
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+
+return 1;
+end;
+
+/*-------------- Пополнение счета страх.депозита через кассу ---------------------*/
+     if((SubStr(aa(3), 1, 5) == "20202") AND (SubStr(aa(4), 1, 5) == "42309"))
+        n_clt = F_clt(aa(3));
+        if(SubStr(aa(4), 6, 3) == "810")
+		bas = post_r;
+		pak = "205";
+		balsym=" 16";
+		basv = doc_vnr;
+		slogn = "";
+	   else
+		bas = post_c;
+		pak = "318";
+		basv = doc_vnc;
+		slogn = "144";
+	   end;
+	 Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),
+                      aa(8),balsym,"09"," 3",pak,"","","",aa(6),
+		    /*  GetAccountName(aa(8),aa(5))*/
+			"Физические лица",
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+
+return 1;
+end;
+
+
+/*-------------- Выдача наличных через банкомат ---------------------*/
+     if(SubStr(aa(4), 1, 5) == "20208")
+        n_clt = F_clt(aa(4));
+        if(SubStr(aa(4), 6, 3) == "810")
+		bas = post_r;
+		pak = "318";
+		balsym=" 81";
+		basv = doc_vnr;
+		slogn = "";
+	   else
+		bas = post_c;
+		pak = "318";
+		basv = doc_vnc;
+		slogn = "144";
+	   end;
+	ground=aa(8)+" согласно проверочно-сальдовой ведомости. Документов ..."; 
+	Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),
+                     /* aa(8)*/  ground,balsym,"09"," 3",pak,"","","",aa(6),
+		    /*  GetAccountName(aa(8),aa(5))*/
+			"Физические лица",
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+
+return 1;
+end;
+
+/*-----Погашение овердрафта--------------------------*/
+
+     if(SubStr(aa(4), 1, 5) == "45509")
+           n_clt = F_clt(aa(4));
+	   code = Trim(aa(8));
+	   balance = 91309;
+           acc_91309 = "";
+           acc_91309 = GetAccountNumbN(n_clt,code,balance);
+   /*        msgbox(n_clt);*/
+	   balance = 99998;
+/*           acc_99998 = "99998810701000000001";*/
+           if(SubStr(aa(4), 6, 3) == "810")
+		bas = post_r;
+		if(aa(3)=="40817810002021000002")
+                  pak = "634";
+		elif(aa(3)=="40817810702021000001")
+		  pak = "616";
+		end;
+		basv = doc_vnr;
+		slogn = "";
+	   else
+		bas = post_c;
+		pak = "323";
+		basv = doc_vnc;
+		slogn = "143";
+	   end;
+           ncurent = ncurent + 1;
+           ground = aa(8);
+	   Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),
+                      aa(8),"  0","10"," 1",pak,"","","",aa(6),
+		      GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+           ncurent = ncurent + 1;
+
+
+
+
+/*           ground = "Погашение овердрафтного кредита согласно распоряжения от " + String(date_oper);
+	   Insert_Doc_v(basv,acc_99998,acc_91309,(Money(aa(7))),aa(3),
+		          aa(9),"  0","09","09",pak,slogn,"","",aa(8),
+                          GetAccountName_v(aa(8),acc_99998),
+                          GetAccountName_v("810",acc_91309),
+		          date_prov,date_oper); /*,date_oper);   */*/
+
+return 1;
+     end;
+
+/*---Погашение начисленных процентов---*/
+
+     if(SubStr(aa(4), 1, 5) == "47427")
+         if(SubStr(aa(4), 6, 3) == "810")
+	           bas = post_r;
+			if(aa(3)=="40817810702021000001")
+			  pak = "656";  
+                        elif(aa(3)=="40817810002021000002")
+			   pak = "654";
+			end;
+			slogn = "";
+	     else
+			bas = post_c;
+			pak = "323";
+			basv = doc_vnc;
+			slogn = "143";
+	     end;
+           ncurent = ncurent + 1;
+           ground = aa(8);
+	   	Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),aa(8),"  0","17"," 1",
+                     pak,"","","",aa(6),GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;   
+
+/*----Отражение начисленных % на сч.47427-----------------------*/
+ 
+     if((SubStr(aa(3), 1, 5) == "47427") /*AND (SubStr(aa(4), 1, 5) == "47501")*/)
+         if(SubStr(aa(4), 6, 3) == "810")
+	       bas = post_r;
+		  pak = "608";
+		  slogn = "";
+	     else
+		  bas = post_c;
+		  pak = "323";
+		  basv = doc_vnc;
+		  slogn = "143";
+	     end;
+           ncurent = ncurent + 1;
+/*ground = "Начисление процентов по договорам";*/
+ground = aa(8);
+	   	Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),aa(8),"  0","09"," 1",
+                     pak,"","","",aa(6),GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;   
+
+/* Возврат денег при закрытии карты */
+
+     if((SubStr(aa(3), 1, 5) == "40817") AND ((aa(4) == "20202810502020000002") or (aa(4) == "20202810102020000004")))
+	       bas = post_r;
+		  pak = "202";
+
+	 	  slogn = "";
+           ncurent = ncurent + 1;
+           ground = aa(8);
+	   	Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),aa(8)," 51","09"," 3",
+                     pak,"","","",aa(6),aa(9),
+/* GetAccountName(aa(6),aa(3)), */
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;   
+
+
+
+
+/*----Уплата % начисленных на остаток на сч.-----------------------*/
+ 
+     if(aa(3) == "70606810902021501002")
+         if(SubStr(aa(4), 6, 3) == "810")
+	       bas = post_r;
+		  pak = "602";
+		  slogn = "";
+	     else
+		  bas = post_c;
+		  pak = "623";
+		  basv = doc_vnc;
+		  slogn = "143";
+	     end;
+           ncurent = ncurent + 1;
+           datesplit(date_oper,dd,mm,gg);
+		ground = aa(8);
+	   	Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),ground,"  0","17"," 1",
+                     pak,"","","",aa(6),GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;   
+
+
+     if(SubStr(aa(3), 1, 5) == "91317")
+        n_clt = F_clt(aa(3));
+	   code = Trim(aa(6));
+/*	   balance = 91309;
+	   acc_91309 = "";
+        acc_91309 = GetAccountNumbN(n_clt,code,balance);
+	   balance = 99998;*/
+ 	     bas = post_r;
+          pak="614";
+		 basv = doc_vnr;
+		 slogn = "";
+           ncurent = ncurent + 1;
+           ground = aa(8);
+	   Insert_Doc_v(basv,aa(3),acc_99998,(Money(aa(5))),aa(1),
+		      aa(8),"  0","09","09",pak,"","","",aa(7),
+                      GetAccountName_v(aa(6),aa(3)),
+                      GetAccountName_v("810",acc_99998),
+		      date_prov,date_oper); /*,date_oper);   */ 
+
+return 1;
+     end;
+
+
+     if(SubStr(aa(4), 1, 5) == "91317")
+           n_clt = F_clt(aa(4));
+	   code = Trim(aa(8));
+/*	   balance = 91309;
+           acc_91309 = "";
+           acc_91309 = GetAccountNumbN(n_clt,code,balance);
+	   balance = 99998;
+/*           acc_99998 = "99998810701000000001";*/*/
+		bas = post_r;
+		  pak = "604";
+		basv = doc_vnr;
+		slogn = "";
+           ncurent = ncurent + 1;
+           ground = aa(8);
+
+	   Insert_Doc_v(basv,acc_99998,aa(4),(Money(aa(5))),aa(1),
+		          aa(8),"  0","09","09",pak,"","","",aa(6),
+                          GetAccountName_v(aa(6),acc_99998),
+                          GetAccountName_v(aa(6),aa(4)),
+		          date_prov,date_oper); /*,date_oper);   */
+
+return 1;
+     end;
+
+
+
+
+/*
+--------------Перечисления Балаково-Банку  (Не работает. Оставлено для образца)-----------
+
+     if((SubStr(aa(5), 1, 5) == "47422") AND (SubStr(aa(6), 1, 5) == "47423") AND (SubStr(aa(6), 10, 2) == "99"))
+         if(SubStr(aa(6), 6, 3) == "810")
+	       bas = post_r;
+		  pak = "610";
+		  slogn = "";
+	     else
+		  bas = post_c;
+		  pak = "323";
+		  basv = doc_vnc;
+		  slogn = "143";
+	     end;
+           ncurent = ncurent + 1;
+           ground = "Средства для возмещения по операциям банковских карт за "+String(date_nazn);
+	   	Insert_Doc(bas,aa(5),aa(6),(Money(aa(7))),aa(3),ground,"  0","09"," 1",
+                     pak,slogn,"","",aa(8),"Балаковский филиал ЗАО ИШБАНК",
+                      "ОАО Балаково-Банк",
+		      "","",date_prov,date_oper,date_oper,"ОАО Балаково-Банк г.Балаково",OKPO_P,"6439044245","046359728","30101810300000000728",KPP,"6");
+	   upd();
+
+--------------Перечисления комиссии Балаково-Банку------------------------------------------------------
+
+          if(aa(6) == "47423810299000001001")
+			schkom = "70107810799001720501";
+		elif (aa(6) == "47423810299000000002")
+              schkom = "70107810099001720502";
+          elif (aa(6) == "47423810599000000003")
+              schkom = "70107810399001720503";
+		elif (aa(6) == "47423810899000000004")
+              schkom = "70107810699001720504";
+		elif (aa(6) == "47423810199000000005")
+              schkom = "70107810999001720505";
+	     end;
+           ncurent = ncurent + 1;
+           ground = "Комиссия ОАО Балаково-Банка по операциям банковских карт за "+String(date_nazn);
+	   	Insert_Doc(bas,"70209810601002920502",schkom,((Money(aa(7)))*0.2/100),aa(3),ground,"  0","09"," 1",
+                     pak,slogn,"","",aa(8),"Балаковский филиал ЗАО ИШБАНК",
+                      "ОАО Балаково-Банк",
+		      "","",date_prov,date_oper,date_oper,"ОАО Балаково-Банк г.Балаково",OKPO_P,"6439044245","046359728","30101810300000000728",KPP,"6");
+	   upd();
+return 1;
+     end;   
+
+*/
+/*----Удержание комиссии за открытие банковской карты (за просроченные карты)----*/
+
+     if(aa(4) == "70601810202022102024")
+         if(SubStr(aa(4), 6, 3) == "810")
+	       bas = post_r;
+		  pak = "657";
+		  slogn = "";
+	     else
+		  bas = post_c;
+		  pak = "623";
+		  basv = doc_vnc;
+		  slogn = "143";
+	     end;
+           ncurent = ncurent + 1;
+           datesplit(date_oper,dd,mm,gg);
+		ground = aa(8);
+	   	Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),ground,"  0","17"," 1",
+                     pak,"","","",aa(6),GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;   
+
+
+
+
+/*--------Основная обработка пачка317----------------*/
+
+  if(SubStr(aa(4), 6, 3) == "810")
+		bas = post_r;
+		pak = "317";
+	   else
+		bas = post_c;
+		pak = "318";
+	   end;
+		Insert_Doc(bas,aa(3),aa(4),(Money(aa(5))),aa(1),
+                      aa(8),"  0","13"," 1",pak,"","","",aa(6),
+		      GetAccountName(aa(6),aa(3)),
+                      GetAccountName(aa(6),aa(4)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+
+
+end;	/* f_11 */
+/***********************************************************************/
+/********************** Макет 130 **************************************/
+/***********************************************************************/
+macro f_13(str_in)
+     str_1 = str_in;
+     array aa;
+     asize(aa, 54);
+     k = 0;
+     pak="317";
+     while(k < 54)
+	aa(k) = "";
+	k = k + 1;
+     end;
+     i = 0;
+     j = 0;
+     str_e = "";
+     l = StrLen(str_1);
+     while(i < l)
+	  if(SubStr(str_1, i, 1) != "^")
+	    str_e = str_e + SubStr(str_1, i, 1);
+         i = i + 1;
+       else
+         aa(j) = str_e;
+	    str_e = "";
+	    i = i + 1;
+	    j = j + 1;
+	  end;
+     end;/* while i */
+     i=1;
+     l = StrLen(aa(1));
+     nnomdoc=substr(aa(1),l-3,4);
+     aa(1)=nnomdoc;
+
+
+     if(aa(19) == "810")
+       bas = post_r;
+ 	 slogn = "";
+     else
+	 bas = post_c;
+	 pak = "323";
+	 basv = doc_vnc;
+	 slogn = "143";
+     end;
+     ncurent = ncurent + 1;
+     plif="Балаковский филиал ЗАО ИШБАНК//"+aa(7)+"//ИНН "+aa(9)+"//";
+     ground ="Составлено на основании заявления клиента "+aa(21);
+     Insert_Doc_130(bas,aa(5),aa(26),aa(6),(Money(aa(18))),aa(1),ground,"  0","01"," 1",
+                     pak,slogn,"","",aa(19),plif, aa(23),
+		      "","",date_prov,date_oper,date_oper,aa(27),INN_1,aa(25),aa(29),aa(31),aa(41),aa(37));
+	   upd();
+
+return 1;
+   end;   /************* Макет 130 *********************************/
+/*******************************************************************************************/
+/*******************************************************************************************/
+
+
+/*-----Удалено Перов 29,03,06 Работаем со счетами межфилиальных расчетов--------
+
+     if((SubStr(aa(5), 1, 5) == "47422") AND (SubStr(aa(6), 1, 5) == "30301"))
+           if(SubStr(aa(6), 6, 3) == "810")
+		bas = post_r;
+		pak = "317";
+*/
+/*	slg_prov="115"; Для московского корсчета добавляем урегулирование сл.пров 115   */
+/*        else
+		bas = post_c;
+		pak = "318";
+	   end;
+           ncurent = aa(3);
+           ground = " " + String(date_oper);
+	   Insert_Doc(bas,aa(5),aa(6),(Money(aa(7))),aa(3),
+                      aa(9),"  0","09"," ",pak,"","","",aa(8),
+		      GetAccountName(aa(8),aa(5)),
+                      GetAccountName(aa(8),aa(6)),
+		      "","",date_prov,date_oper,date_oper,b_receiver,OKPO_P,OKPO,MFO,CorAcc,KPP,Py);
+	   upd();
+return 1;
+     end;
+
+
+/**************************************************/
+*/
+
+macro f_open()
+/*  GetDate(date_oper, "Введите дату операции !!!");
+  GetDate(date_prov, "Введите дату проводки !!!");
+  GetDate(date_nazn, "Введите дату в назаначении !!!");*/
+
+  GetInt(N_vgr, "Введите номер выгрузки !!!",2);
+/*  GetInt(myoper, "Введите номер ОПЕРАЦИОНИСТА !!!", 4);*/
+
+  f_str = string(date_oper);
+  N_vgr = string(N_vgr);
+  N_vgr = MkStr("0", 2 - Strlen(Trim(N_vgr))) + Trim(N_vgr);
+  istr_12 = (substr(f_str, 1, 2));
+  istr_12 = MkStr("0", 2 - Strlen(Trim(istr_12))) + Trim(istr_12);
+  istr_22 = (substr(f_str, 4, 2));
+  istr_32 = (substr(f_str, 9, 2));
+  f_str = "f:\\Pay01\\out\\3108\\out\\" + istr_32 + istr_22 + istr_12 + N_vgr+ ".e01";
+/*  f_str = "o:\\perov\\" + istr_32 + istr_22 + istr_12 + N_vgr+ ".e01";  */
+/*f_str = "c:\\unioncrd\\" + istr_12 + istr_22 + istr_32 + ".pay";*/
+/*  msgbox(f_str);               		 имя файла данных */
+  leftpart = istr_12 + istr_22 + SubStr(istr_32, 3, 2);
+  return f_str;
+end;	/* f_open */
+
+
+macro f_close()
+   close(txt_in);
+   close(dt);
+   close(dtw);
+end;	/* f_close */
+
+
+
+macro main()
+/*
+	if( open(dt, "d:\\rs50\\mac\\unioncrd\\dcurent.dbf")) /* открытие файла СЧЕТЧИК */
+            open(dtw, "d:\\rs50\\mac\\unioncrd\\dcurent.dbf");
+*/
+  array aa;
+  asize(aa, 54);
+  if( open(dt, "..\\mac\\unioncrd\\dcurent.dbf")) /* открытие файла СЧЕТЧИК */
+    open(dtw, "..\\mac\\unioncrd\\dcurent.dbf");
+    rewind(dt);
+    next(dt);
+    dcurent = dt.d_curent;
+    ncurent = dt.n_curent;
+    if(Trim(dcurent) == {curdate})
+      ncurent = dt.n_curent;
+    else
+	   dcurent = String({curdate});
+      ncurent = Int(0);
+    end;
+/*   else */
+  end;
+
+  f_op = f_open();
+  file txt_in (f_op) txt; /* указатель на файл данных */
+  if( open(txt_in, f_op)) /* открытие файла данных */
+    rewind(txt_in);
+    nnom=0;
+    nsum=money(0);
+    inom=0;
+    isum=money(0);
+    zapr=True;
+    while(next(txt_in))
+      str_1 = Trim(txt_in.str);
+      if (Substr(str_1,1,3)=="110")
+        k = 0;
+        while(k < 21)
+          aa(k) = "";
+          k = k + 1;
+        end;
+        i = 0;
+        j = 0;
+        str_e = "";
+        l = StrLen(str_1);
+        while(i < l)
+          if(SubStr(str_1, i, 1) != "^")
+            str_e = str_e + SubStr(str_1, i, 1);
+            i = i + 1;
+          else
+            aa(j) = str_e;
+            str_e = "";
+            i = i + 1;
+            j = j + 1;
+          end;
+        end;/* while i */
+        nnom=nnom+1;
+        nsum=nsum+money(aa(5));
+      end;
+
+
+      if (Substr(str_1,1,3)=="130")
+        k = 0;
+        while(k < 54)
+          aa(k) = "";
+          k = k + 1;
+        end;
+        i = 0;
+        j = 0;
+        str_e = "";
+        l = StrLen(str_1);
+        while(i < l)
+          if(SubStr(str_1, i, 1) != "^")
+            str_e = str_e + SubStr(str_1, i, 1);
+            i = i + 1;
+          else
+            aa(j) = str_e;
+            str_e = "";
+            i = i + 1;
+            j = j + 1;
+          end;
+        end;/* while i */
+        nnom=nnom+1;
+        nsum=nsum+money(aa(18));
+      end;
+
+      if (Substr(str_1,1,3)=="002")
+        k = 0;
+        while(k < 3)
+          aa(k) = "";
+          k = k + 1;
+        end;
+        i = 0;
+        j = 0;
+        str_e = "";
+        l = StrLen(str_1);
+        while(i < l+1)
+          if(SubStr(str_1, i, 1) != "^")
+            str_e = str_e + SubStr(str_1, i, 1);
+            i = i + 1;
+          else
+            aa(j) = str_e;
+            str_e = "";
+            i = i + 1;
+            j = j + 1;
+          end;
+        end;/* while i */
+        inom=int(aa(1));
+        isum=money(aa(2));
+      end;
+    end;   /* while next */
+    if (inom!=nnom)
+      MsgBox("Количество записей в файле не совпадает с итогом ",nnom," # ",inom);
+      GetTrue(zapr,"Продолжать загрузку? ");
+    end;  
+    if (isum!=nsum)
+      MsgBox("Сумма по пакету не совпадает с итоговой суммой ",nsum," # ",isum);
+      GetTrue(zapr1,"Продолжать загрузку? ");
+    end;
+    if ((zapr!=False) and (zapr1!=False))
+    rewind(txt_in);
+    while(next(txt_in))
+      str_1 = Trim(txt_in.str);
+      if(SubStr(str_1, 1, 3) == "110")
+        f_11(str_1);
+      end;
+      if(SubStr(str_1, 1, 3) == "130")
+        f_13(str_1);
+      end;
+ 
+    end;   /* while next */
+    end;
+
+    f_close();
+  else
+    MsgBox("Файл c данными не найден !!!");
+  end;   /* if open */
+
+end; 	       /* main */
+
+main();
+end;
+

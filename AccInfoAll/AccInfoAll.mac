@@ -1,0 +1,210 @@
+/*
+ * Макрос выводящий отчет по счетам и 
+ * средним движения по ним
+ * developer Polyakov S.George
+ * (т/з Пензиной Екатерины Самара)
+ * v. 1.00-17.10.2012
+ * v. 1.01-24.10.2012
+   Добавлен вывод остатка на текущий операционный день
+*/
+
+import "..\\mac\\bfsofia\\acclib.mac";
+import "..\\mac\\bfsofia\\clnlib.mac";
+import "..\\mac\\bfsofia\\utllib.mac";
+import ClnInter;
+import BankInter;
+
+//макрос формирования заголовка отчета
+macro macAIHeadRpt(sDate1:string,sDate2:string)
+[Сводная информация по клиентским счетам, средним оборотам и средним остаткам с ########## по ##########
+ +-------+-------+-----------------------------------------------------+--------------------+----------+-------------------+---------------+------------------+---------------+-----------------+---------------+--------------+
+ | № п/п |  Код  |                                                     |                    |   Дата   |        ФИО        |   Контактный  |  Среднемесячные  |Среднемесячные |Дата прекращения |               |  Остаток на  |           
+ |       |клиента|               Наименование клиента                  |   Расчетный счет   | открытия |    руководителя   |    телефон    |      обороты     |   остатки     |движения по счету|      ИНН      |   текущий    |          
+ |       |       |                                                     |                    |  счета   |                   |               |                  |               |                 |               |     день     |
+ +-------+-------+-----------------------------------------------------+--------------------+----------+-------------------+---------------+------------------+---------------+-----------------+---------------+--------------+
+](sDate1,sDate2);
+end;
+
+macro macAIRpt(
+               iPP:integer,
+               iCodeCln:integer,
+               oClnName:object,
+               sAcc:string,
+               sOpenAcc:string,
+               oFIO:object,
+               oTel:object,
+               mOst:money,
+               aObor:arrayref,
+               sDateLastPay,
+               sInn,
+               mOstCurDay
+              )
+[+-------+-------+-----------------------------------------------------+--------------------+----------+-------------------+---------------+------------------+---------------+-----------------+---------------+--------------+
+ |#######|#######|#####################################################|####################|##########|###################|###############|##################|###############|#################|###############|##############|
+ |       |       |#####################################################|                    |          |###################|###############|##################|               |                 |               |              |
+ |       |       |#####################################################|                    |          |###################|###############|                  |               |                 |               |              |
+]                                                                                                                           
+(
+ iPP:r,
+ iCodeCln:r,
+ oClnName(0),
+ sAcc,sOpenAcc,
+ oFIO(0),
+ oTel(0),
+ "Дт."+aObor(0),
+ String(mOst):r,
+ sDateLastPay:r,
+ sInn:r,
+ String(mOstCurDay):r,
+ oClnName(1),
+ oFIO(1),
+ oTel(1),
+ "Кт."+aObor(1),
+ oClnName(2),
+ oFIO(2),
+ oTel(2)
+);
+end;
+
+macro macAIMain()
+  var
+     sExt:string,
+     sPathName:string,
+     {oper},
+     {curdate},
+     sFileName:string,
+     bYes:bool,
+     i:integer,
+     bAcc:bool,
+     bNext:bool,
+     dDate1:date,
+     dDate2:date,
+     sDate:string,
+     iDep:integer,
+     sOpenAcc:string,
+     iClnCode:integer,
+     sClnName:string,
+     sFIO1p:string,
+     sTel1p:string,
+     sDateLastPay:string,
+     oTblAcc:object,
+     mOstCurDay:money;
+  array
+       aObor;
+  Const
+       S_DELIM:string="#", S_LOC_DIR:string="TXT";
+  bYes=false;
+  sFileName="";
+  i=0;
+  iDep=macALGetDprt();
+  if (iDep!=-2)
+    sDate=macULSetDate1to2();
+    if (StrLen(sDate)!=0)
+      dDate1=macULGetDateStr(macULGetOneT(sDate,true));
+      dDate2=macULGetDateStr(macULGetOneT(sDate,false));
+      if (
+          (dDate1==Date(0,0,0)) or 
+          (dDate2==Date(0,0,0))
+         )
+        iDep=-2;
+      end;
+    else
+      iDep=-2;
+    end;
+  end;
+  if (iDep!=-2)
+    if (gettrue(false,"Формировать форматный файл для передачи в другие программы?\n (Нет)- вывод печатной формы ТОЛЬКО на экран"))
+      sFileName=GetWorkFileName(String({oper}))+".txt";
+      SetOutput(sFileName);
+    else
+      macAIHeadRpt(macULGetStrDate(dDate1),macULGetStrDate(dDate2));
+    end;
+    oTblAcc=TBFile("account.dbt","r",0,null,"bank.def");
+    rewind(oTblAcc);
+    oTblAcc.rec.account="40500000000000000000";
+    bNext=getge(oTblAcc);
+    while (bNext)
+      if (StrLen(oTblAcc.rec.account,1,3)!="409")
+        if (
+            (macALCheckClnAcc(oTblAcc.rec.account)) and
+            (oTblAcc.rec.Open_Close!="З")
+           ) 
+          message("Просмотрен счет:"+oTblAcc.rec.account);
+          bAcc=false;
+          if (iDep!=-1)
+            if (oTblAcc.rec.Department==iDep)
+              bAcc=true;
+            end;
+          else
+            bAcc=true;
+          end;
+          if (bAcc)
+            //***
+            i=i+1;
+            sClnName=macCLGetNameClnAcc(oTblAcc.rec.account,true);
+            iClnCode=oTblAcc.rec.Client;
+            sClnName=macULGetOneT(sClnName,true,"^");
+            sOpenAcc=macULGetStrDate(oTblAcc.rec.Open_Date);
+            sFIO1p=macCLGetFIOFirstPer(iClnCode);
+            sTel1p=macCLGetPhone1(iClnCode);
+            sDateLastPay=macULGetStrDate(oTblAcc.rec.Final_Date);
+            if (sDateLastPay=="00.00.0")
+              sDateLastPay="";
+            end;
+            aObor(0)=DebetA(oTblAcc.rec.account,dDate1,dDate2);
+            aObor(1)=KreditA(oTblAcc.rec.account,dDate1,dDate2);
+            mOstCurDay=RestA(oTblAcc.rec.account,{curdate});
+            if (StrLen(sFileName)==0)
+              macAIRpt(
+                       i,
+                       iClnCode,
+                       strsplit2(sClnName,50,50,3),
+                       oTblAcc.rec.account,
+                       sOpenAcc,
+                       StrSplit2(sFIO1p,20,20,3),
+                       StrSplit2(sTel1p,15,15,3),
+                       RestA(oTblAcc.rec.account,dDate1,dDate2),
+                       aObor,
+                       sDateLastPay,
+                       GetClientInn(oTblAcc.rec.Client),
+                       mOstCurDay
+                      );
+            else
+              println(
+                      String(i)+S_DELIM+
+                      String(iClnCode)+S_DELIM+
+                      sClnName+S_DELIM+
+                      oTblAcc.rec.account+S_DELIM+
+                      sOpenAcc+S_DELIM+
+                      sFIO1p+S_DELIM+
+                      sTel1p+S_DELIM+
+                      StrSubst(String(aObor(0)),".",",")+S_DELIM+
+                      StrSubst(String(aObor(1)),".",",")+S_DELIM+
+                      StrSubst(String(RestA(oTblAcc.rec.account,dDate1,dDate2)),".",",")+S_DELIM+
+                      sDateLastPay+S_DELIM+
+                      getClientINN(oTblAcc.rec.Client)+S_DELIM+
+                      StrSubst(String(mOstCurDay),".",",")
+                     );
+            end;
+            bYes=true;
+          end;
+        end;
+        bNext=next(oTblAcc);
+      else
+        bNext=false;
+      end;
+    end;
+    if (not bYes)
+      println();
+      println("НЕТ ДАННЫХ ДЛЯ ВЫВОДА!");
+    else
+        if (StrLen(sFileName)!=0)
+            MsgBox("Сформирован форматный файл для передачи в другие программы.\n"+
+                   "Файл сохранен: "+sFileName);
+        end;
+    end;
+  end;
+end;
+
+//Точка входа в программу
+macAIMain()

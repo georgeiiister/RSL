@@ -1,0 +1,1127 @@
+/*
+       RS-Bank 5.50               R-Style Softlab
+          
+          Приостановление операций по счёту
+*/
+
+record AcArest( "ac_arest.dbt", "bank.def" );
+record StopOper( "stop_op.dbt", "bank.def" );
+
+import ClnInter, BankInter, CurrInter, CtgInter, rsexts, "globals.mac";
+
+var facc  = TbFile("account.dbt",  "w", 0, "account.dbt",  "bank.def"),
+    faccC = TbFile("account$.dbt", "w", 0, "account$.dbt", "bank.def"),
+    cr    = TbFile("currency.dbt", "r", 0, "currency.dbt", "bank.def");
+
+//ошибки LoadStopMessage
+const   ERR_NO           = 0  // Нет ошибок
+      , ERR_NOTCLIENT    = 1  // Не найден клиент с ИНН и КПП
+      , ERR_NOTACC       = 2  // Не нейдени ни один л/с
+      , ERR_NOTINNNP     = 3  // Не найден реквизит ИНННП
+      , ERR_STOPINS      = 4  // Ошибка вставки в журнал
+      , ERR_EMPTY_DATEPR = 5  // Отстуствует необходимый реквизит "ДатаРешПр"
+      , ERR_EMPTY_DATEOT = 6  // Отстуствует необходимый реквизит "ДатаРешОт"
+      ;
+
+//Разделители
+const   END_BLOCK    = "###"
+      , END_FRAGMENT = "@@@"
+      , END_FILE     = "===";
+
+// виды действий
+const NO_ACT = 0,
+      SET    = 1,
+      UNSET  = 2;
+
+//виды сообщений
+const   KIND_UNDEF = 0
+      , KIND_STOP  = 1    // о приостановлении
+      , KIND_CANC  = 2;   // об отмене приостановления
+
+// Занчения категории 512 - для отчёта
+const CTG512_VAL_AREST     = "Арестован";
+const CTG512_VAL_NOT_AREST = "Не арестован";
+
+// класс для хранения сведений о загружаемом сообщении
+class StopOpMessElem(FileMessName:string)
+   var KindMess:integer; // Тип сообщения
+   var FileName:string;  // Имя файла сообщения
+   var MessDate:date;    // Дата сообщения из имения файла
+
+   // Получить тип сообщения
+   private macro GetKindMess():integer
+      if( SubStr( StrUpr(FileName), 1, 3 ) == "RPO" )
+         return KIND_STOP;
+      elif( SubStr( StrUpr(FileName), 1, 3 ) == "ROO" )
+         return KIND_CANC;
+      else
+         return KIND_UNDEF;
+      end;
+   end;
+
+   // Получить дату сообщения из файла
+   private macro GetMessDate():date
+      var DateFromMess:string = SubStr(FileName, 23, 2) + "." + SubStr(FileName, 21, 2) + "." + SubStr(FileName, 17, 4); 
+      return date(DateFromMess);
+   end;
+
+   FileName = FileMessName;
+   KindMess = GetKindMess();
+   MessDate = GetMessDate();
+end;
+
+// Функция-компаратор для сортировки массива загружаемых сообщений
+macro cmp_StopOpMessElem(x:StopOpMessElem, y:StopOpMessElem)
+   if( x.KindMess > y.KindMess )
+      return 1;
+   elif( x.KindMess < y.KindMess )
+      return -1;
+   else
+      if(x.MessDate > y.MessDate)
+         return 1;
+      elif(x.MessDate < y.MessDate)
+         return -1;
+      end;
+   end;
+   return 0;
+end;
+
+
+//сведения о счете
+class TAccInfo ()
+  var SetCtg512 = false
+    , ValCtg512
+    , SetCtg513 = false
+    , ValCtg513
+    , ActArest = NO_ACT     // действие с типом ареста "Арест на дебет" (NO_ACT, SET, UNSET)
+    , ActPartArest = NO_ACT // действие с типом ареста "Частичный арест на дебет" (NO_ACT, SET, UNSET)
+    , Comment = "",
+      KindMess = KIND_UNDEF; // Пришлось добавить это поле для формирования протокола
+
+  var AcArestInfoRH = TRecHandler("ac_arest.dbt","bank.def");
+
+  var AcArest = AcArestInfoRH.rec;
+
+    macro FillComment(strComm)
+        if (ValType(strComm) != V_UNDEF)
+            Comment = strComm;
+        else
+           if (ActArest == SET)
+              Comment = Comment + "Установлен тип \"Арест на дебет\" (Т); ";
+           end;
+           if (ActArest == UNSET)
+              Comment = Comment + "Снят тип \"Арест на дебет\" (Т); ";
+           end;
+           if (ActPartArest == SET)
+              Comment = Comment + "Установлен тип \"Частичный арест\" (Д); ";
+           end;
+           if (ActPartArest == UNSET)
+              Comment = Comment + "Снят тип \"Частичный арест\" (Д); ";
+           end;
+           if (SetCtg512)
+              Comment = Comment + "Установлена категория №512 = " + ValCtg512 + "; ";
+           end;
+           if (SetCtg513)
+              if(KindMess == KIND_STOP)
+                 Comment = Comment + "В категорию №513 добавлена сумма " + string(ValCtg513);
+              else
+                 Comment = Comment + "Установлена категория №513 = " + string(ValCtg513);
+              end;
+              clearRecord(cr.rec);
+              cr.rec.Code_Currency = AcArest.Code_Currency;
+              if (geteq( cr )) 
+                 Comment = Comment + " " + cr.rec.Short_Name;
+              end;
+              Comment = Comment +  "; ";
+           end;
+
+        end;
+     end;
+
+     //очистить инфу о проставлении категорий
+     macro ClearCtgInfo()
+        SetCtg512 = false;
+        ValCtg512 = "";
+        SetCtg513 = false;
+        ValCtg513 = $0;
+        KindMess  = KIND_UNDEF;
+     end;
+
+     //очистить инфу о проставлении типа
+     macro ClearTypeInfo()
+        ActArest = NO_ACT;
+        ActPartArest = NO_ACT;
+     end;
+
+     macro Init ()
+       ClearRecord(AcArest);
+       AcArest.Chapter = 1;
+       ClearCtgInfo();
+       ClearTypeInfo();
+     end;
+
+   Init();
+
+end;
+
+//для хранения общей информации
+class  TInfoPart (fname:string)
+
+  var KindMes = KIND_UNDEF;
+  var StopInfoRH = TRecHandler("stop_op.dbt","bank.def");
+
+  var StopInfo = StopInfoRH.rec;
+  var ClientINN = "";     // ИНННП
+  var ClientKPP = "";     // КППНП
+  var AccArray = TArray;  // сведения о счетах
+
+
+   //добавить сведения о счете
+  macro addAccInfo (accInfo:TAccInfo)
+      AccArray[AccArray.Size] = accInfo;
+  end;
+
+  //установить значение атрибута  2
+  macro setProp (prop:string, val:string)
+
+     //интересуют не все атрибуты
+     if (prop == "ИНННП")
+        ClientINN = val;
+     elif (prop == "КППНП")
+        ClientKPP = val;
+     elif (prop == "КодНО")
+        StopInfo.CodeNO = val;
+     elif (prop == "НаимНО")
+       StopInfo.NameNO = val;
+     elif (prop == "НомРешПр")
+        if (KindMes == KIND_STOP)
+            StopInfo.StopNumber = val;
+        elif (KindMes == KIND_CANC)
+            StopInfo.CancStopNumber = val;
+        end;
+     elif (prop == "НомРешОт")
+        if (KindMes == KIND_CANC)
+            StopInfo.StopNumber = val;
+        end;
+     elif (prop == "ДатаРешПр")
+        if (KindMes == KIND_STOP)
+            StopInfo.StopDate = date(val);
+        elif (KindMes == KIND_CANC)
+           StopInfo.CancStopDate = date(val);
+        end;
+     elif (prop == "ДатаРешОт")
+        if (KindMes == KIND_CANC)
+            StopInfo.StopDate = date(val);
+        end;
+     elif (prop == "НаимПрич")
+       StopInfo.StopReason = val;
+     elif (prop == "НомРешВзыск")
+       StopInfo.RecoverNumber = val;
+     elif (prop == "ДатаРешВзыск")
+        StopInfo.RecoverDate = date(val);
+     elif (prop == "СумВзыск")
+       StopInfo.RecoverSum = val;
+     elif (prop == "ВидРеш")
+       StopInfo.CancStopKind = val;
+     end;
+
+  end;
+
+  //получить значение атрибута
+  macro getProp (prop:string)
+
+     var res;
+
+     if (prop == "ИНННП")
+        res = ClientINN;
+     elif (prop == "КППНП")
+        res = ClientKPP;
+     elif (prop == "КодНО")
+         res = StopInfo.CodeNO;
+     elif (prop == "НаимНО")
+        res =  StopInfo.NameNO;
+     elif (prop == "НомРешПр")
+        if (KindMes == KIND_STOP)
+             res =  StopInfo.StopNumber;
+        elif (KindMes == KIND_CANC)
+             res =  StopInfo.CancStopNumber;
+        end;
+     elif (prop == "НомРешОт")
+        if (KindMes == KIND_CANC)
+             res =  StopInfo.StopNumber;
+        end;
+     elif (prop == "ДатаРешПр")
+        if (KindMes == KIND_STOP)
+             res =  StopInfo.StopDate;
+        elif (KindMes == KIND_CANC)
+            res =  StopInfo.CancStopDate;
+        end;
+     elif (prop == "ДатаРешОт")
+        if (KindMes == KIND_CANC)
+             res =  StopInfo.StopDate;
+        end;
+     elif (prop == "НаимПрич")
+        res =  StopInfo.StopReason;
+     elif (prop == "НомРешВзыск")
+        res =  StopInfo.RecoverNumber;
+     elif (prop == "ДатаРешВзыск")
+         res =  StopInfo.RecoverDate;
+     elif (prop == "СумВзыск")
+        res =  StopInfo.RecoverSum;
+     elif (prop == "ВидРеш")
+        res =  StopInfo.CancStopKind;
+     else
+        if (GenPropID(StopInfo,prop) >= 0)
+           res =  GenGetProp(StopInfo,prop);
+        end;
+     end;
+
+     return  res;
+  end;
+
+  //получить дату ареста
+  macro getDateArest()
+    if (KindMes == KIND_STOP)
+       return getProp("ДатаРешВзыск");
+    else
+       return getProp("ДатаРешОт");
+    end;
+  end;
+
+  //получить сумму ареста
+  macro getSumArest(curr:integer)
+    var sum:moneyl = $0
+      , rate:doublel = 0;
+    if (KindMes == KIND_STOP)
+       sum =  getProp("СумВзыск");
+       if (curr)
+           rate = CurrRate(curr, getProp("ДатаРешВзыск"));
+           if (rate)
+             sum = sum / rate;
+    else
+             sum = $0;
+    end;
+       end;
+    end;
+    return sum;
+  end;
+
+
+  //подготовить StopInfo для вставки
+  macro PrepareForIns()
+     StopInfo.Oper = {oper};
+     StopInfo.DateFormLoad = {curdate};
+     StopInfo.TimeFormLoad = time();
+  end;
+
+  ClearRecord(StopInfo);
+
+  // инициализация поля KindMes
+  if (substr( StrUpr(fname),1,3) == "RPO")
+     KindMes = KIND_STOP;
+     StopInfo.Kind = "Р";
+  elif (substr(StrUpr(fname),1,3) == "ROO")
+     StopInfo.Kind = "О";
+     KindMes = KIND_CANC;
+  end;
+
+  StopInfo.FileName = fname;
+
+end;
+
+//Информация о квитанциях и подтверждениях
+class TKvitInfo(fname:string)
+ var FileName:string         // имя файла решения
+     , ConfirmFName:string   // Имя файла подтверждения
+     , KvitFName:string      // имя файла квитанции
+     , confirmErr:integer    // ошибка формирования квитанции
+     , kvitErr:integer       // ошибка формирования
+     ;
+
+  FileName = fname;
+  KvitFName = "KWTVVV_"+fname;
+  ConfirmFName = "PB1_"+fname;
+  confirmErr = 0;
+  kvitErr = 0;
+
+end;
+
+//для хранения информации из файла
+class TFileInfo(path:string)
+  var FileName     // имя файла
+    , InfoKind = ""     //служебная часть: тип информации
+    , InfoPart   // информационная часть
+    , loadError = ERR_NO //ошибка функции загрузки
+    , KvitInfo
+    , FullFileName;    //имя файла с расширением
+
+  private var ext = "";
+
+     //Получить описание ошибки
+     macro GetCommentByErr():string
+      var str = "";
+        if (loadError == ERR_NOTCLIENT)
+           str = "Не найден клиент с ИНН "+InfoPart.ClientINN +" и КПП "+InfoPart.ClientKPP;
+        elif (loadError == ERR_NOTACC)
+           str = "Не найден ни один лицевой счет из файла";
+        elif (loadError == ERR_NOTINNNP)
+           str = "В файле отсутствует реквизит ИНННП. Поиск клиента невозможен";
+        elif (loadError == ERR_STOPINS)
+           str = "Ошибка вставки записи в журнал";
+        elif (loadError == ERR_EMPTY_DATEPR)
+           str = "В файле отсутствует или неправильно заполнен обязательный реквизит <ДатаРешПр>. Файл не может быть загружен;";
+        elif (loadError == ERR_EMPTY_DATEOT)
+           str = "В файле отсутствует или неправильно заполнен обязательный реквизит <ДатаРешОт>. Файл не может быть загружен;";
+        end;
+      return str;
+     end;
+
+  SplitFile(path,FileName, ext);
+  FullFileName = FileName + ext;
+
+  InfoPart = TInfoPart(FileName);
+
+  KvitInfo = TKvitInfo(FullFileName);
+
+
+end;
+
+
+
+// Парсер. Возвращает заполненный объект TFileInfo или NULL, если были ошибки.
+// Сообщение об ошибке пишется в errMsg
+class TParser()
+   var errMsg = "";   //сообщение об ошибке
+
+   //пропарсить текстовый файл
+   macro parse( Path:string ): TFileInfo;
+
+      var state:integer = 0
+         ,FName:string
+         , ai:TAccInfo;
+
+      FILE ParsFile() txt;
+
+      //проверка и открытие файла на чтение
+
+      if (NOT ExistFile(Path))
+          RunError("parse : Неверный путь к файлу"); //обработка ошибок
+      end;
+
+      if (NOT open(ParsFile,Path))
+          RunError("parse: Ошибка открытия файла");
+      end;
+
+
+      SetDelim(":");
+
+      var  fi = TFileInfo(Path);
+
+       //основной цикл по файлу
+      while (next (ParsFile))
+
+         if (state == 0)         //служебная часть
+            if (ParsFile.str == END_FRAGMENT)
+                state = 1;
+              continue;
+            end;
+            if (ParsFile(0) == "ТипИнф")
+                 fi.InfoKind =ParsFile(1);
+            end;
+
+         elif (state == 1)    //информационная часть. решенние о приостановлении
+            if (ParsFile.str == END_BLOCK)
+                state = 2;
+               ai = TAccInfo();
+              continue;
+            end;
+            fi.InfoPart.setProp(ParsFile(0),ParsFile(1));
+
+         elif (state == 2)    //сведения о счете
+            if (ParsFile.str == END_FRAGMENT)
+                state = 3;
+              continue;
+            elif (ParsFile.str == END_BLOCK)
+                state = 2;  //остаёмся в сведениях о счетах. переход  к след. счету
+                fi.InfoPart.addAccInfo(ai);
+                ai = TAccInfo();
+              continue;
+            end;
+
+            if (ParsFile(0) == "НомСч")
+              ai.AcArest.Account = ParsFile(1);
+            elif (ParsFile(0) == "ВидСч")
+              ai.AcArest.KindAcc = ParsFile(1);
+            end;
+
+         elif (state == 3)  //ожидаем конец файла
+            if (ParsFile.str == END_FILE)
+              break;
+            end;
+         end;
+      end;
+
+      if (state != 3)         //не дошли до 3го состояния - значит не хватает разделителей
+         RunError("parse: Ошибка формата файла");
+      end;
+
+      return fi;
+
+   onError(err)
+        errMsg = err.Message;
+       return null;
+   end;
+
+end;
+
+
+//заполнить категории ареста
+macro FillAccInfoByCtg(accInfo:TAccInfo, kind:integer )
+
+   var val513, val512;
+
+   accInfo.ValCtg513 = accInfo.AcArest.SumArest;
+   accInfo.SetCtg512 = true;
+
+   if (kind == KIND_STOP)
+      accInfo.KindMess = KIND_STOP; // Нужно для протокола
+       
+      accInfo.ValCtg512 = CTG512_VAL_AREST;
+      if (accInfo.ValCtg513 > $0)
+         accInfo.SetCtg513 = true;
+      end;
+   elif (kind == KIND_CANC)
+      // Необходимо получить текущее значение категории 513.
+      var AccountID = GetAccountID(accInfo.AcArest.Chapter, accInfo.AcArest.Code_Currency, accInfo.AcArest.Account);
+      var val_arr = TArray;
+
+      if( GetCtgVal(OBJTYPE_ACCOUNT, CTGID_ACNT_SUMAREST, AccountID, val_arr) )
+         if(val_arr[0] > $0)
+            accInfo.ValCtg513 = val_arr[0];
+            accInfo.SetCtg512 = false;
+         else
+            accInfo.ValCtg512 = CTG512_VAL_NOT_AREST;
+         end; 
+      end;
+
+      accInfo.KindMess  = KIND_CANC;
+      accInfo.SetCtg513 = true;
+   end;
+end;
+
+macro InsertSTOPOPER( StopMesID : @integer )
+   return Insert_STOPOPER( StopMesID );
+end;
+
+
+macro InsertACAREST (id, MakeArest, FillCtg, datepr, accInfo, kind)
+   var type = "",
+       act = NO_ACT,
+       err = 0;
+
+   err = Insert_ACAREST( id, MakeArest, FillCtg, datepr, type, act );
+
+   if (err == 0)
+      // Если всё прошло без ошибок, то посмотрим, чего мы наделали.
+      // Сначала определимся с изменениями типа счёта (арест\частичный арест и снят\установлен)
+      if (index(type,"Д"))
+         accInfo.ActPartArest = act;
+      end;
+
+      if (index(type,"Т"))
+         accInfo.ActArest = act;
+      end;
+
+      // Теперь посмотрим, что стало с категориями
+      if (FillCtg)
+         FillAccInfoByCtg(accInfo, kind);
+      end;
+   end;
+
+   return err;
+end;
+
+macro InsertRecConf( id, Kind )
+   return Insert_RecConf( id, Kind );
+end;
+
+
+// проверить клиента по ИНН и КПП
+macro CheckClient(ClientId:integer, fi:TFileInfo):bool
+var docArr = TArray,
+    clINN = "",
+    clKPP = "";
+
+   if ((GetClientDocuments (ClientId, docArr, RD_KIND_INN, 1, {curdate}) == 0 ) AND (docArr.size > 0))
+         clINN = docArr[0].Rec.RegNum;
+   end;
+
+   if ((GetClientDocuments (ClientId, docArr, RD_KIND_KPP, 1, {curdate}) == 0 ) AND (docArr.size > 0))
+         clKPP = docArr[0].Rec.RegNum;
+   end;
+
+
+   return ( (ClientId > 0) AND (clINN == fi.InfoPart.ClientINN)
+            AND ( (fi.InfoPart.ClientKPP == "") OR (clKPP == fi.InfoPart.ClientKPP) ) )
+
+end;
+
+//Загрузить сообщение о приостановлении
+macro LoadStopMessage ( fi : TFileInfo
+                        , MakeArest:bool     //установить/снять арест
+                        , FillCtg:bool        //заполнить категорию
+                        , MakeKvit:bool        //формировать квитанции и подтверждения
+                      ):bool
+var   AccArray = TArray
+    , i:integer = 0
+    , findAcc = false    //Нашли нужный счет (совпадают номер и клиент)
+    , existAcc = false  //Нашли счёт с подходящим номером (нужно для формирования errCode)
+    , err = 0,
+    , docdate;
+
+var   ClientId = 0     //код клиента
+    , ClientNowFound = false   //когда определился клиент, нужно вставить запись в журнал
+    , StopMesID = 0;  //id сообщения в журнале сообщений о приостановлениях
+
+
+   if (MakeArest) // если нужно установить/снять арест:
+     if (fi.InfoPart.KindMes!=KIND_CANC)
+       if (fi.InfoPart.getProp("ДатаРешПр")==date(0,0,0))
+          fi.loadError=ERR_EMPTY_DATEPR;
+          return false;
+       end;
+     else
+       if (fi.InfoPart.getProp("ДатаРешОт")==date(0,0,0))
+          fi.loadError=ERR_EMPTY_DATEOT;
+          return false;
+       end;
+     end;
+   end;
+
+   if (fi.InfoPart.ClientINN == "")  //если ИНННП отсутствует прекратить загрузку файла
+     fi.loadError = ERR_NOTINNNP;
+     return false;
+   end;
+
+
+   //обработать счета
+   AccArray = fi.infopart.AccArray;
+
+   if (AccArray.size == 0 )
+      fi.loadError = ERR_NOTACC;  //счета не найдены - ничего не делаем
+      return false;
+   end;
+
+   for (i, 0, AccArray.size - 1)
+
+      findAcc = false;
+
+      //найти счет
+      //ищем в балансовых рублевых
+      facc.rec.Account = AccArray[i].AcArest.Account;
+
+      if ( getEQ(facc)  AND (index(facc.rec.Type_Account,"П") == 0) AND (index(facc.rec.Type_Account,"М") == 0))
+         //нашли счет
+         existAcc = true;
+
+         if ( (ClientId == 0) AND CheckClient(facc.rec.Client, fi))
+             ClientId = facc.rec.Client; //определились с клиентом
+             ClientNowFound = true;
+         end;
+
+         if (facc.rec.Client == ClientId)
+             //счет нужного клиента
+
+            fi.InfoPart.AccArray[i].AcArest.Code_Currency = 0;
+            findAcc = true;
+         end;
+
+      end;
+
+      if (not findAcc)
+         //по рублям не нашли нужного, ищем в валюте
+         faccC.rec.Account =  AccArray[i].AcArest.Account;
+         faccC.rec.Code_Currency = 0;
+
+         if ( getGE(faccC) AND (faccC.rec.Account == AccArray[i].AcArest.Account))
+
+            //нашли счет
+            existAcc = true;
+
+            if ( (ClientId == 0) AND CheckClient(faccC.rec.Client, fi))
+                ClientId = facc.rec.Client; //определились с клиентом
+                ClientNowFound = true;
+            end;
+            //не нашли, но возможно подойдёт счет в другой валюте
+            while ((faccC.rec.Client != ClientId) AND next(faccC) AND (faccC.rec.Account == AccArray[i].AcArest.Account))
+               if ( (ClientId == 0) AND CheckClient(faccC.rec.Client, fi))
+                  ClientId = facc.rec.Client; //определились с клиентом
+                  ClientNowFound = true;
+               end;
+            end;
+
+            if (faccC.rec.Client == ClientId)
+                //счет нужного клиента
+               fi.InfoPart.AccArray[i].AcArest.Code_Currency = faccC.rec.Code_Currency;
+               findAcc = true;
+            end;
+
+         end;
+
+      end;
+
+      if (findAcc)
+
+          if (ClientNowFound)
+             ClientNowFound = false;
+             //Вставка записи в журнал
+             fi.InfoPart.StopInfo.Client  = ClientID;
+             fi.InfoPart.PrepareForIns();
+             copy(StopOPER,fi.InfoPart.StopInfoRH);
+
+             err = InsertSTOPOPER( @StopMesID );
+             if (err)
+                fi.loadError = ERR_STOPINS;
+                break;   //вставка в журнал не получилась - загрузка не удалась
+             end;
+
+          end;
+
+          //счет найден, accInfo заполнено. Проставим категории и арест, вставим в журнал
+
+          // вставить запись в ac_arest.dbt
+          fi.InfoPart.AccArray[i].AcArest.ID = StopMesID;
+          fi.InfoPart.AccArray[i].AcArest.DateArest = fi.InfoPart.getDateArest();
+          fi.InfoPart.AccArray[i].AcArest.SumArest = fi.InfoPart.getSumArest(fi.InfoPart.AccArray[i].AcArest.Code_Currency);
+          copy(AcArest, fi.InfoPart.AccArray[i].AcArestInfoRH);
+
+
+          if (fi.InfoPart.KindMes=="1")
+            docdate=fi.InfoPart.getProp("ДатаРешПр");
+          else
+            docdate=fi.InfoPart.getProp("ДатаРешОт");
+          end;
+
+  
+          err = InsertACAREST( StopMesID,
+                               MakeArest,
+                               FillCtg,
+                               docdate,
+                               fi.InfoPart.AccArray[i],
+                               fi.InfoPart.KindMes
+                              );
+
+
+          if (err)
+               fi.InfoPart.AccArray[i].FillComment("Ошибка вставки записи о счете в журнал");
+          else
+             //сформируем примечание
+             fi.InfoPart.AccArray[i].FillComment();
+          end;
+
+
+      else
+          fi.InfoPart.AccArray[i].FillComment("Лицевой счет не найден");
+      end;
+
+   end;
+
+   if (MakeKvit)
+        //формировать квитанции и подтверждения
+        fi.KvitInfo.kvitErr = InsertRecConf(StopMesID, "К") ;
+        fi.KvitInfo.confirmErr = InsertRecConf(StopMesID, "П");
+
+   end;
+
+   if (fi.loadError == 0)
+      //заполнение errCode
+      if (ClientId )
+         fi.loadError = ERR_NO;
+      elif (existAcc)
+         fi.loadError = ERR_NOTCLIENT;
+      else
+         fi.loadError = ERR_NOTACC;
+      end;
+    end;
+
+return (fi.loadError == ERR_NO);
+end;
+
+//ошибки парсера
+class TParseErrInfo (_fname:string, _comment:string)
+   var fname,comment;
+   fname = _fname;
+   comment = _comment;
+end;
+
+//Найти запись о сообщении в журнале приостановлений
+macro FindMesInStopOp (fname:string):bool
+   var fstop = TbFile("stop_op.dbt","r",5,"stop_op.dbt", "bank.def");
+   var name = ""; //имя файла без расширения
+   var Kind = "";
+
+   SplitFile(fname,name);
+   Kind = substr( StrUpr(fname), 2, 1);
+   if   ( Kind == "P" )
+      Kind = "Р";
+   elif ( Kind == "O" )
+      Kind = "О";
+   end;
+
+   ClearRecord( fstop );
+
+   fstop.rec.Kind = Kind;
+   fstop.rec.FileName = name;
+
+   return getEQ(fstop);
+end;
+
+
+
+//Заголовок
+macro PrintHeader( PathDir:string     //Директория эл.сообщений из НО
+                   , MakeArest:bool     //Установить/снять арест на л/с
+                   , FillCtg:bool       //Заполнить категории по аресту
+                   , MakeKvit:bool      //Формировать квитанции и подтверждения
+)
+ var DirToNO, err = 0
+    , strArest = ""
+    , strCtg = ""
+    , strKvit = ""
+    ;
+
+ GetRegistryValue("MVODB\\ПРОЦЕДУРЫ\\ОБМЕН С НО\\ПРИОСТАНОВЛЕНИЕ ОПЕРАЦИЙ ПО ЛС\\ДИРЕКТОРИЯ ФАЙЛОВ В НО"
+                  , V_STRING
+                  , DirToNO
+                  , err);
+ if (err)
+    DirToNO = GetTxtDirPath();
+ end;
+
+ if (MakeArest) strArest = "Да"; else strArest = "Нет"; end;
+ if (FillCtg) strCtg = "Да"; else strCtg = "Нет"; end;
+ if (MakeKvit) strKvit = "Да (в директории "+ DirToNO + ")"; else strKvit = "Нет"; end;
+
+
+
+[
+  ПРОТОКОЛ ПРОЦЕДУРЫ ЗАГРУЗКИ СООБЩЕНИЙ О ПРИОСТАНОВЛЕНИИ ОПЕРАЦИЙ ПО СЧЕТАМ
+
+  Дата выполнения: ##########, #
+  Исполнитель    : #### #
+  Директория файлов сообщений из НО: #
+
+  Заполнить для л/с категории №512 "Арест лицевого счета" и №513 "Сумма ареста": #
+  Установить/снять признак ареста л/с: #
+  Формировать квитанции и подтверждения: #
+]
+  ( Date():f:l,
+    Time():f:l,
+    {oper}:l,
+    GetFioOper( {oper}, true ):l,
+    PathDir:l,
+    strCtg:l,
+    strArest:l,
+    strKvit:l
+  );
+
+end;
+
+//блок для каждого успешно обработанного файла
+macro  PrintCorrectData(fi:TFileInfo, num:integer, MakeKvit:bool)
+
+var strResolut, strClient, strINN_KPP , i = 0, j = 1 ,arrComm;
+
+   if (fi.InfoPart.KindMes == KIND_STOP)
+       strResolut = "о приостановлении операций";
+   else
+       strResolut = "об отмене приостановления операций";
+   end;
+
+   GetClientShortName (fi.InfoPart.StopInfo.Client, strClient );
+   strClient = GetClientCodeByID (fi.InfoPart.StopInfo.Client) + " \""+ strClient + "\"";
+
+   strINN_KPP = GetClientINN(fi.InfoPart.StopInfo.Client)+"/"+ GetClientKPP(fi.InfoPart.StopInfo.Client);
+
+   [
+     №#### Файл: #
+           Решение #
+           Клиент: #
+           ИНН/КПП: #
+   ]
+      ( num:l,
+        fi.FullFileName :l,
+        strResolut:l,
+        strClient:l,
+        strINN_KPP:l
+      );
+  [
+    ─────────────────────────┬────────────────────────────────────────────────────────────────────────────────
+     Лицевой счет            │ Примечание
+    ─────────────────────────┼────────────────────────────────────────────────────────────────────────────────
+  ];
+
+   while (i < fi.InfoPart.AccArray.size)
+     j = 1;
+     arrComm = StrSplit2(fi.InfoPart.AccArray[i].Comment, 78,78,1);
+
+     [ ######################### ###############################################################################
+     ](fi.InfoPart.AccArray[i].AcArest.Account:l,
+       arrComm[0]);
+     while (j< arrComm.size)
+        [                           ###############################################################################
+        ](arrComm[j]);
+        j = j+1;
+     end;
+     i=i+1;
+   end;
+
+   var kvit, conf;
+
+   if (MakeKvit)
+      if (fi.KvitInfo.kvitErr)
+        kvit = "!Ошибка формирования квитанции";
+      else
+        kvit = fi.KvitInfo.KvitFName;
+      end;
+
+      if (fi.KvitInfo.confirmErr)
+        conf = "!Ошибка формирования подтверждения";
+      else
+        conf = fi.KvitInfo.ConfirmFName;
+      end;
+
+
+   [
+     Сформированы:
+     квитанция #
+     подтверждение #
+   ]
+    (kvit:l,
+     conf:l);
+   end;
+
+   println;
+
+
+
+end;
+
+
+
+//Файлы, которые не были загружены
+macro  PrintErrorData(failedData:TArray, parserErrData:TArray)
+
+ var i = 0, j = 1,  arrComm = TArray, counter =0, comment = "";
+
+    if ((failedData.size + parserErrData.size) == 0)
+      return;
+    end;
+
+
+    [
+      Файлы, которые не были загружены
+      ───┬───────────────────────────────────┬──────────────────────────────────────────────────────────────────
+      №  │ Файл                              │ Примечание
+      ───┼───────────────────────────────────┼──────────────────────────────────────────────────────────────────
+    ];
+
+    while (i < ParserErrData.size)
+       j = 1;
+       arrComm = StrSplit2(ParserErrData[i].comment, 66,66,1);
+
+       [ ### ################################### #################################################################
+       ]((i+1):l, ParserErrData[i].fname:l, arrComm[0]);
+       while (j < arrComm.size)
+          [                                         #################################################################
+          ](arrComm[j]);
+          j = j+1;
+       end;
+       i = i+1;
+    end;
+
+    counter = i+1;
+    i = 0;
+
+    while (i < failedData.size)
+       j = 1;
+       comment = failedData[i].GetCommentByErr();
+       arrComm = StrSplit2(comment, 108,65,2);
+
+       [ ### ################################### #################################################################
+       ]((i + counter):l, failedData[i].FullFileName:l, arrComm[0]);
+       while (j < arrComm.size)
+          [                                         #################################################################
+          ](arrComm[j]);
+          j = j+1;
+       end;
+       i = i+1;
+    end;
+
+
+end;
+
+//Блок итогов
+macro  PrintFooter(allFiles:integer, succFiles:integer, allAccs:integer)
+[
+  ИТОГО:
+    Всего файлов: #
+    Успешно обработано: #
+         Обработано лицевых счетов: #
+]
+ (allFiles:l, succFiles:l, allAccs:l );
+end;
+
+//Печать протокола
+macro  PrintReport(PathDir, MakeArest, FillCtg, MakeKvit, reportData, failedData, parserErrData, ColFilesAll)
+ var i = 0,
+     countAcc = 0; //Счетчик обработанных счетов
+
+   PrintHeader( PathDir, MakeArest, FillCtg, MakeKvit);
+
+   [
+     УСПЕШНО ЗАГРУЖЕННЫЕ ФАЙЛЫ
+   ];
+   if (reportData.size == 0)
+   [
+     Ни один файл не был загружен
+   ];
+   else
+      for (i,0,reportData.size - 1)
+          //блок для каждого успешно обработанного файла
+          PrintCorrectData(reportData[i], i+1, MakeKvit);
+          countAcc = countAcc + reportData[i].InfoPart.AccArray.size;
+      end;
+   end;
+
+    //Файлы, которые не были загружены
+   PrintErrorData(failedData, parserErrData);
+
+   //Итоги
+   PrintFooter(ColFilesAll, reportData.size, countAcc);
+end;
+
+macro ProcessStopOperFolder( PathDir:string,     // Директория эл.сообщений из НО
+                             MakeArest:bool,     // Установить/снять арест на л/с
+                             FillCtg:bool,       // Заполнить категории по аресту
+                             MakeKvit:bool       // Формировать квитанции и подтверждения
+                           )
+   var MaskFile = "R?O?" + SubStr({MFO_Bank},3,7) + "*.TXT",
+       ColFilesAll = 0;
+
+   // если в конце нет слеша - добавим
+   if (substr(PathDir,strlen(Pathdir),1) != "\\")
+      PathDir = PathDir + "\\";
+   end;
+
+   var FileList = TDirList (PathDir+MaskFile,"f"),
+       i = 0,
+       SortedMessList = TArray(),
+       parser:TParser,
+       fi:TFileInfo,
+       reportData    = TArray,  // корректные данные
+       failedData    = TArray,  // ошибки загрузки
+       parserErrData = TArray,  // ошибки парсера
+       postAct = 0,             // действие после загрузки
+       dirArh  = "",            // директория арх.файлов из НО
+       err     = 0;
+
+   // Действие с файлом после загрузки
+   GetRegistryValue("MVODB\\ПРОЦЕДУРЫ\\ОБМЕН С НО\\ПРИОСТАНОВЛЕНИЕ ОПЕРАЦИЙ ПО ЛС\\ДЕЙСТВИЕ ПОСЛЕ ЗАГРУЗКИ", V_INTEGER, postAct, err);
+   if (err)
+      postAct = 1;
+   end;
+
+   GetRegistryValue("MVODB\\ПРОЦЕДУРЫ\\ОБМЕН С НО\\ПРИОСТАНОВЛЕНИЕ ОПЕРАЦИЙ ПО ЛС\\ДИРЕКТОРИЯ АРХИВН ФАЙЛОВ ИЗ НО", V_STRING, dirArh, err);
+   if (err)
+      dirArh = GetTxtDirPath();
+   end;
+
+   // Отбираем файлы согласно маске
+   for (i, 0, FileList.Count - 1 )
+      if ( (SubStr( StrUpr(FileList.name(i)), 1, 3 ) != "RPO") AND (SubStr( StrUpr(FileList.name(i)), 1, 3 ) != "ROO"))
+         continue;
+      end;
+
+      // Все подходящие файлы запехаем в массив
+      var NewMess = StopOpMessElem(FileList.name(i));
+      SortedMessList(ColFilesAll) = NewMess; 
+
+      ColFilesAll = ColFilesAll + 1;
+   end;
+
+   // Отсортируем массив по типу сообщения и дате
+   qsort(SortedMessList, "cmp_StopOpMessElem");
+
+   // Обрабатываем отсортированный массив
+   for (i, 0, ColFilesAll - 1 )
+      var CurrentFileName:string = SortedMessList.Value(i).FileName;
+
+      // Ищем название файла в списке "Журнал регистрации приостановлений"
+      if( FindMesInStopOp(CurrentFileName) )
+         parserErrData[parserErrData.size] = TParseErrInfo(CurrentFileName, "В журнале регистраций приостановлений уже существует запись о файле");
+         continue;
+      end;
+
+      fi = parser.parse(PathDir + CurrentFileName);
+
+      if (fi == NULL)
+         // пропарсить не удалось - запомним для отчета
+         parserErrData[parserErrData.size] = TParseErrInfo(CurrentFileName, Parser.errMsg);
+         continue;
+      end;
+
+      if (LoadStopMessage(fi, MakeArest, FillCtg, MakeKvit))
+         reportData[reportData.size] = fi;
+         if (postAct == 2)
+            // перенести в директорию арх. файлов из НО
+            Run( GetEnv( "COMSPEC" ), "/C move " + PathDir + CurrentFileName + " " + dirArh + "\\" + CurrentFileName + " > nul" );
+         elif (postAct != 1)
+            // удалить загруженный файл
+            RemoveFile(PathDir + CurrentFileName);
+         end;
+      else
+         failedData[failedData.size] = fi;
+      end;
+   end;
+
+   // печать протокола
+   PrintReport(PathDir, MakeArest, FillCtg, MakeKvit, reportData, failedData, parserErrData,ColFilesAll);
+
+end;
+
+
+MACRO ReportSend( Вид_Сообщения, Имя_Сформир_Файла, Директ_Файлов )
+   var KindMess = "";
+
+   if ( Вид_Сообщения == "К" )
+      KindMess = "КВИТАНЦИИ";
+   else
+      KindMess = "ПОДТВЕРЖДЕНИЯ";
+   end;
+
+   println( STRING("ПРОТОКОЛ ПРОЦЕДУРЫ ФОРМИРОВАНИЯ ", KindMess) );
+   println( "" );
+   println( STRING("ДАТА ВЫПОЛНЕНИЯ: ", date():f, " ", time():f ) );
+   println( STRING("ИСПОЛНИТЕЛЬ    : ", String({oper}:4:r), " ", GetFIOOper({oper}, true) ) );
+   println( STRING("ДИРЕКТОРИЯ ФАЙЛОВ СООБЩЕНИЙ В НО: ", Директ_Файлов) );
+   println( "" );
+   println( STRING("СФОРМИРОВАН ФАЙЛ: ", Имя_Сформир_Файла, ".txt") );
+END;
+
+MACRO FormTxtFile( Полное_имя_файла, Вид_Сообщения, Имя_Сформир_Файла, Инфо_Проверки, ДатаФормир, ВремяФормир )
+   Var Day, Mon, Year;
+   var path = SetOutput( Полное_имя_файла );
+
+   datesplit( ДатаФормир, Day, Mon, Year );
+
+   println( Имя_Сформир_Файла + "###" );
+   println( Инфо_Проверки + "@@@" );
+   println( string(Year) + "-" + string(Mon:o:2) + "-" + string(Day:o:2) + "@@@" );
+   println( string( StrSubst(string(ВремяФормир)," ","0")/*time(string(ВремяФормир)):f*/, "@@@") );
+   println( "===" );
+
+   SetOutput( path );
+END;
+
+// EOF

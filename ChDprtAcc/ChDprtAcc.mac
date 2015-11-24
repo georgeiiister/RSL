@@ -1,0 +1,91 @@
+/*
+  Макрос вызова диалога изменения подразделения счета
+  developer Polyakov S.George
+  v 1.00-18.04.2013
+*/
+
+import "..\\mac\\bfsofia\\AccLib.mac";
+
+macro macChDprtAccMain():bool
+  var 
+     iOldDprt:integer,
+     iNewDprt:integer,
+     k:integer,
+     j:integer,
+     i:integer,
+     oTbl:object,
+     bCloseYes:bool,
+     bNext:bool,
+     bRet:bool;
+  array
+       aAcc; 
+  iOldDprt=-2;
+  iNewDprt=-2;
+  bRet=false;
+  iOldDprt=macALGetDprt("ИЗМЕНЯЕМОЕ ПОДРАЗДЕЛЕНИЕ");
+  if (iOldDprt>=0)
+    iNewDprt=macALGetDprt("(!!!) ИЗМЕНЯЕМ НА...");
+    if (iNewDprt>=0)
+      if (
+          gettrue(false,
+                       "Вы действительно хотите изменить у ВСЕХ счетов подразделение: \n"+StrUpr(macALGetDprtName(iOldDprt))+
+                       " на подразделение \n"+StrUpr(macALGetDprtName(iNewDprt)+"?")
+                 )
+         )
+        bRet=true;
+      end;
+    end;
+  end;
+  //имеем все данные для смены подразделения
+  aAcc(0)="account.dbt";
+  aAcc(1)="account$.dbt";
+  aAcc(2)="obacnt.dbt";
+  aAcc(3)="obacnt$.dbt";
+  if (not bRet)
+    i=aSize(aAcc);
+  else
+    i=0;
+    bCloseYes=false;
+    gettrue(bCloseYes,"Вы хотите обработать и закрытые счета?");
+  end;
+  while (i<=aSize(aAcc)-1)
+    oTbl=TBFile(aAcc(i),"w",0,null,"bank.def");
+    rewind(oTbl);
+    clearrecord(oTbl);
+    j=0;
+    k=0;
+    while (next(oTbl))
+      if (oTbl.rec.department==iOldDprt)
+        bNext=true;
+        if (not bCloseYes)
+          if (oTbl.rec.open_close=="З")
+            bNext=false;
+          end;
+        end;
+        if (bNext)
+          message("Обновляем счет:"+oTbl.rec.Account);
+          oTbl.rec.department=iNewDprt;
+          if (update(oTbl))
+            println(oTbl.rec.Account+" Изменения "+iOldDprt+"=>"+iNewDprt+" по структуре "+aAcc(i)+" Закрыт?: "+oTbl.rec.open_close);
+            j=j+1;
+          else
+            println("Ошибка!!! Не выполнено обновление счета:"+oTbl.rec.Account);
+            k=k+1;
+          end;
+        end;
+      end;
+    end;
+    [----
+     Обработано счетов по структуре ############ : ################## 
+     Не выполнена обработка: ###########
+     ----
+    ]
+     (aAcc(i):l,j:l,k:l);
+    i=i+1;
+  end;
+  if (not bRet)
+    println("Ошибка диалогов выбора или работы программы!");
+  end;
+end;
+
+macChDprtAccMain();

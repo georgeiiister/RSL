@@ -1,0 +1,251 @@
+file cln0 (client) key 0;
+file acc4 (account) key 4;
+file coun3 (clcoun) key 3;
+file cln1 (clients1,"sofia.def") key 0;
+file cln3 (clients3,"sofia.def") key 0;
+
+macro Oc(Open_Close)
+  If (Open_Close=="З")
+    return 1;
+  else
+    return 0;
+  end;
+end;
+
+macro cln(CodCln)
+var
+   strINN="",
+   strClnName="",
+   strSName="", 
+   strNName="", 
+   strPName="", 
+   strBrtDay="",
+   strBrtPlace="",
+   strCtzShip="",
+   strSerDoc="",
+   strNumDoc="",
+   strGvDateDoc="",
+   strOrgGvDoc="", 
+   strFactCountry="",
+   strFactAddrRegion="",
+   strFactAddrRaion="",
+   strFactAddrTown="",
+   strFactAddrNas="", 
+   strFactAddrIndex="",
+   strFactAddrStreet="",
+   strFactAddrHouse="",
+   strFactAddrKorpus="",
+   strFactAddrStr="", 
+   strFactAddrKvart="",
+   strFactAddr="",
+   strUrCountry="",
+   strUrAddrRegion="",
+   strUrAddrRaion="",
+   strUrAddrTown="",
+   strUrAddrNas="",
+   strUrAddrIndex="",
+   strUrAddrStreet="",
+   strUrAddrHouse="",
+   strUrAddrKorpus="",
+   strUrAddrStr="", 
+   strUrAddrKvart="",
+   strUrAddr="",
+   strPhoneNum2="",
+   numN1=1,
+   numLim=0;
+
+Const
+   strLim="#";	
+     
+     Rewind(cln0);
+     ClearRecord(cln0);
+     cln0.Client=CodCln;
+     If (Geteq(cln0))
+     If (cln0.szUserType=="Ф") 
+         strClnName=Trim(cln0.Name_Client); 
+         While (numN1<=StrLen(strClnName))
+           If (SubStr(strClnName,numN1,1)==" ")
+              numLim=numLim+1
+           Else
+              If (numLim==0)
+                 strSName=strSName+SubStr(strClnName,numN1,1)
+              ElIf (numLim==1)
+                 strNName=strNName+SubStr(strClnName,numN1,1)
+              ElIf (numLim==2)
+                 strPName=strPName+SubStr(strClnName,numN1,1) 
+              End;
+           End;
+         numN1=numN1+1;
+         End;
+         Rewind(cln3);
+         ClearRecord(cln3);
+         cln3.Client=CodCln;  
+         If (GetEQ(cln3)) 
+            If (Trim(cln3.INNKey)!="0")
+                strINN=cln3.INNKey
+            End;
+            strBrtDay=String(cln3.BirthDate);
+            strBrtPlace=Trim(cln3.BirthPlace);
+            If (Trim(cln3.szPhoneNumber2)!="")
+               strPhoneNum2=", "+cln3.szPhoneNumber2
+            End;
+         End;
+         Rewind(cln1);
+         ClearRecord(cln1);
+         cln1.Client=CodCln;
+         If (GetEQ(cln1))
+            strCtzShip=Trim(cln1.Poddanstvo);
+            strSerDoc=StrSubst(Trim(cln1.PassportSeria)," ","");
+            If (StrSubst(Trim(cln1.PassportNum)," ","")=="")
+               If (StrSubst(Trim(cln3.PspSerNum)," ","")=="")
+                  Return "" /*Если нет номер паспорта и нет серии, клиента не выбираем*/
+               Else 
+                  /*Если оператором вводится серия в номер для паспорта РФ, то разбиваем строку*/ 
+                  If ((StrLen(StrSubst(Trim(cln3.PspSerNum)," ",""))==10) And (strCtzShip=="РФ"))
+                     strSerDoc=SubStr(StrSubst(Trim(cln3.PspSerNum)," ",""),1,4);
+                     strNumDoc=SubStr(StrSubst(Trim(cln3.PspSerNum)," ",""),5);     
+                  Else
+                     strNumDoc=StrSubst(Trim(cln3.PspSerNum)," ","");
+                     strSerDoc="";
+                  End;
+               End; 
+            Else
+               If ((strSerDoc=="") And (StrLen(StrSubst(Trim(cln1.PassportNum)," ",""))==10) And (strCtzShip=="РФ")) 
+	          strSerDoc=SubStr(StrSubst(Trim(cln1.PassportNum)," ",""),1,4);
+                  strNumDoc=SubStr(StrSubst(Trim(cln1.PassportNum)," ",""),5); 
+               Else
+                  strNumDoc=StrSubst(Trim(cln1.PassportNum)," ","");
+               End;
+            End;
+            strGvDateDoc=String(cln1.PassportWhen);
+            strOrgGvDoc=Trim(cln1.PassportWhere);
+            Rewind(coun3);
+            ClearRecord(coun3); 
+            coun3.CodeNum3=cln1.FactAddrCountry;
+            If (GetEQ(coun3))
+               strFactCountry=Trim(coun3.Name)
+            End;
+            If (Trim(cln1.FactAddrRegion)!="")
+               strFactAddrRegion=", " + cln1.FactAddrRegion
+            End;
+            If (Trim(cln1.FactAddrRaion)!="")
+               strFactAddrRaion=", р-он: " + cln1.FactAddrRaion
+            End;
+            If (Trim(cln1.FactAddrTown)!="")
+               strFactAddrTown=", " + cln1.FactAddrTown
+            End;
+            If (Trim(cln1.FactAddrNas)!="")
+               strFactAddrNas=", "+Trim(cln1.FactAddrNas)
+            End;          
+            If (Trim(cln1.FactAddrIndex)!="")
+               strFactAddrIndex=", "+cln1.FactAddrIndex 
+            End;
+            If (Trim(cln1.FactAddrStreet)!="")
+               strFactAddrStreet=", "+Trim(cln1.FactAddrStreet)
+            End;
+            If (Trim(cln1.FactAddrHouse)!="")
+               strFactAddrHouse=", д.: "+Trim(cln1.FactAddrHouse)
+            End;
+            If (Trim(cln1.FactAddrKorpus)!="")
+               strFactAddrKorpus=", корп.: "+Trim(cln1.FactAddrKorpus)
+            End;
+            If (Trim(cln1.FactAddrStr)!="")
+               strFactAddrStr=", / "+Trim(cln1.FactAddrStr)
+            End;
+            If (Trim(cln1.FactAddrKvart)!="")
+               strFactAddrKvart=", кв.: "+Trim(cln1.FactAddrKvart)
+            End;   
+            strFactAddr=strFactCountry+strFactAddrRegion+strFactAddrRaion+strFactAddrTown+strFactAddrNas+strFactAddrIndex+strFactAddrStreet+strFactAddrHouse+strFactAddrKorpus+strFactAddrStr+strFactAddrKvart;
+            Rewind(coun3);
+            ClearRecord(coun3); 
+            coun3.CodeNum3=cln1.UrAddrCountry;
+            If (GetEQ(coun3))
+               strUrCountry=Trim(coun3.Name)
+            End;
+            If (Trim(cln1.UrAddrRegion)!="")
+               strUrAddrRegion=", " + cln1.UrAddrRegion
+            End;
+            If (Trim(cln1.UrAddrRaion)!="")
+               strUrAddrRaion=", р-он: " + cln1.UrAddrRaion
+            End;
+            If (Trim(cln1.UrAddrTown)!="")
+               strUrAddrTown=", " + cln1.UrAddrTown
+            End;
+            If (Trim(cln1.UrAddrNas)!="")
+               strUrAddrNas=", "+Trim(cln1.UrAddrNas)
+            End;
+            If (Trim(cln1.UrAddrIndex)!="")
+               strUrAddrIndex=", "+cln1.UrAddrIndex 
+            End;
+            If (Trim(cln1.UrAddrStreet)!="")
+               strUrAddrStreet=", "+Trim(cln1.UrAddrStreet)
+            End;
+            If (Trim(cln1.UrAddrHouse)!="")
+               strUrAddrHouse=", д.: "+Trim(cln1.UrAddrHouse)
+            End;
+            If (Trim(cln1.UrAddrKorpus)!="")
+               strUrAddrKorpus=", корп.: "+Trim(cln1.UrAddrKorpus)
+            End;
+            If (Trim(cln1.UrAddrStr)!="")
+               strUrAddrStr=", / "+Trim(cln1.UrAddrStr)
+            End;
+            If (Trim(cln1.UrAddrKvart)!="")
+               strUrAddrKvart=", кв.: "+Trim(cln1.UrAddrKvart)
+            End;   
+            strUrAddr=strUrCountry+strUrAddrRegion+strUrAddrRaion+strUrAddrTown+strUrAddrNas+strUrAddrIndex+strUrAddrStreet+strUrAddrHouse+strUrAddrKorpus+strUrAddrStr+strUrAddrKvart;
+         End; 
+        Return cln0.Client+strLim+strSName+strLim+strNName+strLim+strPName+strLim+strBrtDay+strLim+strBrtPlace+strLim+strCtzShip+strLim+strSerDoc+strLim+strNumDoc+strLim+strGvDateDoc+strLim+strOrgGvDoc+strLim+strLim+strFactAddr+strLim+strUrAddr+strLim+strINN+strLim+Trim(cln3.szPhoneNumber)+strPhoneNum2+strLim;
+     Else
+        Return "" /*Если у клиента нет признака физического лица "Ф"*/
+     End;
+     Else   
+        Return ""/*Если счет не закреплен за клиентом*/
+     End;
+
+End;
+
+/*Точка входа в программу*/
+
+Var
+   i=0,
+   l=0, /*Счетчик выгруженных строк*/
+   strInfCln="";
+Const
+   strLim="#",	
+   strPathFile="..\\TXTFILE\\",
+   strFileName="ClnRScred.txt";
+
+SetOutput(strPathFile+strFileName,false);
+
+Rewind(acc4);
+ClearRecord(acc4);
+
+InitProgress(NRecords(acc4),"Подсчет","Обработано строк");
+While (next(acc4))
+  i=i+1;
+  UseProgress(i);
+  If (     
+       SubStr(Acc4.Account,1,4)=="4550"
+     )
+      strInfCln=Cln(Acc4.Client);
+      If (strInfCln!="")
+         Rewind(cln3);
+         ClearRecord(cln3);
+         cln3.Client=Acc4.Client;
+        If (GetEQ(cln3))
+           If (Trim(String(cln3.ChangeDate))!="")   
+              l=l+1;
+              println(strInfCln+String(Acc4.Open_Date)+strLim+String(Trim(Acc4.Account))+strLim+Oc(acc4.Open_close)+strLim+String(cln3.ChangeDate)+strLim+strLim);
+           End;
+        End;
+      End;
+   End;	
+End;
+
+Close(acc4);
+Close(cln3);
+Close(Cln0);
+Close(strPathFile+strFileName);
+SetOutput(Null,True);
+PrintLn("Выгружено строк: "+l+" в файл: "+strPathFile+strFileName);
+

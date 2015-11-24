@@ -1,0 +1,457 @@
+/*
+  Библиотечный макрос загрузки документов по APS BiZone
+  author: Polyakov S.George
+  ver: 1.00-18.06.2013
+  ver: 1.00-20.06.2013
+  	Добавлено получение номера подразделения текущего операциониста
+  ver: 1.00-24.06.2013
+       Добавлен обход проверки КПП RS-Bank и КПП BiZone для плательщиков
+       в случае отсутствия КПП или =="0"
+  ver: 1.00-13.08.2013
+       К формируемому имени файла добавлен номер операциониста, для уменьшения вероятности
+       конфликта при выгрузке с нескольких рабочих станций
+*/
+
+import "..\\mac\\bfsofia\\acclib.mac";
+import "..\\mac\\bfsofia\\utllib.mac";
+import "..\\mac\\bfsofia\\clnlib.mac";
+import rsexts;
+import BankInter;
+import ClnInter;
+import globals;
+
+private var iItogoDoc:integer,mItogoSum:money; 
+
+private const S_LOCAL_PTH:string="c:\\out\\"; //путь к локально выгруженному файлу
+
+private const S_PATH_SRV:string="..\\report\\bizone\\";  //путь к фалу на сервере
+
+private array 
+              arrFld;
+
+//обработка данных для подготовки формирования проводок
+macro macBLWorkVal(arr:arrayref,iDprt:integer):bool
+  var
+     bRet:bool,
+     iTmp:integer,
+     sAccPayer:string, 	//счет плательщика - нашего клиента
+     sAccReceiver:string,   //счет получателя
+     mSum:money,            //сумма платежа
+     iNumberPack:integer,
+     dDateValue:date,
+     sNumbDoc:string,
+     dDateDoc:date,
+     sKindOper:string,
+     sNamePayer:string,
+     sNameReceiver:string,
+     sBankPayer:string,
+     sBankReceiver:string,
+     sMfoReceiver:string,
+     sMfoPayer:string,
+     sRealAccPayer:string,
+     sRealAccReceiver:string,
+     sCorAccPayer:string,
+     sCorAccReceiver:string,
+     sInnPayer:string,
+     sInnReceiver:string,
+     sNotePay:string,
+     iPayment:integer,
+     iDprtAcc:integer,
+     sShifrOper:string,
+     iOper:integer,
+     sKPPPayer:string,
+     sKPPReceiver:string,
+     sComposerStatus:string,
+     sBudjClCode:string,
+     sOkato:string,
+     sTaxGround:string,
+     sTaxPeriod:string,
+     sTaxNumber:string,
+     sTaxDate:string,
+     sTaxPaymentType:string,
+     iResultCarry:integer,
+     sSymbolCach:string,
+     sSymbNotBal:string,
+     sCln:string;
+  const
+     S_ACC_PAYER:string="LSKL", 		//счет плательщика
+     S_ACC_RECEIVER:string="LSKOR", 	//счет получателя
+     S_SUM:string="SU",      		//сумма платежа
+     S_DVV:string="DVV",                  //дата приема документов в BiZone
+     S_NUMB_DOC:string="ND",              //номер документа
+     S_DATE_DOC:string="DD",              //дата документа
+     S_NAME_PAYER:string="NAMKL",         //наименование клиента (плательщика)
+     S_NAME_RECEIVER:string="NAMKOR",     //наименование получателя 
+     S_BIC_PAYER:string="MFKB",           //банк плательщика
+     S_BIC_RECEIVER:string="MF",          //банк получателя 
+     S_COR_ACC_PAYER:string="KRKB",       //корсчет банка плательщика
+     S_NOTE_PAY1:string="NKOR1",          //примечание по документу
+     S_NOTE_PAY2:string="NKOR2",
+     S_NOTE_PAY3:string="NKOR3",
+     S_NOTE_PAY4:string="NKOR4",          
+     S_INN_PAYER:string="INNMFKB",        //ИНН плательщика
+     S_INN_RECEIVER:string="INNMF",       //ИНН получателя
+     S_KPP_PAYER:string="KPPA",
+     S_KPP_RECEIVER:string="KPPB",
+     S_COR_ACC_RECEIVER:string="KR",
+     S_PAYMENT:string="PRIOR",	       //очередность платежа
+     S_COMPOSER_STATUS:string="SSTATUS",
+     S_BUDJ_CL_CODE:string="CODBCLAS",
+     S_KIND_OPER:string="VO",
+     S_TAX_GROUND:string="NALPLAT",
+     S_TAX_PERIOD:string="NALPER",
+     S_OKATO:string="CODOKATO",
+     S_TAX_NUMBER:string="NDNAL",
+     S_TAX_DATE:string="DDNAL",
+     S_TAX_PAYMENT_TYPE:string="TYPNAL",
+     S_INFO:string="Информация! ",
+     S_ERR:string="Ошибка! ";
+
+  array  
+       arrNumPackIn, 
+       arrNumPackOut, 
+       arrResultCarry;
+
+  arrNumPackIn(1)=2;
+  arrNumPackIn(2)=2;
+  arrNumPackIn(3)=2;
+  arrNumPackIn(4)=0;
+  arrNumPackIn(5)=0;
+
+  arrNumPackOut(1)=507;
+  arrNumPackOut(2)=507;
+  arrNumPackOut(3)=507;
+  arrNumPackOut(4)=0;
+  arrNumPackOut(5)=0;
+
+  arrResultCarry(1)=113;
+  arrResultCarry(2)=113;
+  arrResultCarry(3)=113;
+  arrResultCarry(4)=113;
+  arrResultCarry(5)=113;
+
+  bRet=true;
+  iTmp=macULIndStrInArr(S_ACC_PAYER,arrFld);
+  sCln=macCLGetNameClnAcc(trim(arr(iTmp)));
+  //проверка существования счета
+  if (StrLen(sCln)!=0)
+    //если дальше проверять счет (закрыт ли или может арест, то делать здесь)
+    sAccPayer=trim(arr(iTmp));
+    sNamePayer=macULGetOneT(sCln,true,"^");  //используем данные из RS
+    iTmp=macULIndStrInArr(S_NAME_PAYER,arrFld);
+    if (trim(arr(iTmp))!=sNamePayer)
+      //edt Polyakov S.George - убрал на время
+      /*
+      println(S_INFO+"Наименование клиента не совпадет с RS-Bank! Номер счета плательщика: "+sAccPayer);
+      println("RS-Bank: "+sNamePayer);
+      println("BiZone : "+trim(arr(iTmp)));
+      */
+    end;
+  else
+    bRet=false;
+    println(S_ERR+"Счет плательщика не найден: "+trim(arr(iTmp)));
+  end;
+  //проверка получателя
+  iTmp=macULIndStrInArr(S_ACC_RECEIVER,arrFld);
+  sAccReceiver=trim(arr(iTmp));
+  //проверка суммы платежа
+  iTmp=macULIndStrInArr(S_SUM,arrFld);
+  mSum=money(arr(iTmp));
+  iTmp=macULIndStrInArr(S_DVV,arrFld);
+  dDateValue=Date(arr(iTmp)); //явное приведение типа date(dbf)->date(rsl) //здесь дата приема документов в BiZone
+  iTmp=macULIndStrInArr(S_NUMB_DOC,arrFld);
+  sNumbDoc=string(int(arr(iTmp)));
+  iTmp=macULIndStrInArr(S_DATE_DOC,arrFld);
+  dDateDoc=date(arr(iTmp));
+  iTmp=macULIndStrInArr(S_KIND_OPER,arrFld);
+  sKindOper=string(int(arr(iTmp)));
+  iTmp=macULIndStrInArr(S_NAME_RECEIVER,arrFld);
+  sNameReceiver=trim(arr(iTmp));
+  //анализируем БИК и Наименование банка плательщика и получателя
+  iTmp=macULIndStrInArr(S_COR_ACC_PAYER,arrFld);
+  sCorAccPayer=trim(arr(iTmp));
+  //msgbox(sCorAccPayer);
+  iTmp=macULIndStrInArr(S_BIC_PAYER,arrFld);
+  sMFOPayer=macULSetAddSpace(string(int(arr(iTmp))),9,"0");
+  sBankPayer="";
+  sBankPayer=GetBankName(sMFOPayer,sCorAccPayer);
+  if (StrLen(sBankPayer)!=0)
+    if (string({MFO_Bank})!=sMFOPayer)
+      println(S_INFO+"БИК Банка плательщика не совпадет с RS-Bank! Номер счета плательшика: "+sAccPayer);
+      println("RS-Bank: "+string({MFO_Bank}));
+      println("BiZone : "+sMFOPayer);
+      bRet=false;
+    end;
+  else
+    bRet=false;
+  end;
+  iTmp=macULIndStrInArr(S_COR_ACC_RECEIVER,arrFld);
+  //msgbox(iTmp);
+  if (iTmp!=-1)
+    sCorAccReceiver=trim(arr(iTmp));
+  else
+    sCorAccReceiver="";
+  end;
+  iTmp=macULIndStrInArr(S_BIC_RECEIVER,arrFld);
+  sMFOReceiver=macULSetAddSpace(string(int(arr(iTmp))),9,"0");
+  sBankReceiver="";
+  sBankReceiver=GetBankName(sMFOReceiver,sCorAccReceiver);
+  if (StrLen(sBankReceiver)==0) 
+    //не нашли стандартно, надо смотреть более детально
+    sBankReceiver=macULGetBankNameKorAcc(sMFOReceiver);
+    if (StrLen(sBankReceiver)!=0)
+      sBankReceiver=macULGetOneT(sBankReceiver,true,"^");
+      //продумать, может добавить sCorAccReceiver=macULGetOneT(sBankReceiver,false,"^")
+      //если sCorAccReceiver==""
+    else
+      println(S_ERR+"Банк не найден: "+sMFOReceiver+" Номер счета плательщика: "+sAccPayer);
+      bRet=false;
+    end;
+  end;
+  iTmp=macULIndStrInArr(S_NOTE_PAY1,arrFld);
+  sNotePay=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_NOTE_PAY2,arrFld);
+  sNotePay=sNotePay+trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_NOTE_PAY3,arrFld);
+  sNotePay=sNotePay+trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_NOTE_PAY4,arrFld);
+  sNotePay=sNotePay+trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_INN_PAYER,arrFld);
+  sInnPayer=GetClientInn(int(macULGetOneT(sCln,false,"^")));
+  if (sInnPayer!=trim(arr(iTmp)))
+      println(S_INFO+"ИНН Клиента не совпадет с RS-Bank! Номер счета плательщика: "+sAccPayer);
+      println("RS-Bank: "+sInnPayer);
+      println("BiZone : "+trim(arr(iTmp)));
+  end;
+  //указываем все же ИНН тот, который в документе, а не в RS-Bank
+  if (StrLen(trim(arr(iTmp)))!=0)
+    sInnPayer=trim(arr(iTmp));
+  end;
+  iTmp=macULIndStrInArr(S_INN_RECEIVER,arrFld);
+  sInnReceiver=trim(arr(iTmp));
+  if (not macULCheckINN(sInnReceiver))
+    println(S_INFO+"Возможно ИНН ПОЛУЧАТЕЛЯ указан неверно: "+sInnReceiver+" Номер счета плательщика:"+sAccPayer);  
+  end;
+  iTmp=macULIndStrInArr(S_PAYMENT,arrFld);
+  iPayment=int(arr(iTmp)); 
+  iDprtAcc=macALGetDprtAcc(sAccPayer);
+  if (iDprtAcc==-2)
+    iDprtAcc=iDprt;
+  end;
+  iTmp=macULIndStrInArr(S_KIND_OPER,arrFld); //по анализу макроса Кирила
+  sShifrOper=macULSetAddSpace(string(int(arr(iTmp))),2,"0");
+  iOper=macALGetOperAcc(sAccPayer);
+  iTmp=macULIndStrInArr(S_KPP_PAYER,arrFld);
+  sKPPPayer=macCLGetKPP(int(macULGetOneT(sCln,false,"^")));
+  //проверка КПП плательщика
+  if (
+      (sKPPPayer!="0") and
+      (trim(arr(iTmp))!="") and
+      (sKPPPayer!="") and
+      (trim(arr(iTmp))!="0")
+     )
+    if (sKPPPayer!=trim(arr(iTmp)));
+        println(S_INFO+"КПП Клиента не совпадет с RS-Bank! Номер счета плательщика: "+sAccPayer);
+        println("RS-Bank: "+sKPPPayer);
+        println("BiZone : "+trim(arr(iTmp)));
+    end;
+  end;
+  sKPPPayer=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_KPP_RECEIVER,arrFld);
+  sKPPReceiver=trim(arr(iTmp));
+  if (
+      (StrLen(sKPPReceiver)!=0) and
+      (sKPPReceiver!="0")
+     )
+    if (not macULIsNum(sKPPReceiver))
+      println(S_ERR+"В КПП получателя присутствуют недопустимые символы! Номер счета плательщика: "+sAccPayer);
+      bRet=false;
+    end;
+  end;
+  iTmp=macULIndStrInArr(S_COMPOSER_STATUS,arrFld);
+  sComposerStatus=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_OKATO,arrFld);
+  sOkato=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_BUDJ_CL_CODE,arrFld);
+  sBudjClCode=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_TAX_GROUND,arrFld);
+  sTaxGround=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_TAX_PERIOD,arrFld);
+  sTaxPeriod=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_TAX_NUMBER,arrFld);
+  sTaxNumber=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_TAX_DATE,arrFld);
+  sTaxDate=trim(arr(iTmp));
+  iTmp=macULIndStrInArr(S_TAX_PAYMENT_TYPE,arrFld);
+  sTaxPaymentType=trim(arr(iTmp));
+  iResultCarry=arrResultCarry(iDprt);
+  sSymbolCach=macULSetAddSpace("0",3," ");
+  sSymbNotBal=macULSetAddSpace("0",3," ");
+  //***********************************************
+  //формируем пачку и анализируем тип проводки
+  if (sMFOReceiver=={MFO_Bank})
+    //внутренняя проводка
+    sMFOPayer=null;
+    sMFOReceiver=null;
+    sCorAccPayer=null;
+    sCorAccReceiver=null;
+    sRealAccPayer=sAccPayer;
+    sRealAccReceiver=sAccReceiver;
+    iNumberPack=arrNumPackIn(iDprt);
+  else
+    sMFOPayer=null;
+    sRealAccPayer=sAccPayer;
+    sRealAccReceiver=sCorAccPayer;
+    sCorAccPayer=null;
+    iNumberPack=arrNumPackOut(iDprt);
+  end;
+  //***********************************************
+  //println(sMfoPayer+"|"+sAccPayer+"|"+sRealAccPayer+"|"+sCorAccPayer);
+  //println(sMfoReceiver+"|"+sAccReceiver+"|"+sRealAccReceiver+"|"+sCorAccReceiver);
+  //msgbox(sTaxPaymentType);
+  //bRet=false;
+  if (bRet)
+    bRet=macULInsDocToPost(
+                            sAccPayer,
+                            sAccReceiver,
+                            mSum,
+                            iNumberPack,
+                            dDateValue,
+                            sNumbDoc,
+                            dDateDoc,
+                            sKindOper,
+                            sNamePayer,
+                            sNameReceiver,
+                            sBankPayer,
+                            sBankReceiver,
+                            sNotePay,
+                            sInnPayer,
+                            sInnReceiver,
+                            sSymbolCach, //символ кассы
+                            iPayment,
+                            dDateDoc, 
+                            iDprtAcc,  
+                            sShifrOper,
+                            iOper,
+                            sKPPPayer,
+                            "Э",
+                            sKPPReceiver,
+                            iResultCarry, // как по BiPrint
+                            sComposerStatus,
+                            sOkato,
+                            sMFOPayer,
+                            sMFOReceiver,
+                            sRealAccPayer,
+                            sRealAccReceiver,
+                            sCorAccPayer,
+                            sCorAccReceiver,
+                            sBudjClCode,
+                            sTaxGround,
+                            sTaxPeriod,
+                            sTaxNumber,
+                            sTaxDate,
+                            sTaxPaymentType,
+                            sSymbNotBal
+                          )
+  end;
+  if (bRet)
+    iItogoDoc=iItogoDoc+1;
+    mItogoSum=mItogoSum+mSum;
+  else
+    println("ДОКУМЕНТ НЕ ВЫГРУЖЕН!");
+    println("Номер счета плательщика: "+sAccPayer);
+    println("Наименование плательщика: "+sNamePayer);
+  end;
+  return bRet;
+end;
+
+//формирование массивов с данными
+macro macBLOdbf(sPath:string,iDprt:integer):bool
+  
+file odbf() dbf;
+
+  var
+      k:integer, //счетчик строк
+      i:integer,
+      bRet:bool;
+
+  array 
+      arrVal;
+  k=0;
+  bRet=false;
+  open(odbf,sPath);
+  //формируем заголовок структуры
+  i=0;
+  asize(arrFld,0);
+  while (i<=fldnumber(odbf))
+    arrFld(i)=fldname(odbf,i);
+    i=i+1;
+  end;
+  while(next(odbf))
+    k=k+1;
+    message("Идет обработка строки: "+k);
+    i=0;
+    asize(arrVal,0);
+    while (i<=asize(arrFld)-1)
+      arrVal(i)=odbf(i);
+      i=i+1;
+    end;
+    //сформировали строку в массив
+    bRet=macBLWorkVal(arrVal,iDprt);
+  end;
+  close(odbf);
+  return bRet;
+end;
+
+//основной макрос запуска
+macro macBLMain()
+  var
+      iDprt:integer,
+      i:integer,
+      bCp:bool,
+      bY:bool,
+      sPath:string;
+  
+  array
+       arrFileName;
+
+  sPath="";
+  bCp=false;
+  i=0;
+  bY=false;
+  
+  arrFileName(0)="pp.dbf"; //можно попробовать указывать файлы не в ручную, а сканировать каталог
+
+  iDprt={operdprt};  
+  if (iDprt>=1) 
+    while (i<asize(arrFileName))
+      iItogoDoc=0;
+      mItogoSum=money(0);
+      bCp=false;
+      if (not IsStandAlone)
+        sPath=S_PATH_SRV+macULGetStrDate({curdate},false);
+        sPath=sPath+"_"+string(iDprt)+"_"+macULTimeToStr(time(),false)+"_"+macGetFileName(arrFileName(i),false);
+        sPath=sPath+"_"+string({oper})+"."+macGetFileName(arrFileName(i),true); 
+        if (true) //реализовать проверку на наличие файла локально
+          bCp=copyfile("$"+S_LOCAL_PTH+arrFileName(i),sPath,true,"Подождите! Идет копирование...");
+          if (bCp)
+            //если скопировали на сервер
+            //обрабатываем уже данные с сервера
+            bY=macBLOdbf(sPath,iDprt);
+            println("----");
+            println("Итого выгружено документов: "+string(iItogoDoc)+" на сумму: "+string(mItogoSum));
+            //удаляем
+            removefile("$"+S_LOCAL_PTH+arrFileName(i));
+          else
+            msgbox("Ошибка копирования файла выгрузки на сервер!\nВозможно файл открыт или не найден.");
+          end;
+        end;
+      else
+        msgbox("Реализована работа только в терминальном режиме!");
+      end;
+      i=i+1;
+    end;
+  else
+     msgbox("Ошибка получения номера подразделения текущего пользователя!");
+  end;
+end;

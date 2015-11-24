@@ -1,0 +1,9 @@
+/*
+  макрос тестирования удержаний
+  author: Polyakov S.George
+  ver: 1.00-29.01.2013
+*/
+
+import "..\\mac\\bfsofia\\Utllib.mac";
+macCheckSumPrcKasOutNew();
+exit(1);

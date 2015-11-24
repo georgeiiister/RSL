@@ -1,0 +1,14 @@
+/*
+  Макрос для контроля сумм на счетах физических лиц и 
+  и счетах физических лиц БАНКОВСКИХ карт
+
+  author: Polyakov S.George
+
+  ver: 1.00-19.09.2013
+
+*/
+
+import "..\\mac\\bfsofia\\AccPlFizLib.mac";
+
+macAccPlFizMain();
+

@@ -1,0 +1,464 @@
+/*
+ * Макропрограмма печатной формы журнала сообщений от НО
+ * и формирования печатной формы справки/реестра по остаткам на счетах для НО
+ * developer Polyakov S.George
+ * 20.02.2011
+ * В разделе "Участок для измнения" 
+   при необходимости сменить номер НО
+ * при необходимости изменить местонахожения справочника СОУН (справочник НО)
+ * edt Polyakov S.George 27.05.2011
+ * edt Polyakov S.George 31.05.2011
+ * edt Polyakov S.George 02.06.2011
+ * edt Polyakov S.George 07.06.2011
+ * edt Polyakov S.George 15.06.2011
+*/
+
+file r_stop0(stop_op,"bank.def") key 0;
+file r_ac_ar0(ac_arest,"bank.def") key 0;
+
+import BankInter,ClnInter,"param.mac",vrslplat;
+
+/*Участок для изменения*/
+
+const S_CODE_NO="6439"; //"наша" налоговая 
+      
+
+var iA=int(0),mSum=Moneyl(0),sAcc="Нет данных",iC=int(0),iV=int(0),iG=int(0),
+    iL=int(0),iU=int(0),sNoData="--ДАННЫЕ ДЛЯ ВЫВОДА ОТСУТСТВУЮТ--";
+
+array arrMen1;
+
+      arrMen1(0)="ВЫВЕСТИ ЖУРНАЛ РЕГИСТРАЦИИ СООБЩЕНИЙ";
+      arrMen1(1)="ВЫВЕСТИ СПРАВКУ ОБ ОСТАТКАХ СРЕДСТВ НА СЧЕТЕ ПО ОТОБРАННЫМ СООБЩЕНИЯМ";
+      arrMen1(2)="ВЫВЕСТИ РЕЕСТР СПРАВОК ОБ ОСТАТКАХ СРЕДСТВ НА СЧЕТЕ ПО ОТОБРАННЫМ СООБЩЕНИЯМ";
+
+macro macDownReg(sFIOOp,dCurDate)
+if (iU>0)
+[
+
+Представитель банка                   ######################################                       ##########
+                     --------------   --------------------------------------    -------------     ------------
+                      (должность)                    (Ф.И.О.)                     (подпись)          (дата)
+
+                                                                                         М.П.
+](sFIOOp:c,dCurDate:c);
+else
+  println();
+  println(sNoData);
+end;
+end;
+
+macro macPrnLineReg(sCln,iU,sStopN,sDate,sAcc,sInn,mSum)
+  var 
+    NN,n=int(0);
+  const 
+    I_N=int(3);//число строк для разбиения наименования клиента
+  println(" "+iU:r:4," "+sStopN:13:r," "+sDate:15:r," "+sAcc:21:c," "+sInn:13:r,mSum:49:a);
+  NN=DoStrSplit(sCln,115,115,I_N);
+  while(n!=I_N)
+    if (trim(NN(n))!="")
+      println(NN(n));
+    else
+      break;
+    end;
+    n=n+1;
+  end;
+  println("-------------------------------------------------------------------------------------------------------------------+")
+end;
+
+
+
+
+macro macHeadReg(sNOName,sNOAddr,dCur,sBankName) 
+[                                                  Наименование налогового органа
+                                                   ####################################################################
+                  
+                                 Адрес: #############################################################
+
+                                                      РЕЕСТР                                                        
+              справок об остатках денежных средств на счете (счетах) организации (индивидуального) 
+              предпринимателя, нотариуса, занимающегося частной практикой, адвоката, учредившего 
+                                              адвокатский кабинет)
+                                           по состоянию на ########## г.
+
+Банк:###############################################################################################################
+      --------------------------------------------------------------------------------------------------------------
+В соответствии с запросами налогового органа представляет информацию об оcтатках денежных средств на счетах, 
+открытых клиентами банка:
++---+------------+--------------+--------------------+------------+------------------------------------------------+
+| № | № запроса  | Дата запроса |       № счета      |     ИНН    |                    Сумма                       |
++---+------------+--------------+--------------------+------------+------------------------------------------------+  
+](sNOName:l,sNOAddr:l,dCur:r,strUpr(sBankName):c);
+end;                                                                                                                
+
+//получение вида валюты
+macro macTypeCur(sAcc:string):string
+  file r_acc0(account,"bank.def") key 0;
+  file r_cur0(currency,"bank.def") key 0;
+  file r_iso0(isocur,"bank.def") key 0;
+  var sNo:string;
+  sNo="Отсутствует";
+  rewind(r_acc0);
+  clearrecord(r_acc0);
+  r_acc0.Account=sAcc;
+  if (geteq(r_acc0))
+    rewind(r_cur0);                                                                                                  
+    clearrecord(r_cur0);
+    r_cur0.Code_Currency=r_acc0.Code_Currency;
+    if (geteq(r_cur0))
+      rewind(r_iso0);
+      clearrecord(r_iso0);
+      r_iso0.ISOCode=r_cur0.Short_Name;
+      if (geteq(r_iso0))
+        sNo=r_iso0.NumberCode;
+      end;
+    end;
+  end;
+  return sNo;
+end;
+
+//получение вида счета
+macro macTypeAcc(sAcc:string):string
+  file r_acc0(account,"bank.def") key 0;
+  var sNo:string;
+  sNo="Отсутствует";
+  rewind(r_acc0);
+  clearrecord(r_acc0);
+  r_acc0.Account=sAcc;
+  if (geteq(r_acc0))
+    if (index(r_acc0.Type_Account,"Ч")>0)
+      sNo="Расчетный";
+    end;
+  end;
+  return sNo;
+end;
+
+//поиск наименования НО налоговой по справочнику СОУН
+macro macCNN(sCodeNO:string):string 
+  file sn("..\\obj\\soun1.dbf") dbf;
+  var
+    i:integer,
+    b:bool;
+
+  b=false;
+  i=0;
+  if (open(sn))
+    rewind(sn);
+    while(next(sn))
+      i=i+1;
+      message("Просмотр справочника СОУН "+i);
+      if ((Trim(sn.KOD)==sCodeNO) and (strlen(Trim(sn.DATAK))==0))
+        b=true;
+        return Trim(strsubst(sn.NAIMK,","," "));
+      end;
+    end;
+    if (not b)
+      return "НАИМЕНОВАНИЕ -НО- НЕ НАЙДЕНО!";
+    end;
+  else
+    return "Ошибка открытия справочника СОУН";
+  end;
+end;
+
+
+//поиск адреса налоговой по справочнику СОУН
+macro macCN(sCodeNO:string):string 
+  file sn("..\\obj\\soun1.dbf") dbf;
+  var
+    i:integer,
+    b:bool;
+
+  b=false;
+  i=0;
+  if (open(sn))
+    rewind(sn);
+    while(next(sn))
+      i=i+1;
+      message("Просмотр справочника СОУН "+i);
+      if ((Trim(sn.KOD)==sCodeNO) and (strlen(Trim(sn.DATAK))==0))
+        b=true;
+        return Trim(strsubst(sn.ADRES,","," "));
+      end;
+    end;
+    if (not b)
+      return "АДРЕС -НО- НЕ НАЙДЕН!";
+    end;
+  else
+    return "Ошибка открытия справочника СОУН";
+  end;
+end;
+
+//получение полного наименования клиента
+macro macClnN(iCln:integer):string
+  var sClnN:string;
+      sClnN="";
+  if (getClientFullName(iCln,sClnN)!=0)
+    sClnN="";   
+  end;
+  return sClnN;
+end; 
+
+macro macSpr(iCnt,sNO,sAddrNO,NAMEB,INN,KPP,BIC,dStopNum,sStopNum,sClnName,sClnINN,sClnKPP,sAcc,sTypeAcc,sCodeCur,mSum,dCur1,sOper,dCur2)
+[                                                                                                      Приложение № 2
+                                                                                                 к приказу ФНС России                  
+                                                                                         от 30.03.2007 № ММ-3-06/178@
+                                                 Наименование налогового органа
+                                                 ####################################################################
+                                                 Адрес: #############################################################
+
+    Справка об остатках денежных средств на счете (счетах) организации (индивидуального предпринимателя, нотариуса,
+ занимающегося частной практикой, адвоката, учредивщего адвокатский кабинет)
+
+Банк: ###############################################################################################################
+      ---------------------------------------------------------------------------------------------------------------
+              (полное или сокращенное наименование банка в соответствии с Книгой государственной 
+                                       регистрации кредитных организаций)
+                         
+ИНН: ##########    КПП: #########
+БИК: ######### 
+
+в соответствии с запросом налогового органа от ########## № #####################  
+в отношении:
+#####################################################################################################################
+---------------------------------------------------------------------------------------------------------------------
+(наименование организации, ФИО индивидуального предпринимателя (нотариуса, занимающегося частной практикой, адвоката, 
+                                         учредившего адвокатский кабинет)
+                                           
+ИНН/КИО: ############     КПП: #########
+                                          
+представляет информацию об остатках денежных средств на следующих счетах, открытых указанному лицу
++--------------------+--------------+---------------------------------+---------------------------------------------+
+|                    |              | цифровой код вида валюты счета  | остаток денежных средств                    |
+|   номер счета      |   вид счета  | (в соответствии с Общеросийским | на счете (руб., коп./вал.)                  |
+|                    |              |     классификатором валют)      |                                             |
++--------------------+--------------+---------------------------------+---------------------------------------------+
+|         1          |       2      |                3                |                      4                      |
++--------------------+--------------+---------------------------------+---------------------------------------------+
+|####################|##############|#################################|#############################################|   
++--------------------+--------------+---------------------------------+---------------------------------------------+
+Указанная информация предоставляется по состоянию на ########## г.
+                                                                
+
+Представитель банка                           ###############################                         ##########
+                       -----------------    -----------------------------------    -------------     ------------
+                          (должность)                    (Ф.И.О.)                    (подпись)          (дата)
+
+                                                                                        М.П.
+
+* При выполнении банками обязанностей, предусмотренных пунктом 5 статьи 76 Налогового кодекса Российской Федерации, 
+указывается дата и номер соответствующего решения налогового органа о приостановлении операций 
+по счетам налогоплательщика 
+
+#####
+ -   -   -   -   -   -   -   -   -   -   -   -   -   -   -   -  -   -   -   -   -   -   -   -   -   -   -   -   -  -]
+(sNO:l,sAddrNO,strUpr(NAMEB):c,INN,KPP,BIC,dStopNum,sStopNum,strUpr(sClnName):l,sClnINN,sClnKPP,sAcc,sTypeAcc:c,sCodeCur:c,mSum:a,dCur1,sOper:c,dCur2:c,iCnt:l);                                                                                                    
+
+end;
+
+macro macDownJnl()
+ if (iV>0)
+   println();
+   println();
+   println("                                                  _______________ "+GetFioOper({oper},true,"."));
+ else
+  println();
+  println(sNoData);
+ end;
+end;
+
+macro macPrnLine(sKind,sStopN,sDate,sDLoad,sCodeNO,sCancN,dCancD,sCancK,sAcc,mSum)
+  if (sKind=="Р")
+    sKind="ПРИОС"
+  elif (sKind=="О")
+    sKind="ОТМЕН"
+  end;
+  if (sCodeNO==S_CODE_NO) //скрываем код "нашей" налоговой
+    sCodeNO=""
+  end;
+  iC=iC+1;
+  println(iC:r:6," "+sKind:6:r," "+sStopN:10:r," "+sDate:11:r," "+sDLoad:13:r," "+sCodeNO:9:r," "+sCancN:14:r," "+dCancD:16:r," "+sCancK:12:r," "+sAcc:21:c,mSum:17:a);
+end;
+
+macro macDateMsg(dDateS,dDateE)
+  var
+    bNext=true,
+    iT=int(0);
+  rewind(r_stop0);
+  clearrecord(r_stop0);
+  initprogress(nrecords(r_stop0),"Подсчет","Обработано строк");
+  while (next(r_stop0))
+    iA=iA+1;
+    useprogress(iA);
+    if ((r_stop0.StopDate>=dDateS) and ((r_stop0.StopDate<=dDateE)))
+      iV=iV+1;
+      rewind(r_ac_ar0);
+      clearrecord(r_ac_ar0);
+      r_ac_ar0.Id=r_stop0.ID;
+      mSum=Moneyl(0);
+      sAcc="Нет данных";
+      if (geteq(r_ac_ar0))
+        bNext=true;
+        while (bNext)
+          if (r_ac_ar0.ID==r_stop0.ID)
+            iT=iT+1;
+            sAcc=r_ac_ar0.Account;
+            mSum=r_ac_ar0.SumArest;
+            if (iL==0)
+              macPrnLine(r_stop0.Kind,r_stop0.StopNumber,r_stop0.StopDate,r_stop0.DateFormLoad,r_stop0.CodeNO,r_stop0.CancStopNumber,r_stop0.CancStopDate,r_stop0.CancStopKind,sAcc,mSum);
+            elif (iL==1)
+              if (r_stop0.Kind=="Р")
+                 iG=iG+1;
+                 macSpr(iG,r_stop0.NameNO,macCN(r_stop0.CodeNO),{Name_Bank},ИНН,Банк_КПП,{MFO_Bank},r_stop0.StopDate,r_stop0.StopNumber,macClnN(r_stop0.Client),getClientINN(r_stop0.Client),getClientKPP(r_stop0.Client),sAcc, macTypeAcc(sAcc),macTypeCur(sAcc):c,restA(sAcc,{curdate}-1),{curdate},getFIOoper({oper}),{curdate});
+               end;
+            elif (iL==2)
+              if (r_stop0.CodeNO==S_CODE_NO)
+                 if (r_stop0.Kind=="Р") 
+                   iU=iU+1;
+                   macPrnLineReg(macClnN(r_stop0.Client),iU,r_stop0.StopNumber,r_stop0.StopDate,sAcc,getClientINN(r_stop0.Client),restA(sAcc,{curdate}-1));
+                 end;
+               end;
+            end;
+            if (not next(r_ac_ar0))
+              bNext=false;
+            end;
+          else
+            bNext=false;
+          end;
+        end;
+        iT=int(0);
+      end;
+    end;
+  end;
+  if (iL==0)
+    macDownJnl();
+  elif(iL==2)
+    macDownReg(getFIOoper({oper}),{curdate});
+  end;
+end;
+
+macro macDateLoad(dDateS,dDateE)
+  var
+    bNext=true, sTypAcc="",
+    iT=int(0);
+  rewind(r_stop0);
+  clearrecord(r_stop0);
+  initprogress(nrecords(r_stop0),"Подсчет","Обработано строк");
+  while (next(r_stop0))
+    iA=iA+1;
+    useprogress(iA);
+    if ((r_stop0.DateFormLoad>=dDateS) and ((r_stop0.DateFormLoad<=dDateE)))
+      iV=iV+1;
+      rewind(r_ac_ar0);
+      clearrecord(r_ac_ar0);
+      r_ac_ar0.Id=r_stop0.ID;
+      mSum=Moneyl(0);
+      sAcc="Нет данных";
+      if (geteq(r_ac_ar0))
+         bNext=true;
+         while (bNext)
+           if (r_ac_ar0.ID==r_stop0.ID)
+             iT=iT+1;
+             sAcc=r_ac_ar0.Account;
+             mSum=r_ac_ar0.SumArest;
+             if (iL==0)
+               macPrnLine(r_stop0.Kind,r_stop0.StopNumber,r_stop0.StopDate,r_stop0.DateFormLoad,r_stop0.CodeNO,r_stop0.CancStopNumber,r_stop0.CancStopDate,r_stop0.CancStopKind,sAcc,mSum);
+             elif (iL==1)
+               if (r_stop0.Kind=="Р")
+                 iG=iG+1;
+                 macSpr(iG,r_stop0.NameNO,macCN(r_stop0.CodeNO),{Name_Bank},ИНН,Банк_КПП,{MFO_Bank},r_stop0.StopDate,r_stop0.StopNumber,macClnN(r_stop0.Client),getClientINN(r_stop0.Client),getClientKPP(r_stop0.Client),sAcc, macTypeAcc(sAcc),macTypeCur(sAcc):c,restA(sAcc,{curdate}-1),{curdate},getFIOoper({oper}),{curdate});
+               end;
+             elif (iL==2)
+               if (r_stop0.CodeNO==S_CODE_NO)
+                 if (r_stop0.Kind=="Р") 
+                   iU=iU+1;
+                   macPrnLineReg(macClnN(r_stop0.Client),iU,r_stop0.StopNumber,r_stop0.StopDate,sAcc,getClientINN(r_stop0.Client),restA(sAcc,{curdate}-1));
+                 end;
+               end;
+             end;
+             if (not next(r_ac_ar0))
+               bNext=false;
+             end;
+           else
+             bNext=false;
+           end;
+         end;
+         iT=int(0);
+      end;
+    end;
+  end;
+  if (iL==0)
+    macDownJnl;
+  elif (iL==2)
+    macDownReg(getFIOoper({oper}),{curdate});
+  end;
+end;
+
+macro macHeadJnl(sNote1,sNote2)
+  println(StrUpr(sNote1));
+  println();
+  println(sNote2);
+[
++-----+-----+---------+----------+------------+--------+-------------+----------------+----------+--------------------+----------------+
+|№ п/п| Тип |    №    |   Дата   | Дата ввода | Код НО | № отм. реш. | Дата отм. реш. | Вид отм. |       № счета      |      Сумма     |
++-----+-----+---------+----------+------------+--------+-------------+----------------+----------+--------------------+----------------+
+];                                                                 
+end;
+
+macro macMain()
+ var
+   iM=int(0),
+   dDateS={curdate},
+   sNote1="",
+   dDateE={curdate};
+
+   array arrMen;
+
+   arrMen(0)="ВЫВЕСТИ ДАННЫЕ ПО ДАТЕ ВВОДА";
+   arrMen(1)="ВЫВЕСТИ ДАННЫЕ ПО ДАТЕ СООБЩЕНИЯ";
+
+   iM=menu(arrMen);
+
+   if (iM>=0)
+     if (getDate(dDateS,"Укажите начальную дату диапазона поиска"))
+       if (dDateS!=Date(0,0,0))
+         dDateE=dDateS;
+         if (getDate(dDateE,"Укажите конечную дату диапазона поиска"))
+           if ((dDateE!=Date(0,0,0)) and (dDateE>=dDateS))
+             iL=menu(arrMen1);
+             if (iL>=0) 
+               sNote1="Журнал регистрации сообщений от Налоговых Органов. Операционный день: "+{curdate};
+               if (iM==0)
+                 if (iL==2)
+                   macHeadReg(macCNN(S_CODE_NO),macCN(S_CODE_NO),{curdate},{Name_Bank});
+                 end;
+                 if (iL==0)
+                   macHeadJnl(sNote1,"Дата ввода сообщений с "+dDateS+" по "+dDateE);
+                 end;
+                 macDateLoad(dDateS,dDateE);
+               elif (iM==1)
+                 if (iL==2)
+                   macHeadReg(macCNN(S_CODE_NO),macCN(S_CODE_NO),{curdate},{Name_Bank});
+                 end;
+                 if (iL==0)
+                   macHeadJnl(sNote1,"Дата сообщений с "+dDateS+" по "+dDateE);
+                 end;
+                 macDateMsg(dDateS,dDateE);
+               end;
+               if ((iL==1) and (iG<=0))
+                 println();
+                 println(sNoData);
+               end;
+             end;
+            else
+              MsgBox("Конечная Дата не может быть равной нулю или меньше начальной!"); 
+           end;
+         end;
+       else
+         MsgBox("Начальная Дата не может быть равной нулю!");
+       end;
+     end;
+   end;
+end;
+
+macMain();
+

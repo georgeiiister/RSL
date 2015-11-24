@@ -1,0 +1,19 @@
+file  snd0 (nal_izv,  "sofia.def") key 1 ;
+
+rewind(snd0);
+clearrecord(snd0);
+NumSh="";
+j=0;
+k=0;
+strDate="";
+While(next(snd0)) 
+    j=j+1;
+    Message("Идет обработка "+j);
+    snd0.Departament=0;
+// If ((SubStr(snd0.File_SName,4,1)=="2") AND ((snd0.Date_Send>=Date("15.07.2008")) And (snd0.Date_Send<=Date("25.11.2008"))))    
+       k=k+1;
+    // PrintLn(k+"#"+snd0.Date_Send+"#"+snd0.Account+"#"+snd0.File_Sname);
+  //   PrintLn(k:c:3,snd0.Date_Send:c:13,snd0.Account:a:22,snd0.File_Sname:c:47);
+    //End;
+   //update(snd0); 
+End;

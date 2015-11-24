@@ -1,0 +1,120 @@
+/*
+ * Макропрограмма для сверки остатков по карточным счетам 
+ * в RS-Bank и Psit-Retail
+ * доступ к Psit-Retail по IP=10.13.1.36
+ * developer Polyakov S.George
+ * 28.11.2011
+ * edit Polyakov S.George 22.02.2012 Добавлена работа в 3-х звенке 
+ * edit Polyakov S.George 05.04.2013 Добавлен новый IP Retail
+*/
+
+import BankInter; //задействована функция restA
+import rsexts;
+
+const
+       S_NET_PATH:string="\\\\10.13.1.36\\For_Exp\\sverka\\", //правится под филиал
+	S_FILE_N:string="ost.txt";
+
+//Подпрограмма-функция для проверки существования 
+//передаваемого номера счета
+macro macIsacc(sAcc:string):bool
+  file accv0("account$") key 0;
+  file acc0(account) key 0;
+  var
+     bRet:bool,
+     btAcc:BtFileRef;
+  const
+     I_VAL:integer=int(810); //константа национальной валюты  
+  bRet=false;
+  btAcc=acc0;
+  if (strlen(sAcc)==20)
+    if (substr(sAcc,6,3)!=I_VAL)
+      btAcc=accv0;
+    end;
+    btAcc.account=sAcc;
+    rewind(btAcc);
+    if (geteq(btAcc))
+      bRet=true;
+      return bRet;
+    end;
+  end;
+  return bRet;
+end;
+
+//Подпрграмма функция возврата остатка по счету
+macro macOst(sAcc:string):money
+  return restA(sAcc,{curdate});
+end;
+
+macro macHead()
+[         CЧЕТ                  RS-BANK            RETAIL           РАЗНИЦА
+
+]
+end;
+
+
+//Точка входа в программу
+macro main(sPath:string)
+file ftxt() txt 1024;
+//msgbox(macIsacc("40702810901000000680"));
+//msgbox(macOst("40702810901000000680"));
+var 
+ icnt:integer, 
+ mOstRS:money, 
+ mOstRet:money,
+ mDif:money,
+ bEOF:bool,
+ sFileP:string,
+ sAcc:string;
+ icnt=0;
+ bEOF=false;
+ sFileP=sPath;
+  if (open(ftxt,sFileP+S_FILE_N))
+    //msgbox(sFileP+S_FILE_N+".txt");
+    setdelim("|");
+    macHead();
+    while (next(ftxt))
+      sAcc=trim(ftxt(1));
+        if (macIsAcc(sAcc))
+          bEOF=true;
+          mOstRet=money(StrSubst(trim(ftxt(2)),",","."));
+          mOstRS=macOst(sAcc);
+          mDif=mOstRet-mOstRS;
+          if (mDif!=0)
+            icnt=icnt+1;
+            println(sAcc:r:20,mOstRS:a:18,mOstRet:a:18,mDif:a:18)
+          end;
+        else
+          println(sAcc+" НЕ НАЙДЕН В RS-BANK!");
+        end;
+    end;
+    close(ftxt);
+    if (bEOF) //если файл заполнен и хотябы один счет найден 
+      if (icnt==0) //если для найденного счета отличается остаток
+        print(" ----- ПО НАЙДЕННЫМ СЧЕТАМ В RS-BANK НЕТ РАСХОЖДЕНИЙ В ОСТАТКАХ");
+      end;
+      //удаляем обработанный файл 
+      if (not RemoveFile(sFileP+S_FILE_N))
+        msgbox("Ошибка удаления ФАЙЛА СВЕРКИ!");
+      end;
+    else
+      println();
+      println(" ----- ФАЙЛ СВЕРКИ ИЗ RETAIL СОДЕРЖИТ НЕВЕРНЫЕ ЗНАЧЕНИЯ ИЛИ НЕ ЗАПОЛНЕН");
+    end;
+  else
+    MsgBox("ФАЙЛ ДЛЯ СВЕРКИ из Psit Retail НЕ НАЙДЕН! СФОРМИРУЙТЕ ФАЙЛ ИЛИ ПРОВЕРЬТЕ ДОСТУП К СЕРВЕРУ!");
+  end;
+end;
+
+RemoveFile(sFileP+S_FILE_N); //удаляем или пытаемся 'старый' файл
+if (IsStandAlone)
+  //msgbox(S_NET_PATH);	
+  main(S_NET_PATH);
+else
+  if (copyfile("$"+S_NET_PATH+S_FILE_N,"..\\TXTFILE\\"+S_FILE_N))
+    if (not RemoveFile("$"+S_NET_PATH+S_FILE_N))
+        msgbox("Ошибка удаления ФАЙЛА СВЕРКИ с сервера Retail! Возможно недостаточно прав! Обратитесь к разработчику");
+    end  
+  end;
+  main("..\\TXTFILE\\");
+end;

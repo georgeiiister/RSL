@@ -1,0 +1,364 @@
+/*
+Макрос для удаления записей по 322-П (журнал и раздел ограничений)
+developer Polyakov S.George 16.03.2010
+add Polyakov S.George 22.08.2011
+*/
+
+file r_ac_ar1(ac_arest,"bank.def") key 1;
+file r_acc0(account,"bank.def") key 0;
+file r_stop0(stop_op,"bank.def") key 0;
+file r_lim1(limit,"bank.def") key 1;
+file r_canc_lim1(canc_lim,"bank.def") key 1;
+file r_canc_lim3(canc_lim,"bank.def") key 3;
+file r_acclimit1(acclimit,"bank.def") key 1;
+
+file w_ac_ar0(ac_arest,"bank.def") key 0 write;
+file w_ac_ar0_1(ac_arest,"bank.def") key 0 write;
+file w_stop0_1(stop_op,"bank.def") key 0 write;
+file w_stop0(stop_op,"bank.def") key 0 write;
+file w_lim0(limit,"bank.def") key 0 write;
+file w_canc_lim0(canc_lim,"bank.def") key 0 write;
+file w_acclimit0(acclimit,"bank.def") key 0 write;
+file w_acc_clim0(acc_clim,"bank.def") key 0 write;
+
+Const
+     I_VAL=int(810); //константа национальной валюты
+
+var strAcc="",
+    intChapter=1,
+    flgNext=false,flgNextI=false,flgNextB=false,
+    intArr=0,intA=0,flgRet=false,intB=0,intC=int(0),intD=int(0),intF=int(0),intG=int(0),
+    blnId=true,blnDelClim=true,flgNdelOp=false,flgDelLim=false,intCodeC=int(0);
+    
+array arrID,arrMsgName;
+
+macro macDel()
+//strAcc="40702810001000000726";
+flgRet=false;
+if (GetString(strAcc,"Введите номер счета",20))
+  if (StrLen(Trim(strAcc))!=0)
+    strAcc=Trim(strAcc);
+    rewind(r_acc0);
+    r_acc0.account=strAcc;
+    if (getEQ(r_acc0))
+      rewind(r_ac_ar1);
+      intCodeC=r_acc0.Code_Currency;
+      if (SubStr(strAcc,6,3)!=I_VAL)
+        if (getInt(intCodeC,"ДЛЯ УТОЧНЕНИЯ ПОИСКА УКАЖИТЕ КОД ВАЛЮТЫ ДАННОГО СЧЕТА"))
+        end;
+      end;
+      //msgbox(intCodeC);
+      r_ac_ar1.Chapter=intChapter;
+      r_ac_ar1.Code_Currency=intCodeC;
+      r_ac_ar1.Account=r_acc0.Account;
+      if (getEQ(r_ac_ar1))
+        flgNext=true;
+        aSize(arrID,0);
+        aSize(arrMsgName,0);
+        while(flgNext)
+          if ((r_ac_ar1.Account==r_acc0.Account) and 
+              (r_ac_ar1.Code_Currency==intCodeC) and 
+              (r_ac_ar1.Chapter==intChapter))
+            rewind(r_stop0);
+            r_stop0.ID=r_ac_ar1.ID;
+            if (getEQ(r_stop0))
+              intArr=aSize(arrID);
+              arrID(intArr)=r_stop0.ID;
+              arrMsgName(intArr)="Вид: "+r_stop0.Kind+", № "+r_stop0.StopNumber+"/"+r_stop0.StopDate+", Добавлено: "+r_stop0.DateFormLoad+"/"+r_stop0.TimeFormLoad;
+              flgRet=true;
+            else
+              MsgBox("ВНИМАНИЕ! НАРУШЕНА ССЫЛОЧНАЯ ЦЕЛОСТНОСТЬ ДЛЯ ЗАПИСИ С КОДОМ: "+r_ac_ar1.ID+" ОБРАТИТЕСТЬ К РАЗРАБОТЧИКАМ!");
+              flgNext=false;
+              flgRet=false;
+            end;
+              flgNext=Next(r_ac_ar1);
+          else
+            flgNext=false;
+          end;
+        end;
+      else
+        MsgBox("ПО УКАЗАННОМУ СЧЕТУ НЕТ ЗАПИСЕЙ АРЕСТОВ/СНЯТИЙ");
+      end;
+    else
+      MsgBox("УКАЗАННЫЙ СЧЕТ НЕ НАЙДЕН!");
+    end;
+  end;
+end;
+
+if (flgRet)
+  intA=0;
+  intB=0;
+  intC=0;
+  intD=0;
+  intF=0;
+  intG=0;
+  flgNdelOp=false;
+  flgRet=false;
+  intArr=menu(arrMsgName,"Выбор удаляемого сообщение","УДАЛИТЬ ПО СЧЕТУ: "+strAcc);
+  if (intArr>=0)
+    rewind(w_ac_ar0);
+    w_ac_ar0.ID=arrID(intArr);
+    if (getEQ(w_ac_ar0))
+      flgNext=false;
+      while(not flgNext)
+        if (w_ac_ar0.ID==arrID(intArr))
+          if (
+              (w_ac_ar0.Chapter==intChapter) and
+              (w_ac_ar0.Code_Currency==intCodeC) and
+              (w_ac_ar0.Account==r_acc0.Account)
+             ) 
+           if (delete(w_ac_ar0))
+             close(w_ac_ar0);
+             intA=intA+1; //Удалена запись по счету
+             flgRet=true;
+           else
+             MsgBox("ОШИБКА УДАЛЕНИЯ ЗАПИСИ ПО СЧЕТУ!");
+             flgNext=true; //В случае ошибки всегда останется одна запись по счету (это важно)
+             flgRet=false; //Т.е. можно запустить повторно, с указанием оставшего счета
+           end;
+          else
+            //значит в одном сообщении было несколько счетов
+            flgNdelOp=true;
+          end;
+        else
+          flgNext=true;
+        end;
+        if (not next(w_ac_ar0))
+          flgNext=true;
+        end;
+      end;
+      rewind(w_stop0);
+      w_stop0.ID=arrID(intArr);
+      if (getEQ(w_stop0))
+        if (flgRet) //если не удален хотя бы один счет, то оставляем сообщение
+          //add Polyakov S.George 22.08.2011
+          //удаляем приостановку из таблицы limit.dbt
+          //если не находим, значит работаем с отменой или нарушение ссылочной целостности
+          blnDelClim=true; //true если не найдены подчиненные записи, а false - нашли, но ничего с ними не сделали 
+          rewind(r_lim1);
+          r_lim1.IdStopOp=w_stop0.ID;
+          if (getEQ(r_lim1))
+            //нашли - приостановка
+            //важно, если нашли приостановку, то надо удалить и её отмену (с сообщением), если она есть
+            flgNextI=false;
+            while(not flgNextI)
+              if (r_lim1.IdStopOp==w_stop0.ID)
+                flgDelLim=false;
+                rewind(r_acclimit1);
+                //здесь проверяем именно по этому ключу, так как в одном сообщениее
+                //может быть несколько разных счетов
+                r_acclimit1.IdLimit=r_lim1.IdLimit;
+                r_acclimit1.Chapter=intChapter;
+                r_acclimit1.CodeCurrency=intCodeC;
+                r_acclimit1.Account=r_acc0.Account;
+                  if (getEQ(r_acclimit1))
+                    flgDelLim=true; //это приостановка именно по указанному счету
+                    //теперь мы можем узнать, отменялось ли решение о приостановке
+                     if ((r_acclimit1.IdCnclLimit>int(0)))
+                      //msgbox("!");
+                      //приостановка отменена - удалить и отмену
+                      //удалить отмены и !!! почистить журнал :)
+                       rewind(w_canc_lim0);
+                       w_canc_lim0.IdCnclLimit=r_acclimit1.IdCnclLimit;
+                       if (getEQ(w_canc_lim0))
+                         rewind(w_ac_ar0_1);
+                         w_ac_ar0_1.ID=w_canc_lim0.IdStopOp;
+                         blnDelClim=getEQ(w_ac_ar0_1);
+                         rewind(w_acc_clim0);
+                         w_acc_clim0.IdAccLimit=r_acclimit1.IdAccLimit;
+                         w_acc_clim0.IdCnclLimit=w_canc_lim0.IdCnclLimit;
+                         if (getEQ(w_acc_clim0))
+                           if (delete(w_acc_clim0) and blnDelCLim)
+                              close(w_acc_clim0);
+                              intC=intC+1; //удалили по суммам об отмене
+                              if (delete(w_canc_lim0))
+                                close(w_canc_lim0);
+                                intF=intF+1;
+                              else
+                                blnDelCLim=false;
+                              end;
+                           else
+                              blnDelCLim=false;
+                           end;
+                         end;
+                       end;
+                       if (blnDelClim)
+                         //чистим журнал
+                         //так как индекс по полю IdStopOp - уникальный,
+                         //следовательно IdStopOp - для отмен уникальный в ac_arest и stop_op
+                         rewind(w_stop0_1);
+                         w_stop0_1.ID=w_ac_ar0_1.ID;
+                         if (getEQ(w_stop0_1))
+                           //msgbox(w_ac_ar0_1.ID);
+                           if (delete(w_ac_ar0_1))
+                             intA=intA+1;
+                             close(w_ac_ar0_1);
+                             if (delete(w_stop0_1))
+                               intB=intB+1;  
+                             else
+                               blnDelClim=false;
+                             end;
+                           else
+                             blnDelCLim=false;
+                           end;
+                         end;
+                       end;
+                     end;
+                     if (blnDelCLim)
+                       rewind(w_acclimit0);
+                       w_acclimit0.IdAccLimit=r_acclimit1.IdAccLimit;
+                       if (getEQ(w_acclimit0))
+                         if (delete(w_acclimit0))
+                           close(w_acclimit0);
+                           intD=intD+1; //удалили по лицевым счетам ограничения
+                         else
+                           blnDelCLim=false;
+                         end;
+                       end;
+                     end;
+                  end;
+              //здесь удаляем limit, но только если удалась проверка на наличие
+              //по таблице acclimit
+              if (flgDelLim)
+                if (blnDelCLim)
+                  rewind(w_lim0);
+                  w_lim0.IdLimit=r_lim1.IdLimit;
+                  if (getEQ(w_lim0))
+                    if (delete(w_lim0))
+                      close(w_canc_lim0);
+                      intG=intG+1;
+                    else
+                      blnDelCLim=false;
+                    end;
+                  end;
+                end;
+              end;
+              else
+                flgNextI=true;
+              end;
+              if (not next(r_lim1))
+                flgNextI=true;
+              end;
+            end;
+          else
+            //не нашли - отмена
+            rewind(r_canc_lim3);
+            r_canc_lim3.IdStopOp=w_stop0.ID;
+            if (getEQ(r_canc_lim3))
+              //msgbox("нашли запись об отмене в canc_lim");
+              //если найдена отмена
+              //не проверяем повторно, так как индекс уникальный
+              //обновляем limit.dbt, acclimit
+              //удаляем записи из canc_lim, acc_clim
+              rewind(r_acclimit1);
+              r_acclimit1.IdLimit=r_canc_lim3.IdLimit;
+              r_acclimit1.Chapter=intChapter;
+              r_acclimit1.CodeCurrency=intCodeC;
+              r_acclimit1.Account=r_acc0.Account;
+              if (getEQ(r_acclimit1))
+                //msgbox("по номеру счета нашли приостановку, которую отменяет эта омена");
+                rewind(w_acc_clim0);
+                w_acc_clim0.IdAccLimit=r_acclimit1.IdAccLimit;
+                w_acc_clim0.IdCnclLimit=r_canc_lim3.IdCnclLimit;
+                if (getEQ(w_acc_clim0))
+                  //msgbox("нашли запись об этой отмене в acc_clim");
+                  if (delete(w_acc_clim0))
+                    close(w_acc_clim0);
+                    intC=intC+1;
+                  else
+                    blnDelCLim=false;
+                  end;
+                end;
+                if (blnDelClim)
+                  rewind(w_acclimit0);
+                  w_acclimit0.IdAccLimit=r_acclimit1.IdAccLimit;
+                  if (getEQ(w_acclimit0))
+                     //msgbox("проставляем 0 - нет отмены для найденной приостановки");
+                     w_acclimit0.IdCnclLimit=int(0);
+                     if (update(w_acclimit0))
+                     else
+                       blnDelCLim=false;
+                     end;
+                  end;
+                end;
+              end;
+              if (blnDelCLim)
+                rewind(w_canc_lim0);
+                w_canc_lim0.IdCnclLimit=r_canc_lim3.IdCnclLimit;
+                if (getEQ(w_canc_lim0))
+                    //msgbox("удаляем отмену");
+                  if (delete(w_canc_lim0))
+                    close(w_canc_lim0);
+                    intF=intF+1;
+                  else
+                    blnDelCLim=false;
+                  end;
+                end;
+              end;
+              if (blnDelClim)
+                rewind(w_lim0);
+                w_lim0.IdLimit=r_acclimit1.IdLimit;
+                if (getEQ(w_lim0))
+                  //msgbox("обнуляем дату и время окончания приостановки");
+                  w_lim0.DateEnd=date(0,0,0);
+                  w_lim0.TimeEnd=time(0,0,0);
+                  if (update(w_lim0))
+                  else
+                    blnDelCLim=false;
+                  end;
+                end;
+              end;
+            else
+              MsgBox("ОШИБКА! УКАЗАННАЯ ОТМЕНА НЕ ВНЕСЕНА В ОГРАНИЧЕНИЯ ОПЕРАЦИЙ ПО СЧЕТУ! ОТМЕНА БУДЕТ УДАЛЕНА, НО НЕОБХОДИМО ПРОВЕРИТЬ КОРРЕКТНОСТЬ ЗАПОЛНЕНИЯ ПРИОСТАНОВКИ ДЛЯ ДАННОЙ ОТМЕНЫ!");
+            end;
+          end;
+          flgRet=false;
+          if (blnDelCLim) //если не найдена ни одна приостановка по счету или все (!!!) они успешно удалены
+            if (not flgNdelOp) //проверяем есть ли ещё в этом сообщении другие счета
+              if (delete(w_stop0))
+                close(w_stop0);
+                intB=intB+1; //Удалено сообщение
+                flgRet=true;
+              end;
+            end;
+          end;
+        end;
+      else
+        MsgBox("ОШИБКА! НЕ НАЙДЕНО УДАЛЯЕМОЕ СООБЩЕНИЕ!");
+      end;
+    else
+      MsgBox("ОШИБКА! НЕ НАЙДЕН СЧЕТ ПО УДАЛЯЕМОМУ СООБЩЕНИЮ!");
+    end;
+    MsgBox("УДАЛЕНО ЗАПИСЕЙ ПО СЧЕТАМ:-"+intA+"- ПО СООБЩЕНИЯМ -"+intB+"- ПО СУММАМ ОБ ОТМЕНЕ -"+intC+" - ПО СЧЕТАМ С ОГРАНИЧЕНИЯМИ - "+intD+" - ПО ОТМЕНЕ ОГРАНИЧЕНИЙ  - "+intF+" - ПО ОГРАНИЧЕНИЯМ - "+intG);
+  end;  
+end;
+
+if (flgRet) //если все закончилось успешно
+  return true;
+else
+  return false;
+end;
+
+end;
+
+
+/*************************** Точка входа в программу ***********************/
+
+//macDel
+
+blnId=true;
+if (GetTrue(blnId,"ХОТИТЕ УДАЛИТЬ СООБЩЕНИЕ И ОГРАНИЧЕНИЯ ПО СЧЕТУ?"))
+end;
+while (blnId)
+  if (macDel)
+    if (GetTrue(blnId,"ВЫПОЛНИТЬ УДАЛЕНИЕ ДЛЯ ДРУГОЙ ЗАПИСИ?"))
+    else
+      blnId=false;
+    end;
+  else
+    if (GetTrue(blnId,"ДАННЫЕ НЕ УДАЛЕНЫ! ПОВТОРИТЬ?"))
+    else
+      blnId=false;
+    end;
+  end
+end;

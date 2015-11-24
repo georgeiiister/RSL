@@ -1,0 +1,897 @@
+//СвидГР:67,000588237
+//СвидНУ:67,000192041
+
+/**/
+
+file  izv7 (nal_out,  "sofia.def") key 7;
+file  izv1 (nal_out,  "sofia.def") key 1;
+file  izv8 (nal_out,  "sofia.def") key 8;
+file  izv0 (nal_out,  "sofia.def") key 0 write;
+file  num0 (nal_nums, "sofia.def") key 1 write;
+file  num1 (nal_nums, "sofia.def") key 1;
+file  snd0 (nal_izv,  "sofia.def") key 0;
+file  snd1 (nal_izv,  "sofia.def") key 0 write;
+file  acc1 (account,  "bank.def") key 0;
+file  clt1 (client,   "bank.def") key 0;
+file  cls1 (clients1, "sofia.def") key 0;
+file  cls3 (clients3, "sofia.def") key 0;
+file  fil1 (nal_file, "sofia.def") key 1;
+file  fil2 (nal_file, "sofia.def") key 1 write;
+
+file  filr () txt;
+
+array STRA;
+STRA(0) = "индивидуальный предприниматель";
+STRA(1) = "инд. предпр-ль";
+STRA(2) = "инд. пр-ль";
+STRA(3) = "инд пр-ль";
+STRA(4) = "ичп ";
+STRA(5) = "пбюл";
+STRA(6) = "ип ";
+STRA(7) = "нотариус";
+STRA(8) = "глава кфх";
+/*Edit Polyakov 12.12.2008*/
+/*Расширина информация по сравнению с головным */
+/*При добавлении нового STRA(N) надо поправить строку 127 в текущем исходнике*/
+STRA(9) = "адвокатский кабинет";
+STRA(10) = "глава крестьянского (фермерского) хозяйства";
+/*Edit Polyakov 12.12.2008*/
+/*
+array ENDA;
+ENDA(0) = 31;
+ENDA(1) = 15;
+ENDA(2) = 11;
+ENDA(3) = 10;
+ENDA(4) = 4;
+ENDA(5) = 5;
+ENDA(6) = 3;
+STRA(7) = 9;
+STRA(8) = 10;
+*/
+INNB  = "7706195570";      //ИНН Банка
+KPPB  = "643902001";       //КПП Банка  /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+BICB  = "046359826";       //БИК Банка  /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+REGNB = "2867";            //Регистрационный номер Банка
+OGRNB = "1027739066354";   //ОГРН Банка
+NALB  = "6439";            //Код налоговой Банка /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/ 
+NAMEB = "БАЛАКОВСКИЙ ФИЛИАЛ АКБ СОФИЯ (ЗАО)"; //Наименование Банка /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+ADRB  = "413840,64,САРАТОВСКИЙ,БАЛАКОВО,,ТИТОВА,37,,"; /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+//ADRB  = "643,115035,77,,,,КАДАШЕВСКАЯ НАБ,32/2,1,";
+IDB   = INNB + "**" + KPPB;
+FIL   = "0001";            //Порядковый номер филиала Банка /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+//TPB   = "(8453)44-16-71";  //Телефон Банка /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+TPB   = "(8453)44-57-73";  //Телефон Банка /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+//FIO   = "СТРЕКНЕВА,НАДЕЖДА,ЛЬВОВНА";            	//Исполнитель /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+FIO   = "ДАНИЛОВ,СЕРГЕЙ,ЮРЬЕВИЧ";            	//Исполнитель /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+//WORK  = "ГЛАВНЫЙ БУХГАЛТЕР"; 		//Должность исполнителя /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+WORK  = "НАЧАЛЬНИК ОТДЕЛА ПО РАБОТЕ С КЛИЕНТАМИ"; 		//Должность исполнителя /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+VER   = "5.01";            //Версия формата
+
+Path_File = "..\\nalogi\\Out\\";
+File_Name = "";
+NNNNNN = "";    //Порядковый номер сообщения в текущем году  
+DD = "";        //Год отправки сообщения  
+FileDay = 0;    //Номер файла в день       
+
+ИдФайл;
+ТипИнф;
+ВерсПрог;
+ТелОтпр;
+ДолжнОтпр;
+ФамОтпр;
+КолДок;
+ВерсФорм;
+
+ИдДок;
+НомСооб;
+КодНОБ;
+НаимКО;
+АдрКО;
+РегНомКО;
+НомФ;
+БИК;
+ИННКО;
+КППКО;
+ОГРНКО;
+НаимНП;
+ФИОИП;
+СвидГР;
+СвидНУ;
+ИНННП;
+КППНП; 
+ОГРННП;
+КодСостДог;
+ДатаЗаклДог;
+ДатаРастДог;
+НомерДог;
+КодСостСч;
+ВалСч;
+ВидСч;
+ДатаОткрСч;
+ДатаЗакрСч;
+НомСч;
+ДолжнПрБ;
+ФИОПрБ;
+ДатаСооб;
+ТелБанка;
+
+НомСчСтар;
+ПризнИзм;
+НомИзмСч;
+ДатаИзмСч;
+
+
+/***************************************************************/
+macro StrPars(STR)
+// STRS= "индивидуальный предпринематель"; 
+// STR = "индивидуальный предпринематель Иванов Иван Иванович ИЧП ";
+// STR = "ИП Иванов Иван Иван"; 
+// STR = "ИЧП Иванов Иван Иванович";
+ m = 0;
+ while(m<=10)
+   STRL= StrLwr(STR);
+   STRS = STRA(m);
+   Ps = Index(STRL,STRS);
+   Ls = StrLen(STRS);
+   if(Ps>0)
+//     STR = SubStr(STR,1,Ps-1)+SubStr(STR,Ps+ENDA(m),StrLen(STR)-ENDA(m));
+     STR = SubStr(STR,1,Ps-1)+SubStr(STR,Ps+StrLen(STRA(m)),StrLen(STR)-StrLen(STRA(m)));
+   end;
+   m = m+1;
+ end;                     
+
+ STR = Trim(STR);
+// MsgBox("",STR);
+ N1 = 1;
+ Разделитель = 0;
+ FClt="";
+ IClt="";
+ OClt="";
+ while(N1<=StrLen(STR))
+   if(SubStr(STR,N1,1) == " ")
+     Разделитель=Разделитель+1;
+   else
+     if(Разделитель==0)
+        FClt=FClt+SubStr(STR,N1,1);
+     elif(Разделитель==1)
+        IClt=IClt+SubStr(STR,N1,1);
+     elif(Разделитель==2)
+        OClt=OClt+SubStr(STR,N1,1);
+     end;
+   end;
+   N1=N1+1;
+ end;
+// STR = FClt+","+IClt+","+OClt;
+ if(FClt != "")
+   STR = FClt;
+ end;
+ if(IClt != "")
+   STR = STR+","+IClt;
+ end;
+ if(OClt != "")
+   STR = STR+","+OClt;
+ end;
+
+ return STR;
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro InitStr()
+ IDB = INNB + "**" + KPPB;
+ ИдФайл="ИдФайл:";
+ ТипИнф="ТипИнф:";
+ ВерсПрог="ВерсПрог:РУЧНАЯ ПОДГОТОВКА";
+ ТелОтпр="ТелОтпр:(8453)44-57-73"; /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+ ДолжнОтпр="ДолжнОтпр:НАЧАЛЬНИК ОТДЕЛА ПО РАБОТЕ С КЛИЕНТАМИ"; /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+ ФамОтпр="ФамОтпр:ДАНИЛОВ"; /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+ КолДок="КолДок:1";
+ ВерсФорм="ВерсФорм:5.01";
+
+ ИдДок="ИдДок:";
+ НомСооб="НомСооб:";
+ КодНОБ="КодНОБ:6439"; /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+ НаимКО="НаимКО:БАЛАКОВСКИЙ ФИЛИАЛ АКБ "+ "\X22"+"СОФИЯ"+"\X22"+" (ЗАО)"; /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+ АдрКО="АдрКО:413840,64,САРАТОВСКИЙ,БАЛАКОВО,,ТИТОВА,37,,"; /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+// АдрКО="АдрКО:643,115035,77,,,,КАДАШЕВСКАЯ НАБ,32/2,1,";
+ РегНомКО="РегНомКО:2867"; 
+ НомФ="НомФ:0001";/*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+ БИК="БИК:046359826"; /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+ ИННКО="ИННКО:7706195570";
+ КППКО="КППКО:643902001"; /*Edit 12.12.2008 Polyakov Подставляем наши реквизиты*/
+ ОГРНКО="ОГРНКО:1027739066354";
+ НаимНП="НаимНП:";
+ ФИОИП="ФИОИП:";     //Для организаций отсутствует
+ СвидГР="СвидГР:";
+ СвидНУ="СвидНУ:";
+ ИНННП="ИНННП:";
+ КППНП="КППНП:";
+ ОГРННП="ОГРННП:";
+ КодСостДог="КодСостДог:";
+ ДатаЗаклДог="ДатаЗаклДог:";
+ ДатаРастДог="ДатаРастДог:";
+ НомерДог="НомерДог:";
+ КодСостСч="КодСостСч:";
+ ВалСч="ВалСч:";
+ ВидСч="ВидСч:";
+ ДатаОткрСч="ДатаОткрСч:";
+ ДатаЗакрСч="ДатаЗакрСч:";
+ НомСч="НомСч:";
+ ДолжнПрБ="ДолжнПрБ:НАЧАЛЬНИК ОТДЕЛА ПО РАБОТЕ С КЛИЕНТАМИ"; /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+ ФИОПрБ="ФИОПрБ:ДАНИЛОВ,СЕРГЕЙ,ЮРЬЕВИЧ"; /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+ ДатаСооб="ДатаСооб:";
+ ТелБанка="ТелБанка:(8453)44-57-73"; /*Edit 10.06.2010 Polyakov Подставляем наши реквизиты*/
+
+ НомСчСтар="НомСчСтар:";
+ ПризнИзм="ПризнИзм:";
+ НомИзмСч="НомИзмСч:";
+ ДатаИзмСч+"ДатаИзмСч:";
+end;
+
+/***************************************************************/
+macro DateStr()
+//MsgBox("");
+ DateS = Trim(String({curdate}));
+ if(StrLen(DateS)==10)
+   DateS = SubStr(DateS,7,4)+SubStr(DateS,4,2)+SubStr(DateS,1,2);
+ else
+   DateS = SubStr(DateS,6,4)+SubStr(DateS,3,2)+"0"+SubStr(DateS,1,1);
+ end;
+ return DateS;
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro FindLF(f)
+ flag = 0;
+ NNN = "";
+  rewind(num1);
+  next(num1);
+  ClearRecord(num1);
+  num1.Year = SubStr(String({curdate}),7,4); //Находим запись текущего года
+  flag = (GetEQ(num1));
+  if(flag)
+    NNN = Trim(String(num1.Numb));
+    while(StrLen(NNN)<6)
+      NNN = "0" + NNN;
+    end;
+  else
+    NNN = "000001";
+  end;
+ return NNN;
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro IsThisYear(Acc,TY)
+ flag = 0;
+ IsYear = 0;
+ rewind(izv1);
+ ClearRecord(izv1);
+ izv1.Account = Acc;
+ flag = (GetGE(izv1));
+ if(flag)
+   while(flag)
+     if(izv1.Account == Acc)
+//Закоментарено т.к. от года не зависит.
+//       if(SubStr(String(izv1.Date_Change),7,4) == TY)
+          IsYear = izv1.File_Numb;
+          DD = SubStr(String(izv1.Date_Change),9,2);
+          return IsYear;
+          flag = 0;
+//       end;
+     else
+       flag = 0;
+     end;
+     next(izv1);
+   end;
+ else
+   IsYear = 0;
+ end;
+ return IsYear;
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro CreateF(Acc,TypeC,DateC,Dep,Oper,AccSM,ID,Rez,IsTY)
+ X0     = "";
+ NNNNNN = "";
+ if((TypeC==10) Or (TypeC==12))   //Изменение
+   X0 = SubStr(Trim(String(TypeC)),1,1);
+ else
+   X0 = Trim(String(TypeC));      //Открытие-0, Закрыти-2
+ end;
+ DateS = DateStr();
+ if(Rez == 0)
+   A = "1";         //Не отправлено (Первичные)
+ elif(Rez == -2)
+   A = "3";         //Ошибка
+ elif(Rez == -1)
+   A = "2";         //Не прием
+ end;
+ if(X0 == 0)        //Было открытие нового счета
+   if(IsTY == 0)
+     NNNNNN = FindLF(0); 
+     DD     = SubStr(DateS,3,2);
+   else
+     NNNNNN = String(IsTY);
+     while(StrLen(NNNNNN)<6)
+       NNNNNN = "0" + NNNNNN;
+     end;
+   end;
+ else               //Было закрытие или изменение
+   if (IsTY == 0)   //Определяем номер сообщения исходя - было по данному счету
+     NNNNNN = FindLF(0);
+     DD     = SubStr(DateS,3,2);
+   else
+     NNNNNN = String(IsTY);
+     while(StrLen(NNNNNN)<6)
+       NNNNNN = "0" + NNNNNN;
+     end;
+   end;
+ end;
+ File_Name="SBC";
+ File_Name=File_Name+X0+A+SubStr(BICB,3,7)+"_"+NALB+DateS+"_"+REGNB+FIL+DD+NNNNNN+"_";
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro FindLN(Acc)
+ flag = 0;
+ LastNumb = 0;
+ rewind(izv8);
+ ClearRecord(izv8);
+ izv8.Account = Acc;
+ flag = (GetGE(izv8));
+ if(flag)
+  CurentID = izv8.ID;
+  while(flag)
+    if((izv8.Account != Acc))
+      flag = 0;
+    else
+      if(izv8.LastNumb > 0)
+        LastNumb = izv8.LastNumb;
+      end;
+      next(izv8);
+      if(CurentID == izv8.ID)
+	flag = 0;
+      end;
+    end;
+  end;
+ end;
+ return LastNumb;
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro File_Day()
+ flag = 0;
+ NumbF = 0;
+ rewind(fil1);
+ ClearRecord(fil1);
+ fil1.Date_File = {curdate};
+ flag = (GetEQ(fil1));
+ if(flag)
+   NumbF = fil1.File_Numb;
+ else
+   NumbF = 0;
+ end;
+ return NumbF;
+end;
+/***************************************************************/
+
+/***************************************************************/
+macro CreateS(Acc,TypeC,DateC,Dep,Oper,AccSM,ID,Rez)
+ flag1 = 0;
+ flag2 = 0;
+ flag3 = 0;
+ DateS = DateStr();
+
+ LastNumb = FindLN(Acc);
+ rewind(acc1);
+ ClearRecord(acc1);
+ acc1.Account = Acc;
+ flag1 = (GetEQ(acc1));
+ if(flag1)
+    InitStr();
+    /*Edit Polyakov 12.12.2008*/
+    // NumbDog = acc1.UserField4;
+    NumbDog = acc1.Client; //Номер договора==Коду клиента
+    /*Edit Polyakov 12.12.2008*/
+    Client = acc1.Client;
+    DateOpen   = Trim(String(acc1.Open_Date));
+    DateClose  = Trim(String(acc1.Close_Date));
+    rewind(clt1);
+    ClearRecord(clt1);
+    clt1.Client = Client;
+    flag2 = (GetEQ(clt1));
+    if(flag2)
+//      INNClt     = clt1.inn;
+//      KPPClt     = clt1.KPP;
+      FulNameClt = clt1.Name_Client;
+      //
+      TypeWork   = "";
+      TypeWork   = clt1.szUserType;
+      if(clt1.NotResident == "X")
+        Rezident = 0;
+      else
+        Rezident = 1;
+      end;
+/*
+      N1=1;
+      Разделитель = 0;
+      FClt="";
+      IClt="";
+      OClt="";
+      while(N1<StrLen(FulNameClt))
+         if(SubStr(FulNameClt,N1,1) == " ")
+           Разделитель=Разделитель+1;
+         else
+           if(Разделитель==0)
+               FClt=SubStr(FulNameClt,N1,1);
+           elif(Разделитель==1)
+               IClt=SubStr(FulNameClt,N1,1);
+           elif(Разделитель==2)
+               OClt=SubStr(FulNameClt,N1,1);
+           end;
+         end;
+         N1=N1+1;
+      end;
+      FClt=FClt+","+IClt+","+OClt;  
+*/
+    end;
+
+    FClt=StrPars(FulNameClt);
+
+    rewind(cls3);
+    ClearRecord(cls3);
+    cls3.Client = Client;
+    flag2 = (GetEQ(cls3));
+    if(flag2)
+      INNClt = cls3.InnKey;
+    end;
+
+    rewind(cls1);
+    ClearRecord(cls1);
+    cls1.Client = Client;
+    flag2 = (GetEQ(cls1));
+    if(flag2)
+    /*Edit Polyakov 12.12.2008*/
+    If (cls1.KPP=="0") //У нас КПП проставляется 0, так что надо учитывать
+       KPPClt=""
+    else
+       KPPClt=cls1.KPP;
+    end; 	
+    // KPPClt = cls1.KPP;
+    /*Edit Polyakov 12.12.2008*/
+      СвидГР=СвидГР+cls1.SerSvidReg+","+cls1.NumSvidReg;
+      СвидНУ=СвидНУ+cls1.NalogSvSer+","+cls1.NalogSvNum;
+      if((StrLen(Trim(СвидГР)) == 8) And (Index(СвидГР,",")>0))
+        СвидГР = "СвидГР:";
+      end;
+      if((StrLen(Trim(СвидНУ)) == 8) And (Index(СвидНУ,",")>0))
+        СвидНУ = "СвидНУ:";
+      end;
+      if(Rezident == 0)
+        СвидГР = "СвидГР:";
+      end;
+    end;
+//MsgBox("",Rez," ",LastNumb);
+    if((Rez == -1) Or (Rez == -2))
+      NNN = String(LastNumb);
+    else
+      NNN = String(LastNumb+1);
+    end;
+    while(StrLen(NNN)<3)
+      NNN = "0" + NNN;
+    end;
+    File_Name = File_Name + NNN;
+    SetOutput(Path_File+File_Name+".txt",false); 
+
+    /* служебная часть */
+    FileDay  = 0; 
+    FileDay  = File_Day();
+    FileDayS = "";
+    FileDayS = Trim(String(FileDay + 1));
+    while(StrLen(FileDayS)<6)
+      FileDayS = "0" + FileDayS;
+    end;
+    IDB = IDB + DateS + FileDayS;
+
+    ИдФайл=ИдФайл+IDB;
+    if((TypeC==10) Or (TypeC==12))   //Изменение
+      ТипИнф=ТипИнф+"СООБЩИЗМЕН";
+    elif((TypeC==0))                 //Открытие-0
+      ТипИнф=ТипИнф+"СООБЩБАНКА";
+    elif((TypeC==2))                 //Закрыти-2
+      ТипИнф=ТипИнф+"СООБЩБАНКА";
+    end;
+
+    println(ИдФайл);
+    println(ТипИнф);
+    println(ВерсПрог);
+    println(ТелОтпр);
+    println(ДолжнОтпр);
+    println(ФамОтпр);
+    println(КолДок);
+    println(ВерсФорм);
+    println("###");
+    println("@@@");
+
+    /*Информационная часть*/
+    if(SubStr(Acc,1,1)=="3")
+       ВидСч=ВидСч+"КОРРЕСПОНДЕНТСКИЙ";
+    else
+       ВидСч=ВидСч+"РАСЧЕТНЫЙ";
+    end;
+    DateSoob = Trim(String({curdate}));
+    if(StrLen(DateSoob) <10)
+      DateSoob="0"+DateSoob;
+    end;
+    if(StrLen(DateOpen) <10)
+      DateOpen="0"+DateOpen;
+    end;
+    if(StrLen(DateClose) <10)
+      DateClose="0"+DateClose;
+    end;
+    CurAcc=SubStr(Acc,6,3);
+    if(CurAcc=="810")
+      CurAcc="0";
+    else
+      CurAcc="1";
+    end;	
+    ИдДок=ИдДок+SubStr(ИдФайл,8,35)+"000001";        //Заполн
+    НомСооб=НомСооб+SubStr(File_Name,27,16)+","+NNN; //Заполн
+    НаимНП=НаимНП+FulNameClt;   
+    СвидГР=СвидГР;
+    СвидНУ=СвидНУ;
+    ИНННП=ИНННП+INNClt;
+//    if(TypeWork == "Ф")
+    if(Index(TypeWork,"Ф") > 0)
+    else
+     КППНП=КППНП+KPPClt;
+    end;
+    ДатаЗаклДог=ДатаЗаклДог+DateOpen;
+    ДатаРастДог=ДатаРастДог+DateClose;
+    НомерДог=НомерДог+NumbDog;     
+    ВалСч=ВалСч+CurAcc;
+    ДатаОткрСч=ДатаОткрСч+DateOpen;
+    ДатаЗакрСч=ДатаЗакрСч+DateClose;
+    НомСч=НомСч+Acc;
+    ДатаСооб=ДатаСооб+DateSoob;    
+
+    НомСчСтар="НомСчСтар:"+AccSM;
+    ПризнИзм="ПризнИзм:"+"2";
+    НомИзмСч="НомИзмСч:"+Acc;
+    ДатаИзмСч="ДатаИзмСч:"+DateSoob;
+//    if(TypeWork == "И")
+    if((Index(TypeWork,"И") > 0) Or (Rezident == 0))
+      ОГРННП=ОГРННП+cls1.GosRegNum; //18-12-2007
+    else
+      ОГРННП=ОГРННП+cls1.GosRegNum;
+    end;
+    if((TypeC==10) Or (TypeC==12))   //Изменение
+    elif((TypeC==0))                 //Открытие-0
+      КодСостДог=КодСостДог+"1";
+      КодСостСч=КодСостСч+"1";
+    elif((TypeC==2))                 //Закрыти-2
+      КодСостДог=КодСостДог+"0";
+      КодСостСч=КодСостСч+"0";
+    end;
+    if((TypeC==0) Or (TypeC==2))     //Открытие закрытие
+      println(ИдДок);
+      println(НомСооб);
+      println(КодНОБ);
+      println(НаимКО);
+      println(АдрКО);
+      println(РегНомКО);
+      println(НомФ);
+      println(БИК);
+      println(ИННКО);
+      println(КППКО);
+      println(ОГРНКО);
+      if(Index(TypeWork,"И") == 0)
+	 println(НаимНП);
+      end;
+//      if(TypeWork == "И")
+      if(Index(TypeWork,"И") > 0)
+        ФИОИП = ФИОИП+FClt;
+        println(ФИОИП);
+      end;
+      println(СвидГР);
+      println(СвидНУ);
+      println(ИНННП);
+      println(КППНП);
+      println(ОГРННП);
+      println(КодСостДог);
+      if(TypeC==0)
+        println(ДатаЗаклДог);
+      elif(TypeC==2)
+        println(ДатаРастДог);
+      end;
+      println(НомерДог);
+      println(КодСостСч);
+      println(ВалСч);
+      println(ВидСч);
+      if(TypeC==0)
+        println(ДатаОткрСч);
+      elif(TypeC==2)
+        println(ДатаЗакрСч);
+      end;
+      println(НомСч);
+      println(ДолжнПрБ);
+      println(ФИОПрБ);
+      println(ДатаСооб);
+      println(ТелБанка);
+    else
+      println(ИдДок);
+      println(НомСооб);
+      println(КодНОБ);
+      println(НаимКО);
+      println(АдрКО);
+      println(НомСчСтар);
+      println(НомерДог);
+//      println(НаимНП);
+      if(Index(TypeWork,"И") == 0)
+	 println(НаимНП);
+      end;
+//      if(TypeWork == "И")
+      if(Index(TypeWork,"И") > 0)
+        ФИОИП = ФИОИП+FClt;
+        println(ФИОИП);
+      end;
+      println(ИНННП);
+      println(КППНП);
+      println(ОГРННП);
+      println(ПризнИзм);
+      println(РегНомКО);
+      println(НомФ);
+      println(БИК);
+      println(ИННКО);
+      println(КППКО);
+      println(ОГРНКО);
+      println(НомИзмСч);
+      println(ДатаИзмСч);
+      println(ДолжнПрБ);
+      println(ФИОПрБ);
+      println(ДатаСооб);
+      println(ТелБанка);
+    end;
+    println("###");
+    println("@@@");
+    println("===");
+ end;
+ Close(Path_File+File_Name+".txt"); 
+ SetOutput(Null,True);
+ return LastNumb;
+end;
+/***************************************************************/
+
+macro RecS(StrRec);
+ L1=1;
+ L2=1;
+ L1 = StrLen(StrRec);
+ while(L2 < L1)
+  if(SubStr(StrRec,L2,1) != ":")
+   L2 = L2 + 1;
+  else
+   L1 = L2;
+  end;
+ end;
+ L1 = StrLen(StrRec) + 1;
+ return SubStr(StrRec,(L2 + 1),((L1 - L2)));
+end;
+
+/***************************************************************/
+macro main()
+ flag      = 0;
+ flag1     = 0;
+ ThisYear  = SubStr(String({curdate}),7,4);
+ ThisDateS = String({curdate});
+ ThisDate  = {curdate};
+ /*Edit Polyakov 12.12.2008*/
+ /*
+ if((operator == 22) or
+    (operator == 23) or
+    (operator == 24) or
+    (operator == 25) 
+   )                       //Закоментировано, так как для нас не принципиально
+     Departament = 2;
+ else
+     Departament = 1;
+ end;
+ */
+ /*Edit Polyakov 12.12.2008*/
+ rewind(izv7);
+ ClearRecord(izv7);
+ izv7.Flag_Send = 1;
+ izv7.Rezult    = -2;   //Становимя на запись если есть ошибка
+// izv7.Rezult    = -3; //Становимя на запись если есть ошибка
+ flag = (GetGE(izv7));
+ while((flag))
+    if(izv7.Flag_Send == 1)  //Есть сообщения с у которых в поле Flag_Send 
+                             //стоит отправка
+      if((izv7.Rezult == 0) Or (izv7.Rezult == -1) Or (izv7.Rezult == -2))
+                                               /* Подготовлен к отправке 0
+				                  или принят с ошибкой  -1 
+						  или не принят         -2 
+						  ***** или обнаружили ошибку -3
+					       */
+	 IsThisY = 0; 
+//MsgBox("");
+         IsThisY = IsThisYear(izv7.Account,ThisYear); // Проверяем наличее сообщения в текущем году
+
+         //Определяем имя текущего файла без номера сообщения за день MMM
+         CreateF(izv7.Account,izv7.Type_Change,izv7.Date_Change,izv7.Departament,izv7.Oper,izv7.Account_SM,izv7.ID,izv7.Rezult,IsThisY);      
+
+         LastNumb = 0;
+	 LastNumb = CreateS(izv7.Account,izv7.Type_Change,izv7.Date_Change,izv7.Departament,izv7.Oper,izv7.Account_SM,izv7.ID,izv7.Rezult);
+/**/
+         flag1 = 0;
+         rewind(acc1);
+         ClearRecord(acc1);
+         acc1.Account = izv7.Account;
+         flag1 = (GetEQ(acc1));
+         if(flag1)
+          Client = acc1.Client;
+         end;
+
+         if(FileDay == 0)
+           fil2.Date_File = ThisDate;
+           fil2.File_Numb = 1;			
+           insert(fil2);
+         else
+           rewind(fil2);
+           ClearRecord(fil2);
+           fil2.Date_File = ThisDate;
+           flag2 = (GetEQ(fil2));
+           if(flag2)
+   	     fil2.File_Numb = FileDay + 1;
+ 	     update(fil2);
+           end;
+         end;
+         FileDay = 0;
+
+         if(IsThisY == 0)
+ 	   rewind(num0);
+ 	   next(num0);
+           ClearRecord(num0);
+           num0.Year = ThisYear;
+           flag1 = (GetEQ(num0));
+           if(flag1)
+ 	     num0.Numb = num0.Numb+1;
+ 	     update(num0);
+ 	   else
+ 	     num0.Year = ThisYear;
+             num0.Numb = 2;
+//             num0.Numb = 1;
+             insert(num0);
+ 	   end;
+         end;
+
+         rewind(izv0);
+         flag1 = 0;
+         ClearRecord(izv0);
+         izv0.ID = izv7.ID;
+         flag1 = (GetEQ(izv0));
+         if(flag1)
+ 	   izv0.LastNumb  = LastNumb  + 1;
+ 	   izv0.File_Name = File_Name;
+ 	   izv0.File_Numb = Int(SubStr(File_Name,37,6));
+ 	   izv0.Rezult = 1;
+           update(izv0);
+         end;
+
+         ClearRecord(snd1);
+         rewind(snd1);
+         snd1.Account = izv7.Account;
+         snd1.Client  = izv7.Client;
+         snd1.Balance = izv7.Balance;
+         snd1.Code_Currency = ВалСч;
+         snd1.Date_Change   = izv7.Date_Change;
+         snd1.Type_Change   = izv7.Type_Change;
+         snd1.Account_SM    = izv7.Account_SM;
+         snd1.Departament   = izv7.Departament;
+         snd1.Oper    = izv7.Oper;
+         snd1.Date_Send     = {curdate};
+         snd1.File_SName    = File_Name;
+         snd1.Send_Numb     = String(LastNumb  + 1);
+         snd1.ID_Account    = izv7.ID;
+         snd1.Rezult   = 1;
+         snd1.INN      = RecS(ИНННП);
+         snd1.IDFile   = RecS(ИдФайл);
+         snd1.TypeSoob = RecS(ТипИнф);
+         snd1.VerPrg   = RecS(ВерсПрог);
+         snd1.SenderWrk = RecS(ДолжнОтпр);
+         snd1.TPSender = RecS(ТелБанка);
+         snd1.FSender  = RecS(ФамОтпр);
+         snd1.DocC     = RecS(КолДок);
+         snd1.VerFor   = RecS(ВерсФорм);
+         snd1.IDDoc    = RecS(ИдДок);
+         snd1.NumSend  = RecS(НомСооб);
+         snd1.CodeNal  = RecS(КодНОБ);
+         snd1.NameBANK = RecS(НаимКО);
+         snd1.AdrBANK  = RecS(АдрКО);
+         snd1.RegNumBank = RecS(РегНомКО);
+         snd1.FILNum   = RecS(НомФ);
+         snd1.BIC      = RecS(БИК);
+         snd1.INNBank  = RecS(ИННКО);
+         snd1.KPPBank  = RecS(КППКО);
+         snd1.OGRNBank = RecS(ОГРНКО);
+         snd1.CltName  = RecS(НаимНП);
+         snd1.CltFIO   = RecS(ФИОИП);
+         snd1.GosReg   = RecS(СвидГР);
+         snd1.SvedNU   = RecS(СвидНУ);
+         snd1.CltKPP   = RecS(КППНП);
+         snd1.CltOGRN  = RecS(ОГРННП);
+         snd1.CodeSDog = RecS(КодСостДог);
+         if(izv7.Type_Change==0)
+           snd1.DateDog = RecS(ДатаЗаклДог);
+         elif(izv7.Type_Change==2)
+           snd1.DateDog = RecS(ДатаРастДог);
+         end;
+         snd1.NumDog    = RecS(НомерДог);
+         snd1.CodSAccount = RecS(КодСостСч);
+         snd1.CodeCurr    = RecS(ВалСч);
+         snd1.VidAccount  = RecS(ВидСч);
+         if(izv7.Type_Change==0)
+            snd1.DateAccount = RecS(ДатаОткрСч);
+         elif(izv7.Type_Change==2)
+            snd1.DateAccount = RecS(ДатаЗакрСч);
+         end;
+         snd1.WrkCreator    = RecS(ДолжнПрБ);
+         snd1.FIOSender     = RecS(ФИОПрБ);
+         snd1.DateSoob      = RecS(ДатаСооб);
+         snd1.TPBank        = RecS(ТелБанка);
+         snd1.PRChangeAcc   = RecS(ПризнИзм);
+         snd1.DateChangeAcc = RecS(ДатаИзмСч);
+
+         insert(snd1);
+/**/        
+      end;
+      flag = next(izv7);
+    elif(izv7.Rezult == 1)
+      flag = 0;
+    end;
+ end;
+ Close(izv0);
+ Close(izv1);
+ Close(izv7);
+ Close(izv8);
+ Close(snd0);
+ Close(acc1);
+ Close(clt1);
+ Close(cls1);
+ Close(cls3);
+ Close(num0);
+ Close(num1);
+ Close(fil1);
+ Close(fil2);
+ if(gettrue(TRUE,"ЖЕЛАЕТЕ РАСПЕЧАТАТЬ?")) 
+   flag = 1;
+   while(flag)
+      if ( not selectfile( fname_r, "..\\nalogi\\OUT\\*.txt", "ВЫБЕРИТЕ файл с данными " ) )
+         exit( 1 );
+      end;
+      if(not open(filr,fname_r))
+         MsgBox("Файл "+fname_r+" не открыт!");
+         exit(1);
+      end;
+      close(filr);
+      ViewFile(filr);
+//      while(next(filr))
+//         println(filr.str);
+//      end;
+      if(gettrue(TRUE,"РАСПЕЧАТАТЬ СЛЕДУЮЩИЙ ДОКУМЕНТ?"))
+         flag = 1;
+      else
+         flag = 0;
+      end;
+   end;
+ end;  
+
+
+end;
+/***************************************************************/
+
+main();

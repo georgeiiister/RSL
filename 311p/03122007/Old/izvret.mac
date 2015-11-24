@@ -1,0 +1,119 @@
+/**/
+//Обработка почты.
+
+file  izv7 (nal_out,  "sofia.def") key 7;
+file  izv1 (nal_out,  "sofia.def") key 1;
+file  izv8 (nal_out,  "sofia.def") key 8;
+file  izv0 (nal_out,  "sofia.def") key 0 write;
+file  num0 (nal_nums, "sofia.def") key 1 write;
+file  num1 (nal_nums, "sofia.def") key 1;
+file  snd0 (nal_izv,  "sofia.def") key 0;
+file  snd1 (nal_izv,  "sofia.def") key 0 write;
+file  snd8 (nal_izv,  "sofia.def") key 8 write;
+file  acc1 (account,  "sofia.def") key 0;
+file  clt1 (client,   "sofia.def") key 0;
+file  cls1 (clients1, "sofia.def") key 0;
+file  cls3 (clients3, "sofia.def") key 0;
+file  fil1 (nal_file, "sofia.def") key 1;
+file  fil2 (nal_file, "sofia.def") key 1 write;
+
+file t () txt;
+
+RegNumKO = "2867";
+NumNUKO  = "7750";
+
+macro main()
+ if ( not selectfile( fname, "..\\nalogi\\IN\\*.txt", "ВЫБЕРИТЕ файл с данными " ) )
+   exit( 1 );
+ end;
+ if(not open(t,fname))
+   MsgBox("Файл "+fname+" не открыт!");
+   exit(1);
+ end;
+
+//SBE01455268_775020071122_2867000007000222_001.TXT 
+//SBF034552682_775020071126_2867000007000226_002.TXT
+ if(Index(fname,"SBE") > 0)
+   FirstP = Index(fname,"SBE")-1;
+ end;
+ if(Index(fname,"SBF") > 0)
+   FirstP = Index(fname,"SBF")-1;
+ end;
+ SecondP = Index(fname,"NumNUKO")-1;
+ ThirdP  = Index(fname,"RegNumKO")-1;
+// SecondP = Index(fname,"7750")-1;
+// ThirdP  = Index(fname,"2867")-1;
+ FileSName = Trim(SubStr(fname,FirstP+1,(StrLen(fname)-FirstP-4)));
+ NNNNNN = SubStr(fname,ThirdP+11,6);
+ MMM    = SubStr(fname,ThirdP+18,3);
+ DateS  = Date(Int(SubStr(fname,SecondP+11,2)),Int(SubStr(fname,SecondP+9,2)),Int(SubStr(fname,SecondP+5,4)));
+
+ rewind(t);
+ next(t);    
+ flag_e = 0;
+ while(next(t))
+   if(Index(t.str,"КодОшибки:") > 0)
+    CodeE = "";
+    CodeE = SubStr(t.str,Index(t.str,":")+1,StrLen(t.str)-Index(t.str,":"));
+    if(Index(CodeE,"000") > 0)
+      flag_e = 0;
+    else
+      flag_e = 1;
+    end;
+   end;
+   if(Index(t.str,"НаимОшибки:") > 0)
+    Comment = "";
+    Comment = SubStr(t.str,Index(t.str,":")+1,StrLen(t.str)-Index(t.str,":"));
+   end;
+   if(Index(t.str,"ДатаОбр:") > 0)
+    SPos  = Index(t.str,"ДатаОбр") + 8;          
+    EPos  = 10;
+    DateR = "";
+    DateR = SubStr(t.str,SPos,EPos);
+   end;
+ end;
+ rewind(snd8);
+ ClearRecord(snd8);
+ SerchS = "";
+ SerchS = "SBC"+Trim(SubStr(fname,FirstP+4,(StrLen(fname)-FirstP-7)));
+ snd8.File_SName = SerchS;
+ flag = (GetEQ(snd8));
+ if(flag)
+   ID = 0;
+   iD = snd8.ID_Account;
+   rewind(izv0);
+   ClearRecord(izv0);
+   izv0.ID = ID;
+   flag = (GetEQ(izv0));
+ end;
+                
+ if(flag_e == 0)
+  snd8.Date_Receive = Date(Int(SubStr(DateR,1,2)),Int(SubStr(DateR,4,2)),Int(SubStr(DateR,7,4)));
+  snd8.File_RName   = FileSName ;
+  snd8.Comment = Comment;
+  snd8.Rezult  = 2;
+  izv0.Comment = Comment;
+  izv0.Rezult = 2;
+  update(izv0);
+  update(snd8);
+ else
+  if(gettrue(TRUE," Файл принят с ошибками. Отразить в базе?"))  
+    snd8.Date_Receive = Date(Int(SubStr(DateR,1,2)),Int(SubStr(DateR,4,2)),Int(SubStr(DateR,7,4)));
+    snd8.File_RName   = FileSName ;
+    snd8.Comment = Comment;
+    snd8.Rezult  = -1;
+    izv0.Comment = Comment;
+    izv0.Rezult = -1;
+    update(izv0);
+    update(snd8);
+  else             
+    snd8.Date_Receive = Date(Int(SubStr(DateR,1,2)),Int(SubStr(DateR,4,2)),Int(SubStr(DateR,7,4)));
+    snd8.File_RName   = FileSName ;
+    snd8.Comment = Comment;
+    snd8.Rezult  = -1;
+    update(snd8);
+  end;
+ end;
+end;
+
+main();

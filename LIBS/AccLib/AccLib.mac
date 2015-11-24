@@ -1,0 +1,601 @@
+/*
+  Библиотечный макрос для работы со счетами
+  developer Polyakov S.George
+  v 1.00-05.09.2012
+*/
+
+Const
+      I_ACC_LEN:integer=20,  //стандартная длина счета
+      I_BAL_LEN:integer=5,   //стандартная длина балансового счета
+      I_VAL_LEN:integer=3,   //стандартная длина кода валюты в счете
+      S_NAC_VAL:string="810"; 
+
+array 
+     aBalAcc,
+     aD;
+
+//проверка по списку счетов 1
+macro macALNotUpdAcc1(sAcc:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (
+       (sAcc=="40702840002021000297") or
+       (sAcc=="40702840102021001455") or
+       (sAcc=="40702840202021000026") or
+       (sAcc=="40702840202021000262") or
+       (sAcc=="40702840202021001203") or
+       (sAcc=="40702840202021001371") or
+       (sAcc=="40702840202021001562") or
+       (sAcc=="40702840302021000764") or
+       (sAcc=="40702840302021001459") or
+       (sAcc=="40702840502021000001") or
+       (sAcc=="40702840502021000140") or
+       (sAcc=="40702840502021001343") or
+       (sAcc=="40702840502021001369") or
+       (sAcc=="40702840602021000299") or
+       (sAcc=="40702840602021001379") or
+       (sAcc=="40702840702021000092") or
+       (sAcc=="40702840902021000465") or
+       (sAcc=="40702840902021001118") or
+       (sAcc=="40702978102021000001") or
+       (sAcc=="40702978102021001068") or
+       (sAcc=="40702978102021001343") or
+       (sAcc=="40702978102021001369") or
+       (sAcc=="40702978202021000888") or
+       (sAcc=="40702978502021000465") or
+       (sAcc=="40702978602021000297") or
+       (sAcc=="40702978702021000841") or
+       (sAcc=="40702978802021001562") or
+       (sAcc=="40702978902021001462") or
+       (sAcc=="40802840402021000179") or
+       (sAcc=="40802840502021001133") or
+       (sAcc=="40802840602021000746") or
+       (sAcc=="40802840902021001788") or
+       (sAcc=="40802978002021000179") or
+       (sAcc=="40802978302021000002") or
+       (sAcc=="40802978602021000618") or
+       (sAcc=="40802978702021002008")
+     )
+     bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос возвращающий true, если балансовый счет указанного 
+//=балансовому счету в общедоступном массиве aBalAcc, 
+//использовать с осторожностью при многопользовательском доступе 
+macro macALBalAcc(sAcc:string):bool
+  var i:integer,
+      bRet:bool;
+  i=0;
+  bRet=false;
+  while ((i<aSize(aBalAcc)) and (not bRet))
+    if (aBalAcc(i)==SubStr(sAcc,1,5))
+      bRet=true;
+    end;
+    i=i+1;
+  end;
+  return bRet;
+end;
+
+//макрос заполняющий балансовые счета
+//в общедоступный массив, использовать с осторожностью
+//при многопользовательском доступе
+macro macIASetBalArray():bool
+  var 
+      bRet:bool,
+      i:integer,
+      b:integer,
+      bNext:bool,
+      sBalAcc:string;
+  i=0;
+  sBalAcc="";
+  bret=false;
+  while (i>=0)
+    if (getstring(sBalAcc,"Введите балансовый счет",5))
+      if (StrLen(trim(sBalAcc))==5)
+        b=0;
+        bNext=true;
+        while (b<aSize(aBalAcc))
+          if (aBalAcc(b)==sBalAcc)
+            bNext=false;
+            msgbox("Номер уже был добавлен!");
+          end;
+          b=b+1;
+        end;
+        if (bNext)
+          aBalAcc(i)=sBalAcc;
+          if (gettrue(true,"Добавить следующий балансовый счет?"))
+            i=i+1;
+          else
+             i=-1;
+          end;
+        end;
+      end;
+    else
+     i=-1;
+    end;
+    if ((i==-1) and (asize(aBalAcc)==0))
+      if (gettrue(true,"Ошибка указания балансового счета. Повторить?"))
+         i=0;
+      end;
+    end;
+  end;
+  if (asize(aBalAcc)!=0)
+    msgbox("Введенное число Балансовых счетов: "+asize(aBalAcc));
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос проверяет принадлежность счетов на КЛИЕНТСКИЙ диапазон
+//физических лиц
+macro macALCheckFizClnAcc(sPtAcc:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  sPtAcc=SubStr(sPtAcc,1,5);
+  if (
+      (sPtAcc=="40817")
+     )
+    bRet=true;  
+  end;
+  return bRet;
+end;
+
+//макрос проверяет приналежность счетов на КЛИЕНТСКИЙ диапазон 
+//юридических лиц и индивидуальных предпринимателей 
+macro macALCheckClnAcc(sPtAcc:string):bool
+  var 
+     bRet:bool,
+     sP:string;
+     bRet=false;
+     sP=SubStr(sPtAcc,4,2);
+     sPtAcc=SubStr(sPtAcc,1,3);
+     if (
+         (sPtAcc=="405") or
+         (sPtAcc=="406") or
+         (sPtAcc=="407") or
+         (
+          (sPtAcc=="408") and 
+          (sP=="02")
+         )
+        )
+       bRet=true;
+     end;
+  return bRet;
+end;
+
+//макрос проверки длины счета
+macro macALLenAcc(sAcc:string):bool
+  var
+     bRet:bool;
+
+  bRet=false;
+  if (
+      StrLen(sAcc)==I_ACC_LEN 
+     )
+    bRet=true;  
+  end;
+  return bRet;
+end;
+
+//макрос проверки маски счета
+macro macALCheckMsk(sMask:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (macALLenAcc(sMask))
+      bRet=true;
+  else
+    if (
+        (Index(sMask,"*")!=0) or
+        (Index(sMask,"%")!=0)
+       )
+      bRet=true;
+    end;
+  end;
+  return bRet;
+end;
+
+//получение -хвостика- счета
+macro macALGetAccLast(sAcc:string):string
+  var
+    iI:integer=int(1),
+    iL:integer;
+  if (trim(sAcc)!="")
+    if (StrLen(trim(sAcc))==20)
+      sAcc=SubStr(sAcc,14);
+      iL=StrLen(sAcc);
+      while (iI<=iL)
+        if (SubStr(sAcc,iI,1)!="0")
+          return SubStr(sAcc,iI);
+        else
+          iI=iI+1;
+        end;
+      end;
+    end;
+  end;
+  return sAcc;
+end;
+
+//макрос заполняющий номера подразделений, для которых выполняются действия
+macro macALSetDepArray()
+  var i:integer,
+      b:integer,
+      bNext:bool,
+      iNumDep:integer;
+  i=0;
+  iNumDep=-1;
+  while (i>=0)
+    if (getInt(iNumDep,"Введите номер ПОДРАЗДЕЛЕНИЯ для которого хотите выполнить действия"))
+      if (iNumDep>=0)
+        b=0;
+        bNext=true;
+        while (b<aSize(aD))
+          if (aD(b)==iNumDep)
+            bNext=false;
+            msgbox("Номер уже был добавлен!");
+          end;
+          b=b+1;
+        end;
+        if (bNext)
+          aD(i)=iNumDep;
+          if (gettrue(true,"Добавить следующее подразделение?"))
+            i=i+1;
+          else
+             i=-1;
+          end;
+        end;
+      end;
+    else
+     i=-1;
+    end;
+    if ((i==-1) and (asize(aD)==0))
+      if (gettrue(true,"Вы не указали ни одного подразделения. Повторить?"))
+         i=0;
+      else
+         msgbox("Внимание! Любая проверка на принадлежность счетов к подразделеням НЕ БУДЕТ ВЫПОЛНЕНА!");
+      end;
+    end;
+  end;
+  if (asize(aD)!=0)
+    msgbox("Введенное число подразделений: "+asize(aD));
+  end;
+end;
+
+//макрос возвращающий true, если подразделение СВОЕ
+macro macALDep(iDep:integer):bool
+  var i:integer,
+      bRet:bool;
+  i=0;
+  bRet=false;
+  while ((i<aSize(aD)) and (not bRet))
+    if (aD(i)==iDep)
+      bRet=true;
+    end;
+    i=i+1;
+  end;
+  return bRet;
+end;
+
+
+//макрос возвращающий 0 или 1 для проверки статуса возможности 
+//просмотра документов и счетов других подразделений (возможно указание 
+//номера подразделения  документа или счета)
+// 1 - возможности нет,
+// 0 - возможность есть 
+macro macALGetOperDocDep(iOper:integer,iDocDep:integer):integer
+ var
+    iRet:integer,
+    bDocDep:bool,
+    oTbl:Object;
+
+ iRet=0;
+ bDocDep=false;
+ if (ValType(iDocDep)!=V_UNDEF)
+   if (iDocDep!=Null)
+     if (ValType(iDocDep)==V_INTEGER)
+       bDocDep=true;
+     end;
+   end;
+ end;
+ oTbl=TBFile("person.dbt","r",0,"person.dbt","bank.def");
+ rewind(oTbl);
+ oTbl.item("oper")=iOper;
+ if (getEQ(oTbl))
+   if (bDocDep)
+     if (iDocDep!=0)
+       //у документа подразделение !=0 и такой операционист есть
+      if (StrLen(trim(oTbl.item("AccessToCodeDepart")))==0)
+        if (oTbl.item("CodeDepart")!=iDocDep)
+          iRet=1;
+        end;
+       end;
+     end;
+   end;
+ else
+   iRet=1; //опер не найден
+ end;
+ return iRet;
+end;
+
+//макрос проверки счетов на 1 в 14 позиции (транзитные счета)
+macro macALYesSym14Acc(sAcc:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  sAcc=trim(sAcc);
+  if (SubStr(sAcc,14,1)=="1")
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос возвращающий код подразделения по счету (account.dbt)
+//-2 ошибка при выполнении возврата
+macro macALGetDprtAcc(sAcc:string):integer
+  var
+     oTbl:object,
+     iRet:integer;
+     iRet=-2;
+  if (macALLenAcc(sAcc))
+    oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+    rewind(oTbl);
+    oTbl.rec.Account=sAcc;
+    if (geteq(oTbl))
+      iRet=oTbl.rec.Department;
+    else
+      //ищем по валютным счетам
+      oTbl=TBFile("account$.dbt","r",0,null,"bank.def");
+      rewind(oTbl);
+      oTbl.rec.Account=sAcc;
+      oTbl.rec.Code_Currency=SubStr(sAcc,6,3);
+      if (geteq(oTbl))
+        iRet=oTbl.rec.Department;
+      end;
+    end;
+  end;
+  return iRet;
+end;
+
+//макрос возвращающий наименование подразделения
+macro macALGetDprtName(iDprt:integer):string
+  var
+     oTbl:object,
+     sRet:string;
+  sRet="";
+  oTbl=TBFile("dp_dep.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Code=iDprt;
+  if (geteq(oTbl))
+    sRet=oTbl.rec.Comment;
+  end;
+  return sRet;
+end;
+
+//макрос позволяющий выбрать необходимое подразделение банка
+//return -2 ошибка
+//return -1 ВСЕ ПОДРАЗДЕЛЕНИЯ
+macro macALGetDprt(sNote:string):integer
+  var
+     oTbl:object,
+     i:integer,
+     iRet:integer;
+  array
+       aMenu,aCodeDprt;
+     oTbl=TBFile("dp_dep.dbt","r",0,null,"bank.def");
+     i=1;
+     iRet=-2;
+     rewind(oTbl);
+     while(next(oTbl))
+       aCodeDprt(i)=oTbl.rec.Code;
+       aMenu(i)=oTbl.rec.Comment;
+
+       i=i+1;
+     end;
+     aCodeDprt(0)=-1;
+     if (ValType(sNote)==V_UNDEF)
+       sNote="Укажите подразделение";
+     end;
+     aMenu(0)="<<Все подразделения банка>>";
+     iRet=menu(aMenu,"Выбор",sNote);
+     if (iRet!=-2)
+       iRet=aCodeDprt(iRet);
+     end;
+  return iRet;
+end;
+
+//макрос возвращающий номер операциониста по счету (account.dbt)
+//-2 ошибка при выполнении возврата
+macro macALGetOperAcc(sAcc:string):integer
+  var
+     oTbl:object,
+     iRet:integer;
+     iRet=-2;
+  if (macALLenAcc(sAcc))
+    oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+    rewind(oTbl);
+    oTbl.rec.Account=sAcc;
+    if (geteq(oTbl))
+      iRet=oTbl.rec.Oper;
+    end;
+  end;
+  return iRet;
+end;
+
+//макрос проверки, является ли счет 
+//счетом в национальной валюте
+macro macALCheckNacAcc(sAcc:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  sAcc=SubStr(sAcc,6,3);
+  if (sAcc==S_NAC_VAL)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос проверки, является ли передаваемый счет 
+//спец. счетом
+macro macALCheckSpeAcc(sAcc:string):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (SubStr(sAcc,1,5)=="40821")
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//ВИП или НЕ ВИП? (клиентский, рублевый) 
+macro macALCheckAccClnNacVIP(sAcc:string,TypeAcc:string,bVIP:bool):bool
+  var
+     bRet:bool;
+  bRet=false;
+  if (
+      (macALCheckClnAcc(sAcc)) or 
+      (macALCheckSpeAcc(sAcc)) or
+      (macALCheckFizClnAcc(sAcc)) //add Polyakov S.George 18.09.2013 for Irina.Mescherekova
+     )
+    if (macALCheckNacAcc(sAcc))
+      if (bVIP)
+        if (index(TypeAcc,"Y")>0)
+          bRet=true;
+        end
+      else
+        if (index(TypeAcc,"Y")==0)
+          bRet=true;
+        end
+      end;
+    end;
+  end;
+  return bRet;
+end;
+
+//выборка счетов по указанному балансовому
+//по указанной остальной части счета
+macro macALPrnAccLastPart(sBalAcc:string,sLastPartAcc:string)
+  var
+     oTbl:object,
+     iLenPart:integer,
+     bNext:bool;
+     iLenPart=I_ACC_LEN-StrLen(sLastPartAcc);
+     oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+     rewind(oTbl);
+     oTbl.rec.Account=sBalAcc+"000000000000000";
+     if (getge(oTbl))
+       bNext=true;
+       while (bNext)
+         if (oTbl.rec.Account<=sBalAcc+"999999999999999")
+           if (SubStr(oTbl.rec.Account,iLenPart+1,StrLen(sLastPartAcc))==sLastPartAcc)
+             println(oTbl.rec.account+" "+oTbl.rec.department+" "+oTbl.rec.nameaccount);  
+           end;
+           bNext=next(oTbl);
+         else
+           bNext=false;
+         end;
+       end;
+     end;
+end;
+
+//макрос сканирования клиентских счетов на предмет с датой последенй 
+//проводки >180 к.д.
+macro macALPrnDateOp180()
+  var
+     bNext:bool,
+     iDays:integer,
+     oTbl:object;
+  oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.Account="40502000000000000000";
+  if (getge(oTbl))
+    bNext=true;
+    while(bNext)
+      if (oTbl.rec.Account<"40900000000000000000")
+        if (macALCheckClnAcc(oTbl.rec.Account))
+          if (oTbl.rec.Open_Close!="З")
+            iDays=date(8,1,2013)-oTbl.rec.Final_date;
+            if (iDays>180)
+              println(oTbl.rec.Account);
+              println(iDays+" "+money(1500)*int(iDays/180));
+            end;
+          end;
+        end;
+        bNext=next(oTbl);
+      else
+        bNext=false;
+      end;
+    end;
+  end;
+end;
+
+//макрос для выяснения числа счетов по подразделениям 
+macro macALAccDprt();
+  var
+     i:integer,
+     j:integer,
+     iDprt:integer,
+     oTbl:Object;
+ 
+  array
+     aTbl;
+
+  aTbl(0)="account.dbt";
+  aTbl(1)="account$.dbt";
+  aTbl(2)="obacnt.dbt";
+  aTbl(3)="obacnt$.dbt";
+  
+  i=-1;
+
+  i=menu(aTbl,"Выбор","Выбор");
+  
+  if (i>=0)
+    iDprt=0;
+    if (GetInt(iDprt,"Укажите подразделение \n для которого необходимо узнать число счетов"));
+      oTbl=TBFile(aTbl(i),"r",0,aTbl(i),"bank.def");
+      rewind(oTbl);
+      j=0;
+      while (Next(oTbl))
+        if (oTbl.rec.department==iDprt)
+        j=j+1;
+        end;
+      end;
+      println("Итого счетов по подразделению "+string(iDprt)+" по структуре "+oTbl.TblName+" "+string(j));
+    end;
+  end;
+end;
+
+//возврат связанного счета
+macro macALGetLinkAcc(sAcc:string):string
+  var
+     oTbl:Object,
+     sRet:string;
+
+  sRet="";
+  oTbl=TBFile("account.dbt","r",0,null,"bank.def");
+  rewind(oTbl);
+  oTbl.rec.account=sAcc;
+  if (geteq(oTbl))
+    if (macALLenAcc(trim(oTbl.rec.Connect_Account)))
+      sRet=trim(oTbl.rec.Connect_Account);
+    end;
+  end;
+  return sRet;
+end;
+
+//остатки на счетах физических лиц (отдел банковских карт отдельно, отдельно все прочии)
+macro macALAccPlFizRpt(mOBK:money,mOther:money,sDate:string)
+  var
+     oTbl:object;
+
+  [Информация по счетам физических лиц на дату #
+
+   По счетам ОБК: #
+   По остальным счетам: #
+
+   --- Итого: #
+  ](sDate,mObk:l,mOther:l,(mObk+mOther):l);
+end;

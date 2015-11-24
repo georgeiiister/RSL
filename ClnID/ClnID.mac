@@ -1,0 +1,1512 @@
+/*
+developer Polyakov S.George
+Макрос для подготовки и обновление уникального идентификатора клиента в
+client.dbt и в связанных справочниках 
+используется диапазон описываемый в разделе глобальных констант
+v. 1.00-28.03.2012
+Если использовать как библиотеку, то убрать вызов macMainMenu();
+*/
+
+/*
+Данные для подготовки
+
+Словарь CLIENTS.DEF
+
+-clients1.dbt     - расширенная информация по клиентам
+-clhist.dbt       - история реквизитов
+-clients2.dbt     - расширенная информация по клиентам
+-clients3.dbt     - расширенная информация по клиентам 3
+-clkaslim.dbt     - лимиты кассы клиентов
+-clkasnar.dbt     - нарушение кассовой дисциплины
+-clkasprv.dbt     - проверки по кассе
+-clorgfio.dbt     - состав органов управления (пофамильно) 
+-cltosk.dbt       - коды TOCK клиентов
+-clved.dbt        - коды ВЭД клиентов
+-dovopnac.dbt     - связь клиентов и доверенных лиц
+-valnarus.dbt     - нарушение вал. зконодательства
+-vygoda.dbt       - связь клиентов с выгодоприобретателями
+
+Словарь SOFIA.DEF
+
+-clients1.dbt    - расширенная информация по клиентам
+-clients3.dbt    - расширенная информация по клиентам 3
+-nal_izv.dbt     - налоговые извещение отправленные
+-nal_out.dbt     - список О/З счетов для налоговой
+
+Словарь BANK.DEF
+
+-claddfrm.dbt    - доп. анкета клиента /неизменяемый ключ/
+-characnt.dbt    - характеристики счетов клиента
+-clatrcor.dbt    - признаки клиентов
+-clnote.dbt      - примечание к клиенту  
+-clntacc.dbt     - счета клиента 
+-clshname.dbt    - U короткое название клиента /неизменяемый ключ/
+-pmfpost.dbt     - хранилище документов клиентов
+-claddfrm.dbt    - доп. анкета клиента
+-clatrcor.dbt    - признаки клиентов
+-account$.dbt    - валютные счета
+-account.dbt     - лицевые счета
+-address.dbt     - адреса и способы связи субъекта 
+-arhdoc$.dbt     - валютные архивные документы (Code_Payer(string),Code_Receiver(string))
+-documnt$.dbt    - валютные проведенные документы (Code_Payer(string),Code_Receiver(string))
+-limit.dbt       - ограничения по счету
+-obacnt$.dbt     - валютные лицевые счета
+-obacnt.dbt      - рублевые лицевые счета
+-offiсer.dbt     - список сотрудников субъекта
+-opcntrpt.dbt    - сведения об участниках
+-persn.dbt       - сведения о физических лицах
+-stop_op.dbt     - 322П сообщения
+clientex.dbt     - внешние клиенты(?!) пока не разобрался что делать с ними
+-ctgval.dbt
+*/
+
+//модифицируемая часть
+//Таблицы, где обновляемое поле проиндексировано
+file w_cln_clients1 (clients1,"clients.def") key 0 write;
+file w_cln_clients1_cp (clients1,"clients.def") key 0 write;
+file w_cln_clients2 (clients2,"clients.def") key 0 write;
+file w_cln_clients2_cp (clients2,"clients.def") key 0 write;
+file w_cln_clients3 (clients3,"clients.def") key 0 write;
+file w_cln_clients3_cp (clients3,"clients.def") key 0 write;
+file w_cln_clorgfio (clorgfio,"clients.def") key 0 write;
+file w_cln_clorgfio_cp (clorgfio,"clients.def") key 0 write;
+file w_cln_dovopnac (dovopnac,"clients.def") key 0 write;
+file w_cln_dovopnac_cp (dovopnac,"clients.def") key 0 write;
+file w_cln_dovopnac1 (dovopnac,"clients.def") key 1 write;
+file w_cln_dovopnac1_cp (dovopnac,"clients.def") key 1 write;
+file w_cln_vygoda (vygoda,"clients.def") key 0 write;
+file w_cln_vygoda_cp (vygoda,"clients.def") key 0 write;
+file w_cln_vygoda1 (vygoda,"clients.def") key 1 write;
+file w_cln_vygoda1_cp (vygoda,"clients.def") key 1 write;
+file w_sof_clients1 (clients1,"sofia.def") key 0 write;
+file w_sof_clients1_cp (clients1,"sofia.def") key 0 write;
+file w_sof_clients3 (clients3,"sofia.def") key 0 write;
+file w_sof_clients3_cp (clients3,"sofia.def") key 0 write;
+file w_sof_nal_izv (nal_izv,"sofia.def") key 2 write;
+file w_sof_nal_izv_cp (nal_izv,"sofia.def") key 2 write;
+file w_sof_nal_out (nal_out,"sofia.def") key 2 write;
+file w_sof_nal_out_cp (nal_out,"sofia.def") key 2 write;
+file w_bnk_claddfrm (claddfrm,"bank.def") key 0 write;
+file w_bnk_claddfrm_cp (claddfrm,"bank.def") key 0 write;
+file w_bnk_clshname (clshname,"bank.def") key 0 write;
+file w_bnk_clshname_cp (clshname,"bank.def") key 0 write;
+file w_bnk_limit (limit,"bank.def") key 5 write;
+file w_bnk_limit_cp (limit,"bank.def") key 5 write;
+file w_bnk_opcntrpt (opcntrpt,"bank.def") key 1 write;
+file w_bnk_opcntrpt_cp (opcntrpt,"bank.def") key 1 write;
+file w_bnk_persn (persn,"bank.def") key 0 write;
+file w_bnk_persn_cp (persn,"bank.def") key 0 write;
+
+//Таблицы, где обновляемое поле НЕ проиндексировано
+file w_cln_clhist (clhist,"clients.def") key 0 write;
+file w_cln_clhist_cp (clhist,"clients.def") write; 
+file w_cln_kaslim (clkaslim,"clients.def") key 0 write;
+file w_cln_kaslim_cp (clkaslim,"clients.def") write;
+file w_cln_clkasnar (clkasnar,"clients.def") key 0 write;
+file w_cln_clkasnar_cp (clkasnar,"clients.def") write;
+file w_cln_clkasprv (clkasprv,"clients.def") key 0 write;
+file w_cln_clkasprv_cp (clkasprv,"clients.def")  write;
+file w_cln_cltosk (cltosk,"clients.def") key 0 write;
+file w_cln_cltosk_cp (cltosk,"clients.def") write;
+file w_cln_clved (clved,"clients.def") key 0 write;
+file w_cln_clved_cp (clved,"clients.def") write;
+file w_cln_valnarus (valnarus,"clients.def") key 0 write;
+file w_cln_valnarus_cp (valnarus,"clients.def") write;
+file w_bnk_characnt (characnt,"bank.def") key 0 write;
+file w_bnk_characnt_cp (characnt,"bank.def") write;
+file w_bnk_clatrcor (clatrcor,"bank.def") key 0 write;
+file w_bnk_clatrcor_cp (clatrcor,"bank.def") write;
+file w_bnk_clnote (clnote,"bank.def") key 0 write;
+file w_bnk_clnote_cp (clnote,"bank.def") write;
+file w_bnk_clntacc (clntacc,"bank.def") key 1 write;
+file w_bnk_clntacc_cp (clntacc,"bank.def") write;
+file w_bnk_pmfpost (pmfpost,"bank.def") key 3 write;
+file w_bnk_pmfpost_cp (pmfpost,"bank.def") write;
+file w_bnk_accountv ("account$","bank.def") key 2 write;
+file w_bnk_accountv_cp ("account$","bank.def") write;
+file w_bnk_account (account,"bank.def") key 4 write;
+file w_bnk_account_cp (account,"bank.def") write;
+file w_bnk_address (address,"bank.def") key 1 write;
+file w_bnk_address_cp (address,"bank.def") write;
+file w_bnk_obacntv ("obacnt$","bank.def") key 2 write;
+file w_bnk_obacntv_cp ("obacnt$","bank.def") write;
+file w_bnk_obacn ("obacnt","bank.def") key 2 write;
+file w_bnk_obacn_cp ("obacnt","bank.def") write;
+file w_bnk_officer (officer,"bank.def") key 9999 write;
+file w_bnk_officer_cp (officer,"bank.def") write;
+file w_bnk_officer3 (officer,"bank.def") key 3 write;
+file w_bnk_officer3_cp (officer,"bank.def") write;
+file w_bnk_stop_op (stop_op,"bank.def") key 2 write;
+file w_bnk_stop_op_cp (stop_op,"bank.def") write;
+file w_bnk_clidnt (clidnt,"bank.def") key 0 write;
+file w_bnk_clidnt_cp (clidnt,"bank.def") write;
+file w_bnk_cntragnt (cntragnt,"bank.def") key 9999 write;
+file w_bnk_cntragnt_cp (cntragnt,"bank.def") write;
+file w_bnk_regdoc (regdoc,"bank.def") key 0 write;
+file w_bnk_regdoc_cp (regdoc,"bank.def") write;
+file w_bnk_service (service,"bank.def") key 1 write;
+file w_bnk_service_cp (service,"bank.def") write;
+file w_bnk_reqhist (reqhist,"bank.def") key 9999 write;
+file w_bnk_reqhist_cp (reqhist,"bank.def") write;
+file w_bnk_partyown (partyown,"bank.def") key 0 write;
+file w_bnk_partyown_cp (partyown,"bank.def") write;
+file w_bnk_clconfrm (clconfrm,"bank.def") key 0 write;
+file w_bnk_clconfrm_cp (clconfrm,"bank.def") write;
+file w_bnk_notblnc (notblnc,"bank.def") key 9999 write;
+file w_bnk_notblnc_cp (notblnc,"bank.def") write;
+file w_bnk_notblncv ("notblnc$","bank.def") key 9999 write;
+file w_bnk_notblncv_cp ("notblnc$","bank.def") write;
+
+array 
+      arrInfTblCln,
+      arrInfStrCln,
+      arrTypeEditCln,
+      arrInfTblClnCp;
+
+//заполняем массив информацией для просмотра и конвертирования
+//arrInfTblCln-ссылки на подключенные таблицы
+//arrInfStrCln(2)-под тем же индексом (sFld/sInd/sTypeF/sOld/sNew)
+//sFld-поле(номер), в котором хранится код клиента
+//sInd - проиндексировано ли оно, если ДА - номер индекса, нет - "n"
+//sTypeF - тип поля sFld: только 2 "i"-integer, "s"-стринг
+//sOld AND sNew - старое, новое значение кода клиента
+//arrTypeEditCln - тип модификации - i-insert, u-update
+//*************************************************************
+//*************************************************************
+//модифицируемая часть
+//добавляем таблицы и их описание в порядке приоритета
+
+//обновление по ключу
+arrInfTblCln(0)=w_cln_clients1;  arrInfStrCln(0)="0/0/i";  arrTypeEditCln(0)="u";   arrInfTblClnCp(0)=w_cln_clients1_cp;
+arrInfTblCln(1)=w_cln_clients2;  arrInfStrCln(1)="0/0/i";  arrTypeEditCln(1)="u";   arrInfTblClnCp(1)=w_cln_clients2_cp;
+arrInfTblCln(2)=w_cln_clients3;  arrInfStrCln(2)="0/0/i";  arrTypeEditCln(2)="u";   arrInfTblClnCp(2)=w_cln_clients3_cp;
+arrInfTblCln(3)=w_cln_clorgfio;  arrInfStrCln(3)="0/0/i";  arrTypeEditCln(3)="u";   arrInfTblClnCp(3)=w_cln_clorgfio_cp;
+arrInfTblCln(4)=w_cln_dovopnac;  arrInfStrCln(4)="0/0/i";  arrTypeEditCln(4)="u";   arrInfTblClnCp(4)=w_cln_dovopnac_cp;
+arrInfTblCln(5)=w_cln_vygoda;    arrInfStrCln(5)="0/0/i";  arrTypeEditCln(5)="u";   arrInfTblClnCp(5)=w_cln_vygoda_cp;
+arrInfTblCln(6)=w_sof_clients1;  arrInfStrCln(6)="0/0/i";  arrTypeEditCln(6)="u";   arrInfTblClnCp(6)=w_sof_clients1_cp;
+arrInfTblCln(7)=w_sof_clients3;  arrInfStrCln(7)="0/0/i";  arrTypeEditCln(7)="u";   arrInfTblClnCp(7)=w_sof_clients3_cp;
+arrInfTblCln(8)=w_sof_nal_izv;   arrInfStrCln(8)="2/2/i";  arrTypeEditCln(8)="u";   arrInfTblClnCp(8)=w_sof_nal_izv_cp;
+arrInfTblCln(9)=w_sof_nal_out;   arrInfStrCln(9)="3/2/i";  arrTypeEditCln(9)="u";   arrInfTblClnCp(9)=w_sof_nal_out_cp;
+arrInfTblCln(10)=w_bnk_claddfrm; arrInfStrCln(10)="0/0/i"; arrTypeEditCln(10)="i";  arrInfTblClnCp(10)=w_bnk_claddfrm_cp;
+arrInfTblCln(11)=w_bnk_clshname; arrInfStrCln(11)="0/0/i"; arrTypeEditCln(11)="i";  arrInfTblClnCp(11)=w_bnk_clshname_cp;
+arrInfTblCln(12)=w_bnk_limit;    arrInfStrCln(12)="29/5/i"; arrTypeEditCln(12)="u"; arrInfTblClnCp(12)=w_bnk_limit_cp;
+arrInfTblCln(13)=w_bnk_opcntrpt; arrInfStrCln(13)="2/1/i"; arrTypeEditCln(13)="u";  arrInfTblClnCp(13)=w_bnk_opcntrpt_cp;
+arrInfTblCln(14)=w_bnk_persn;    arrInfStrCln(14)="0/0/i"; arrTypeEditCln(14)="i";  arrInfTblClnCp(14)=w_bnk_persn_cp;
+
+//обновления без ключа, многократным поиском
+arrInfTblCln(15)=w_cln_kaslim;   arrInfStrCln(15)="0/n/i"; arrTypeEditCln(15)="u";   arrInfTblClnCp(15)=w_cln_kaslim_cp;
+arrInfTblCln(16)=w_cln_clkasnar; arrInfStrCln(16)="0/n/i"; arrTypeEditCln(16)="u";   arrInfTblClnCp(16)=w_cln_clkasnar_cp;
+arrInfTblCln(17)=w_cln_clkasprv; arrInfStrCln(17)="0/n/i"; arrTypeEditCln(17)="u";   arrInfTblClnCp(17)=w_cln_clkasprv_cp;  
+arrInfTblCln(18)=w_cln_cltosk;   arrInfStrCln(18)="0/n/i"; arrTypeEditCln(18)="u";   arrInfTblClnCp(18)=w_cln_cltosk_cp;
+arrInfTblCln(19)=w_cln_valnarus; arrInfStrCln(19)="0/n/i"; arrTypeEditCln(19)="u";   arrInfTblClnCp(19)=w_cln_valnarus_cp;
+arrInfTblCln(20)=w_bnk_characnt; arrInfStrCln(20)="0/n/i"; arrTypeEditCln(20)="u";   arrInfTblClnCp(20)=w_bnk_characnt_cp;
+arrInfTblCln(21)=w_bnk_clatrcor; arrInfStrCln(21)="0/n/i"; arrTypeEditCln(21)="u";   arrInfTblClnCp(21)=w_bnk_clatrcor_cp;
+arrInfTblCln(22)=w_bnk_clnote;   arrInfStrCln(22)="0/n/i"; arrTypeEditCln(22)="u";   arrInfTblClnCp(22)=w_bnk_clnote_cp;
+arrInfTblCln(23)=w_bnk_clntacc;  arrInfStrCln(23)="1/n/i"; arrTypeEditCln(23)="u";   arrInfTblClnCp(23)=w_bnk_clntacc_cp;
+arrInfTblCln(24)=w_bnk_pmfpost;  arrInfStrCln(24)="12/n/i";arrTypeEditCln(24)="u";   arrInfTblClnCp(24)=w_bnk_pmfpost_cp;
+arrInfTblCln(25)=w_bnk_address;  arrInfStrCln(25)="1/n/i"; arrTypeEditCln(25)="u";   arrInfTblClnCp(25)=w_bnk_address_cp;
+arrInfTblCln(26)=w_bnk_officer3; arrInfStrCln(26)="1/n/i"; arrTypeEditCln(26)="u";   arrInfTblClnCp(26)=w_bnk_officer3_cp;
+arrInfTblCln(27)=w_bnk_stop_op;  arrInfStrCln(27)="2/n/i"; arrTypeEditCln(27)="u";   arrInfTblClnCp(27)=w_bnk_stop_cp;
+arrInfTblCln(28)=w_bnk_clidnt;   arrInfStrCln(28)="0/n/i"; arrTypeEditCln(28)="u";   arrInfTblClnCp(28)=w_bnk_clidnt_cp;
+arrInfTblCln(29)=w_bnk_regdoc;   arrInfStrCln(29)="0/n/i"; arrTypeEditCln(29)="i";   arrInfTblClnCp(29)=w_bnk_regdoc_cp;
+arrInfTblCln(30)=w_bnk_service;  arrInfStrCln(30)="1/n/i"; arrTypeEditCln(30)="u";   arrInfTblClnCp(30)=w_bnk_service_cp;
+arrInfTblCln(31)=w_bnk_partyown; arrInfStrCln(31)="0/n/i"; arrTypeEditCln(31)="u";   arrInfTblClnCp(31)=w_bnk_partyown_cp;
+arrInfTblCln(32)=w_bnk_clconfrm; arrInfStrCln(32)="0/n/i"; arrTypeEditCln(32)="u";   arrInfTblClnCp(32)=w_bnk_clconfrm_cp;
+arrInfTblCln(33)=w_cln_clhist;   arrInfStrCln(33)="0/n/i"; arrTypeEditCln(33)="u";   arrInfTblClnCp(33)=w_cln_clhist_cp;
+arrInfTblCln(34)=w_cln_clved;    arrInfStrCln(34)="0/n/i"; arrTypeEditCln(34)="u";   arrInfTblClnCp(34)=w_cln_clved_cp;
+arrInfTblCln(35)=w_bnk_cntragnt; arrInfStrCln(35)="3/9999/i"; arrTypeEditCln(35)="u"; arrInfTblClnCp(35)=w_bnk_cntragnt_cp;
+arrInfTblCln(36)=w_bnk_notblnc;  arrInfStrCln(36)="3/9999/i"; arrTypeEditCln(36)="u"; arrInfTblClnCp(36)=w_bnk_notblnc_cp;
+arrInfTblCln(37)=w_bnk_notblncv; arrInfStrCln(37)="3/9999/i"; arrTypeEditCln(37)="u"; arrInfTblClnCp(37)=w_bnk_notblncv_cp;
+arrInfTblCln(38)=w_bnk_reqhist;  arrInfStrCln(38)="1/9999/i"; arrTypeEditCln(38)="u"; arrInfTblClnCp(38)=w_bnk_reqhist_cp;
+arrInfTblCln(39)=w_bnk_officer;  arrInfStrCln(39)="2/9999/i"; arrTypeEditCln(39)="u"; arrInfTblClnCp(39)=w_bnk_officer_cp;
+arrInfTblCln(40)=w_cln_dovopnac1;arrInfStrCln(40)="1/1/i";    arrTypeEditCln(40)="u"; arrInfTblClnCp(40)=w_cln_dovopnac1_cp;
+arrInfTblCln(41)=w_cln_vygoda1;  arrInfStrCln(41)="1/1/i";    arrTypeEditCln(41)="u"; arrInfTblClnCp(40)=w_cln_vygoda1_cp;
+//*************************************************************
+//*************************************************************
+
+//подключение библиотек
+import "..\\mac\\bfsofia\\contclnlib.mac"; 
+
+//Раздел объявления глобальных переменных (участок глобальных замен)
+
+var
+
+ idStart:integer=int(200000),  //начало 1-го диапазона присвоения адресов клиентов (у каждого филиала индивидуально)
+ idStart2:integer=int(250000); //начало 2-го диапазона присвоения адресов клиентов (у каждого филиала индивидуально) 
+
+//макрос дополнения длины до необходимой символами 
+macro macAddSpace(sIn:string,iLen:integer,sSpace:string):string
+  var sRet:string,
+      i:integer;
+  sRet=sIn;
+  i=int(0);
+  if (strLen(sSpace)>0)
+    while (i<iLen-strlen(sIn))
+      sRet=sSpace+sRet;
+      i=i+1;
+    end;
+  end;
+  return sRet;
+end;
+
+//макрос дублирования сортировки кодом клиента с достройкой лидирующих нулей
+macro macAddSpaceSortCln():bool
+  file w_cln0 (client,"bank.def") key 0 write;
+var
+  i:integer,
+  j:integer,
+  bR:bool;
+
+const
+  I_SIZE_SORT:integer=35;
+
+  j=int(0);
+  bR=true;
+  i=int(0);
+  rewind(w_cln0);
+  InitProgress(Nrecords(w_cln0),"Идет обновление поля Sort","Обработано строк");
+  while (next(w_cln0))
+    i=i+1;
+    useprogress(i);
+    //msgbox(strlen(w_cln0.sort));
+    //exit;
+    w_cln0.sort=macAddSpace(w_cln0.Client,I_SIZE_SORT," ");
+    if (update(w_cln0))
+       j=j+1;
+    end;
+  end;
+  remprogress(i);
+  close(w_cln0);
+  if (j>0)
+    bR=true;
+  end;
+  return bR;
+end; 
+
+//макрос проверяет приналежность счетов 
+macro macIsRet1(sPtAcc:string):bool
+var 
+   bRet:bool,
+   sP:string;
+   bRet=false;
+   sP=SubStr(sPtAcc,4,2);
+   sPtAcc=SubStr(sPtAcc,1,3);
+   //msgbox(sP+" - - "+sPtAcc);
+   if (
+       (sPtAcc=="405") or
+       (sPtAcc=="406") or
+       (sPtAcc=="407") or
+       (
+        (sPtAcc=="408") and 
+        (sP=="02")
+       )
+      )
+   bRet=true;
+   end;
+   return bRet;
+end;
+
+//макрос просмотра статуса счетов внебалансовых
+macro macFindVAcc(btTable:btFileRef,iIDCln:integer):integer
+var
+   bNext:bool,
+   bNext2:bool,
+   iChap:integer,
+   i:integer,
+   iRet:integer;
+const
+   I_MAX_CHAP:integer=int(5); //максимальное значение плана счетов
+
+   iRet=int(0);
+   iChap=int(0);
+   i=int(0);
+   bNext=true;
+   message("Проверка статуса клиента с кодом:" +iIDCln);
+   while(bNext)
+     rewind(btTable);
+     btTable.Open_Close="";
+     btTable.Sort="";
+     btTable.Client=iIDCln;
+     btTable.Chapter=iChap;
+     if (getge(btTable))
+       bNext2=true;
+       while (bNext2)
+         //msgbox(btTable.Account+"  "+btTable.client+"  "+iChap);
+         if ((btTable.Client==iIDCln) and (btTable.Chapter==iChap))
+           i=i+1; //счетчик удачных попыток поиска
+           if (macIsRet1(btTable.Account))
+             iRet=1;
+             bNext=false;
+             bNext2=false;
+           end;
+           bNext2=next(btTable);
+         else
+           bNext2=false;
+         end;
+       end;
+     end;
+     if (iChap>=I_MAX_CHAP)
+       bNext=false;
+     else
+       iChap=iChap+1;
+     end;
+   end;
+   message("");
+   close(btTable);
+   if (iRet==int(0))
+     if (i>0)
+       //если находили незакрытые, но в категорию не входят
+       iRet=int(2);
+     end;
+   end;
+   return iRet;
+end;
+
+//макрос просмотра статуса счетов балансовых
+macro macFindAcc(btTable:btFileRef,iIDCln:integer):integer
+var
+  bFind:bool,
+  bNext:bool,
+  iRet:integer; 
+  iRet=int(0);
+  bFind=false;
+  bNext=true;
+  rewind(btTable);
+    message("Проверка статуса клиента c кодом: "+iIDCln);
+    btTable.Sort="";
+    btTable.Open_Close="";
+    btTable.Client=iIDCln;
+    if (getge(btTable))
+    //msgbox(btTable.Account+" "+btTable.Client);
+    while((bNext) and (iRet!=1))
+      if ((btTable.Client==iIDCln) and (btTable.Open_Close!="З"))
+        bFind=true;
+        if (macIsRet1(btTable.Account))
+          iRet=1;
+        end;
+      else
+        bNext=false;
+      end;
+      if (bNext)
+        bNext=next(btTable);
+      end;
+    end;
+    end;
+    if (iRet==int(0))
+      if (bFind)
+        iRet=int(2);
+      end;
+    end;
+close(btTable);
+return iRet;
+end;
+
+//макрос, возвращающий тип диапазона
+//0 - клиент НЕ НАЙДЕН, ЗАКРЫТ, НЕТ СЧЕТОВ, ВСЕ СЧЕТА ЗАКРЫТЫ
+//1 - клиент в первом диапазоне
+//2 - клиент во втором диапазоне  
+macro macRetRange(iIDCln:integer):integer
+file r_cln0(client,"bank.def") key 0;
+file r_acc4(account,"bank.def") key 4;
+file r_accv4("account$","bank.def") key 4;
+file r_obacntv ("obacnt$","bank.def") key 2;
+file r_obacnt ("obacnt","bank.def") key 2;
+var 
+  iRet:integer,
+  bNext:bool;
+  iRet=0;
+  rewind(r_cln0);
+  r_cln0.client=iIDCln;
+  if (geteq(r_cln0))
+    //смотрим параметры клиента
+    if (r_cln0.bdFinishDate==Date(0,0,0)) //если клиент не закрыт
+       iRet=macFindAcc(r_acc4,r_cln0.client);
+       if (iRet==int(0))
+         iRet=macFindAcc(r_accv4,r_cln0.client);
+         if (iRet==int(0))
+           //а что у нас по внебалансовым ?
+           iRet=macFindVAcc(r_obacnt,r_cln0.client);
+           if (iRet==int(0))
+             iRet=macFindVAcc(r_obacntv,r_cln0.client);
+             if (iRet==int(0))
+               //смотри, не выгодоприобретатель ли это
+               if (index(trim(r_cln0.szUserType),"В")!=0)
+                 iRet=int(2);
+               end;
+             end;
+           end;
+         end;
+       end;
+    end;
+  end;
+  close(r_cln0);
+  close(r_acc4);
+  close(r_accv4);
+  return iRet;
+end;
+
+//макрос поиска последнего наибольшего значения при генерации ID
+macro macRetMaxID(iRange:integer):integer
+file r_clnID(clnID,"bfsofia1.def") key 5;
+var 
+   iRet:integer;
+   iRet=int(0);
+   if
+     (    
+      (iRange==1) or 
+      (iRange==2)
+     )
+     rewind(r_clnID);
+     if (iRange==1)
+	r_clnID.Range=iRange;
+       if (getGT(r_clnID))
+         prev(r_clnID);
+         iRet=r_clnID.NewID;
+       end;
+     elif (iRange==2)
+       prev(r_clnID);
+       iRet=r_clnID.NewID;
+     end;
+   end;
+   return iRet;
+end;
+
+//макрос генерации нового код клиента integer/string или возврат существующего
+//bGen=true - создаем
+macro macGenerID(iOldID:integer,sOldSID:string,bGen:bool):string
+file r_clnID(clnID,"bfsofia1.def") key 1;
+var 
+  bYes:bool,
+  iRange:integer,
+  sRet:string;
+  sRet="0/0"; //возврат в случае отсутствия необходимости в генерации
+  bYes=false;
+  if (iOldID<2300000)
+     rewind(r_clnID);
+     r_clnID.oldID=iOldID;
+     bYes=geteq(r_clnID);
+     if ((not bYes) and (bGen))
+        //удачно, можно генерить новое значение
+        //*************************************************
+        iRange=macRetRange(iOldID);
+        if (iRange!=0)
+          if (iRange==1)
+             idStart=idStart+1;
+             sRet=string(idStart)+"/"+string(idStart)+"/"+string(iRange);
+          elif (iRange==2)
+             idStart2=idStart2+1;
+             sRet=string(idStart2)+"/"+string(idStart2)+"/"+string(iRange);
+          end;
+        end;
+        //*************************************************
+     else
+       if (bGen)
+         if (bYes)
+           println("Для клиента с ID "+iOldID+" уже выполнялась генерация нового ID");
+         end;
+       else
+          if (bYes)
+            sRet=r_clnID.NewID+"/"+r_clnID.NewSID;
+          else
+            msgbox("Для клиента с ID "+iOldID+" не выполнялась генерация");
+          end;
+       end;
+     end;
+  else
+    println("Клиент с ID: "+iOldID+" строка ID: "+sOldSID +" лежит в зарезервированном диапазоне для НО");
+  end;
+  close(r_ClnID);
+  return sRet;
+end;
+
+//макропрограмма удаления всех записей из clnID
+
+macro macDelID():bool
+  file w_clnID(clnID,"bfsofia1.def") write;
+var
+  i:integer, 
+  j:integer, //счетчик удаленных записей 
+  bYes:bool;
+  bYes=false;
+  j=int(0);
+  if (GetTrue(false,"Вы действительно хотите удалить все записи из таблицы конвератции ID клиента"))
+    if (Nrecords(w_clnID)>0)
+      rewind(w_clnid);
+      InitProgress(Nrecords(w_clnid),"Подсчет","Удалено строк");
+      i=int(0);
+      while (next(w_clnid))
+        i=i+1;
+        useprogress(i);
+        if (delete(w_clnid))
+          j=j+1;
+        end;
+      end;
+      close(w_clnID);
+      remprogress(i);
+    end;
+    if (j>0) 
+      bYes=true
+    end;
+  end;
+  return bYes;
+end;
+
+//макропрограмма заполнения ID и SID
+
+macro macInsID(iOldID:integer,sOldSID:string):bool
+var 
+  bYes:bool,
+  iNewID:integer,
+  sNewSID:string,
+  iRange:integer,
+  sIDSID:string;
+  bYes=false;
+  file w_clnID(ClnID,"bfsofia1.def") write;
+  file r_clnID(ClnID,"bfsofia1.def") key 1;
+  rewind(r_clnID);
+  r_clnID.oldID=iOldID;
+  if (not GetEQ(r_clnID))
+    clearrecord(w_clnID);
+    sIDSID=macGenerID(iOldID,sOldSID,true);
+    //msgbox(sIDSID);
+    iNewID=int(macGetOneT(sIDSID,true)); //новый код клиента
+    sNewSID=macGetOneT(sIDSID,false); //новый код клиента (строковый вариант)+Range
+    iRange=int(macGetOneT(sNewSID,false));
+    sNewSID=macGetOneT(sNewSID,true);
+    if ((iNewID!=0) and (sNewSID!="0"))  //ошибка генерации ID
+      w_clnID.oldID=iOldID;
+      w_clnID.oldSID=sOldSID;
+      w_clnID.newID=iNewID;
+      w_clnID.newSID=sNewSID;
+      w_clnID.Range=iRange;
+      if (not insert(w_clnID))
+        println("Ошибка добавления СТАРОГО кода клиента: "+iOldID+" и ID строка "+sOldSID);
+      else
+        bYes=true;
+        println("Клиент с ID: "+iOldID+" и строка ID: "+sOldSID +" успешно добавлен");  
+      end;
+    end;
+  else
+    println("Код клиента: "+iOldID+" уже был добавлен для конвертации в таблицу ClnID");
+  end;
+  close(w_clnID);
+  close(r_clnID);
+  return bYes;
+end;
+
+
+macro macReadCln()
+  file r_cln0(client,"bank.def") key 0;
+  file r_clnID(clnID,"bfsofia1.def") key 1;
+var
+  i:integer,
+  bYes:bool,
+  j:integer;
+  i=int(0);
+  j=int(0);
+  bYes=true;
+  if (nrecords(r_clnID)!=0)  //в случае если таблица соответствий ID и OldID уже заполнялась
+      //ищем последнее значение для 2-х диапазонов
+      //и присваиваем его глобальным переменным
+     i=macRetMaxID(1);
+     j=macRetMaxID(2);
+     if (i!=0);
+      idStart=i;	
+     end;
+     if (j!=0)
+      idStart2=j;
+     end;
+  end;
+  if (bYes)
+    rewind(r_cln0);
+    InitProgress(Nrecords(r_cln0),"Подсчет","Просмотрено строк");
+    i=int(0);
+    j=int(0);
+    while(next(r_cln0))
+      i=i+1;
+      useprogress(i);
+      if (r_cln0.Client>=int(73))
+        if (macInsID(r_cln0.Client,r_cln0.Code))
+          j=j+1;
+        end;
+      end;
+    end;
+    close(r_cln0);
+    println("ПРОСМОТРЕНО КЛИЕНТОВ: "+i+" ДОБАВЛЕНО НОВЫХ ID: "+j);
+  else
+    println("ОШИБКА ИНИЦИАЛИЗАЦИИ ГЕНЕРАТОРА НОВЫХ ID!");
+  end;
+end;
+
+//макропрограмма обновления поля в указанных таблицах
+
+macro macUpdVal(rDbTbl:btFileRef,sIn:string,sTypeEdit:string,rDbTblCp:btFileRef):bool 
+
+/*
+  sIn = sFld/sInd/sTypeF/sOld/sNew
+  rDbTbl - наименование подключенной таблицы
+  sFld - поле в котором проводим замену (номер с 0)
+  sInd - проиндексировано ли поле  для поиска значений, если поле не индексировано - "n"
+  sTypeF - тип поля (s или i)
+  sOld и sNew - СТАРОЕ и НОВОЕ значение поля
+*/
+
+var 
+   iFld:string,
+   sInd:string,
+   sOld:string,
+   sNew:string,
+   sTypeF:string,
+   iOld:integer,
+   iNew:integer,
+   i:integer,
+   bYes:bool,
+   bNext:bool,
+   k:integer;
+   bYes=false;
+   i=int(0);
+   //парсим переданный параметр
+   while (i<=4)
+     if (i==0)
+       iFld=int(macGetOneT(sIn,true));
+     elif (i==1)
+       sInd=macGetOneT(sIn,true);
+     elif (i==2)
+       sTypeF=macGetOneT(sIn,true);
+     elif (i==3)
+        if (sTypeF=="i")
+          iOld=int(macGetOneT(sIn,true))  
+        elif (sTypeF=="s")
+          sOld=macGetOneT(sIn,true)
+        end;
+     elif (i==4)
+        if (sTypeF=="i")
+          iNew=int(macGetOneT(sIn,true))  
+        elif (sTypeF=="s")
+          sNew=macGetOneT(sIn,true)
+        end;
+     end;                                  
+     sIn=macGetOneT(sIn,false); 
+     i=i+1;
+   end;
+   rewind(rDbTbl);
+   clearrecord(rDbTbl);
+   bNext=true;
+   i=int(0);
+   if (sInd!="9999")
+      if (sTypeF=="i")
+        rDbTbl(iFld)=iOld;
+      elif (sTypeF=="s")
+        rDbTbl(iFld)=sOld;
+      end;
+      if (sInd!="n")
+        if (not getEQ(rDbTbl))
+           bNext=false;
+        else
+           i=int(1);
+        end;
+      else
+        if (sTypeF=="i")
+          if (not getGE(rDbTbl))
+            bNext=false;
+          else
+            i=int(1);
+          end;
+        else
+           sInd="9999"
+        end;
+      end;
+   end;
+
+   if (bNext) //если что-то нашли или не надо искать совсем
+     if (i==int(0)) //искать не надо
+       bNext=next(rDbTbl); //встали на первую запись после rewind, если не надо искать или ничего не нашли 
+     end;
+   end;
+   
+   if (bNext)
+     bYes=true;
+   end;
+   while (bNext)
+     i=i+1;
+     if (sTypeF=="i")
+        if (rDbTbl(iFld)==iOld)
+        else
+          bNext=false; 
+        end;
+     elif (sTypeF=="s")
+        if (rDbTbl(iFld)==sOld)
+        else
+          bNext=false;
+        end;
+     end;
+     if (bNext)
+       if (sTypeF=="i")
+         rDbTbl(iFld)=iNew;
+       elif (sTypeF=="s")
+         rDbTbl(iFld)=sNew;
+       end;
+       //Процедура insert или update
+       if (sTypeEdit=="u")
+         //*********************
+         if (not update(rDbTbl))
+           //обновляем 
+           println("Ошибка обновления кода клиента (новое значение) " +rDbTbl(iFld)+" в структуре "+string(rDbTbl))+" Возможно нарушение уникальности ключа";
+           bYes=false;
+         else
+           //add polyakov 23.04.2012 
+           if (sInd!="9999")
+             rewind(rDbTbl);
+           end;
+         end;
+       elif (sTypeEdit=="i")
+          //добавляем
+          k=int(0);
+          while (k!=fldnumber(rDbTbl)-1)
+            if (k!=iFld)
+              rDbTblCp(k)=rDbTbl(k); //полностью дублируем строку, кроме поля замены
+            else
+              if (sTypeF=="i")
+                rDbTblCp(k)=iNew;
+              elif (sTypeF=="s")
+                rDbTblCp(k)=sNew;
+              end;       
+            end;
+            k=k+1;
+          end;
+          //insert
+          if (not(insert(rDbTblCp)))
+            println("Ошибка дублирования записи с кодом клиента (новое значение) "+rDbTbl(iFld)+" в структуре "+string(rDbTbl));
+            bYes=false;
+          else
+            if (delete(rDbTbl))
+              //add polyakov 23.04.2012
+              if (sInd!="9999")
+                rewind(rDbTbl);
+              end;
+            else
+             println("Ошибка удаления продублированной записи с кодом клиента (новое значение) "+rDbTbl(iFld)+" в структуре "+string(rDbTblCp));
+              bYes=false;
+            end;
+          end;
+       end;
+       //*********************
+       if (sInd=="9999")
+         bNext=next(rDbTbl);
+       else
+         if (bYes)  //отменяем повторный поиск если ошибка ИЗМЕНЕНИЯ структуры, т.к. будет находить постоянно
+           //rewind(rDbTbl);
+           if (sTypeF=="i")
+             rDbTbl(iFld)=iOld;
+           elif (sTypeF=="s")
+             rDbTbl(iFld)=sOld;
+           end;
+           if (sInd!="n")
+             bNext=geteq(rDbTbl);
+           else
+             bNext=getge(rDbTbl);
+           end;
+         else
+           bNext=false;
+         end;
+       end;
+     else
+       if (sInd=="9999")
+         bNext=next(rDbTbl);
+       end;
+     end;
+   end;
+   close(rDbTbl);
+   return bYes;
+end;
+
+//макрос обновления значения категорий для экз. об. (ctgval.dbt)
+macro macUpdOtherTblCtgVal(iOldID:integer,iNewID:integer):bool
+  file w_ctgval3 (ctgval,"bank.def") key 3 write;
+  var sOldID:string,sNewID:string,j:integer,
+      bRet:bool,bNext:bool;
+    bNext=true;
+    bRet=false;
+    j=int(0);
+    sOldID=macAddSpace(iOldID,10,"0");
+    sNewID=macAddSpace(iNewID,10,"0");
+    while (bNext)
+      rewind(w_ctgval3);
+      w_ctgval3.ObjectType=int(3);
+      w_ctgval3.Object=sOldID;
+      w_ctgval3.Sort=int(0);
+      w_ctgval3.CtgID=int(0);
+      bNext=getge(w_ctgval3);
+      if (bNext)
+        if ((w_ctgval3.Object==sOldID) and (w_ctgval3.ObjectType==int(3)))
+         //msgbox(w_ctgval3.valueid);
+          w_ctgval3.Object=sNewID;
+          if (update(w_ctgval3))
+            j=j+1;
+          else
+            println("Ошибка обновления кода клиента (новое значение) " +iNewID+" в структуре "+string(w_ctgval3))+" Возможно нарушение уникальности ключа";
+            bNext=false;
+          end;
+        else
+          bNext=false;
+        end;
+      else
+        bNext=false;
+      end
+    end;
+    if (j>0)
+      bRet=true;
+    end;
+    close(w_ctgval3);
+    return bRet;
+end;
+
+//макрос обновления по НЕСТАНДАРТНЫМ индексам (внебалансовые)
+macro macUpdOtherTblVAcc(iOldID:integer,iNewID:integer):bool
+
+var bNext:bool,
+    i:integer,
+    sOZ:string,
+    bRet:bool,
+    j:integer,
+    iChap:integer,
+    rDbTbl:btFileRef;
+
+array 
+      arrT;
+
+bRet=false;
+arrT(0)=w_bnk_obacn;
+arrT(1)=w_bnk_obacntv;
+i=int(0);
+j=int(0);
+while (i<asize(arrT))
+  message("Обновление клиента со старым кодом "+String(iOldID)+" в таблице "+string(arrT(i)));
+  bNext=true;
+  rDbTbl=arrT(i);
+  sOZ="";
+  iChap=int(0);
+  while (bNext)
+    rewind(rDbTbl);
+    if (sOZ!="")
+      rDBTbl.Open_Close="З";
+    end;
+    rDbTbl.Sort=""; //add Polyakov S. George 30.04.2012
+    rDbTbl.Client=iOldID;
+    rDbTbl.Chapter=iChap;
+    if (getGE(rDbTbl))
+      //msgbox(rDbTbl.Client+"  "+iChap+"  "+ rDBTbl.Account+"  "+sOZ+"--"); 
+      if (rDbTbl.Client==iOldID)
+        rDbTbl.Client=iNewID;
+        if (update(rDbTbl))
+          j=j+1;
+        else
+         println("Ошибка обновления кода клиента (новое значение) " +iNewID+" в структуре "+string(rDbTbl))+" Возможно нарушение уникальности ключа";
+         bNext=false;
+        end;
+      else
+        if (iChap>=5)
+          iChap=int(0);
+          if (sOZ=="З")
+            bNext=false;
+          else
+            sOZ="З";
+          end;
+        else
+         iChap=iChap+1;
+        end;
+      end;
+    else
+      if (iChap>=5)
+          iChap=int(0);
+          if (sOZ=="З")
+            bNext=false;
+          else
+            sOZ="З";
+          end;
+        else
+         iChap=iChap+1;
+        end;
+    end;
+  end;
+  i=i+1;
+  close(rDbTbl);
+end;
+if (j>=1)                                      
+  bRet=true;
+end;
+return bRet
+end;
+
+//макрос перебора всех новых id и персональное обновление только внеб. счетов
+macro macUpdVAccCln():bool
+file r_clnid0(clnID,"bfsofia1.def") key 0;
+
+var 
+    i:integer,
+    j:integer,
+    bRet:bool;
+
+  i=int(0);
+  j=int(0);
+  bRet=false;
+  rewind(r_clnid0);
+  initprogress(nrecords(r_clnid0,"Просмотр","Обработано строк"));
+  while(next(r_clnid0))
+    i=i+1;
+    useprogress(i);
+    if (macUpdOtherTblVAcc(r_clnid0.oldid,r_clnid0.newid))
+      j=j+1;
+    end;
+  end;
+  remprogress(i);
+  close(r_clnid0);
+  if (j>0)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос обновления по НЕСТАНДАРТНЫМ индексам (балансовые)
+macro macUpdOtherTblAcc(iOldID:integer,iNewID:integer):bool
+
+var bNext:bool,
+    i:integer,
+    sOZ:string,
+    bRet:bool,
+    j:integer,
+    rDbTbl:btFileRef;
+
+array 
+      arrT;
+
+bRet=false;
+arrT(0)=w_bnk_account;
+arrT(1)=w_bnk_accountv;
+i=int(0);
+j=int(0);
+while (i<asize(arrT))
+  message("Обновление клиента со старым кодом "+String(iOldID)+" в таблице "+string(arrT(i)));
+  bNext=true;
+  rDbTbl=arrT(i);
+  sOZ="";
+  while (bNext)
+    if (sOZ!="")
+      rDBTbl.Open_Close="З";
+    end;
+    rDbTbl.Sort="";
+    rDbTbl.Client=iOldID;
+    rewind(rDbTbl);
+    if (getGE(rDbTbl))
+      //msgbox(rDbTbl.Client+" "+rDbTbl.Account+" "+sOZ+" --- "+rDbTbl.Open_close);
+      if (rDbTbl.Client==iOldID)
+        rDbTbl.Client=iNewID;
+        if (update(rDbTbl))
+          j=j+1;
+        else
+         println("Ошибка обновления кода клиента (новое значение) " +iNewID+" в структуре "+string(rDbTbl))+" Возможно нарушение уникальности ключа";
+         bNext=false;
+        end;
+      else
+        if (sOZ=="З")
+          bNext=false;
+        else
+          sOZ="З";
+        end;
+      end;
+    else
+      bNext=false;
+    end;
+  end;
+  i=i+1;
+  close(rDbTbl);
+end;
+if (j>=1)                                      
+  bRet=true;
+end;
+return bRet
+end;
+
+//макрос удаления старой записи добавления новой для справочника клиентов 
+macro macUpdClnMain(iOldID:integer,iNewID:integer,sNewSID:string):bool
+  file wr_cln0 (client,"bank.def") key 0 write;
+  file w_cln (client,"bank.def") write;
+
+  var
+      btTR:btFileRef,
+      btTW:btFileRef,
+      i:integer,
+      k:integer,
+      j:integer,
+      bRet:bool;
+array 
+     aTR,
+     aTW;
+
+  aTR(0)=wr_cln0;  aTW(0)=w_cln;
+  
+  bRet=false;
+  i=int(0);
+  j=int(0);
+  while (i<asize(aTR))
+    btTR=aTR(i);
+    btTW=aTW(i);
+    rewind(btTR);
+    btTR.Client=iOldID;
+    if (geteq(btTR))
+       k=int(0);
+       while (k!=fldnumber(btTR)-1)
+         if (k==0)
+           btTW(k)=iNewID;
+         elif (k==1)
+           btTW(k)=sNewSID;
+         else
+           btTW(k)=btTR(k); //полностью дублируем строку, кроме поля замены
+         end;
+         k=k+1;
+       end;
+       btTW.UserField3=btTR(0);
+       btTW.Sort=macAddSpace(sNewSID,35," ");
+       if (insert(btTW))
+           if (delete(btTR)) //удаляем  старую запись
+           end;
+         j=j+1;
+       else
+         println("Ошибка дублирования клиента со СТАРЫМ кодом: "+iOldID+" Возможно нарушение уникальности индекса!");
+       end;
+    else
+       println("ID: "+iOldID+" в справочнике клиентов не найден! Возможно запись уже продублирована с новым ID");
+    end;
+    i=i+1;
+  end;
+  if (j>=1)
+    println("Удачное дублирование по справочнику клиентов! Старый ID: "+iOldID+" Новый: "+iNewID);
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос перебора всех таблиц и параметров в глобальных массивах
+//с заменой передаваемых ID
+macro macReplaceArr(iOldID:integer,sOldSID:string,iNewID:integer,sNewSID:string):bool
+  var i:integer,
+      j:integer,
+      k:integer, //счетчик неудачных update
+      sIn:string,
+      sTmp:string,
+      sOut:string,
+      bRet:bool;
+  i=int(0);
+  j=int(0);
+  k=int(0);
+  sIn="";
+  sTmp="";
+  sOut="";
+  bRet=false;
+  if (macUpdClnMain(iOldID,iNewID,sNewSID))
+    //отдельно обновляем счета (балансовые)
+      macUpdOtherTblAcc(iOldID,iNewID);
+    //отдельно обновляем счета (внебалансовые)
+      macUpdOtherTblVAcc(iOldID,iNewID);
+    //обновляем ctgval
+      macUpdOtherTblCtgVal(iOldID,iNewID);
+    while (i<asize(arrInfStrCln))
+      message("Обновление клиента со старым кодом "+String(iOldID)+" в таблице "+string(arrInfTblCln(i)));
+       //парсим переданный параметр
+      sTmp=arrInfStrCln(i);
+     j=int(0);
+      while (j<=4)
+        sIn=macGetOneT(sTmp,true);
+        if (j==4)
+          if (sIn=="i")
+            sOut=arrInfStrCln(i)+"/"+iOldID+"/"+iNewID 
+          elif (sIn=="s")
+            sOut=arrInfStrCln(i)+"/"+sOldSID+"/"+sNewSID
+          end;
+        end;
+        sTmp=macGetOneT(sTmp,false); 
+        j=j+1;
+      end;
+      if (sOut!="")
+        if (not macUpdVal(arrInfTblCln(i),sOut,arrTypeEditCln(i),arrInfTblClnCp(i)))
+          k=k+1;
+        end;
+      else
+        println("ОШИБКА ОПИСАНИЯ СТРУКТУРЫ "+arrInfTblCln(i)+" ОШИБОЧНАЯ ПОСЛЕДОВАТЕЛЬНОСТЬ "+arrInfStrCln(i));
+      end;
+      i=i+1;
+    end;
+  end;
+  if (k!=0)
+    return bRet;
+  else
+   return Not bRet;
+  end;
+end;                              
+
+macro macInsOneID(bCln:bool):bool;
+var 
+   bYes:bool,
+   iOldID:integer,
+   sOldSID:string,
+   sNewSID:string,
+   iNewID:integer;
+   iOldID=int(0);
+   bYes=false;
+   if (getInt(iOldID,"Укажите СТАРОЕ значение кода клиента"))
+     sOldSID=String(iOldID);
+     if (getString(sOldSID,"Укажите СТАРОЕ СТРОКОВОЕ значение кода клиента"))
+        sNewSID=macGenerID(iOldID,sOldSID,false);
+        iNewID=int(macGetOneT(sNewSID,true));
+        sNewSID=macGetOneT(sNewSID,false);
+        if ((iNewID!=0) and (sNewSID!="0"))
+          if (bCln)
+            macUpdClnMain(iOldID,iNewID,sNewSID);
+          else
+            macReplaceArr(iOldID,sOldSID,iNewID,sNewSID);
+          end;
+          bYes=true;
+        end;
+     end;
+   end;
+   return bYes;
+end;
+
+//макрос запуска обновлений по таблице соответствий
+macro macUpdateMain()
+  file r_clnid0(clnID,"bfsofia1.def") key 0;
+  var
+    i:integer;
+  i=int(0);
+  rewind(r_clnid0);
+  InitProgress(Nrecords(r_clnid0),"Подсчет","Просмотрено строк");
+  while (next(r_clnid0))
+    i=i+1;
+    useprogress(i);
+    macReplaceArr(r_clnid0.OldID,r_clnid0.OldSID,r_clnid0.NewID,r_clnid0.NewSID);
+  end;
+  close(r_clnid0);
+  remprogress(i);
+end;
+
+//макрос полного дублирования структуры client.dbt в clien_.dbt
+
+macro macDblCln_():bool
+  file r_cln0(client,"bank.def") key 0;
+  file w_cln(clien_,"bank.def") key 9999 write;
+var 
+    i:integer,
+    n:integer,
+    k:integer,
+    bRet:bool,
+    j:integer;
+  i=int(0);
+  j=int(0);
+  n=int(0);
+  //del rows clien_
+  rewind(w_cln);
+  InitProgress(Nrecords(w_cln),"Идет удаление","Удалено строк");
+  while(next(w_cln))
+    i=i+1; 
+    useprogress(i);
+    if (delete(w_cln))
+      j=j+1;
+    end;
+  end;
+  remprogress(i);
+  close(w_cln);
+  rewind(r_cln0);
+  i=int(0);
+  InitProgress(NRecords(r_cln0),"Идет перегрузка клиентов","Обработано строк");
+  while (next(r_cln0))
+    i=i+1;
+    useprogress(i);
+    k=int(0);
+    while (k<=fldnumber(r_cln0)-1)
+      w_cln(k)=r_cln0(k);
+      k=k+1;
+    end;
+    if (insert(w_cln))
+      n=n+1  
+    end;
+  end;
+  remprogress(i);
+  close(w_cln);
+  close(r_cln0);
+  if ((j>0) and (n>0))
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос добавления номера договора=старому коду клиента
+macro macNumDogAdd():bool
+  file r_cln0(client,"bank.def") key 0;
+  file r_clnid0(clnID,"bfsofia1.def") key 0;
+  file w_cln10(clients1,"sofia.def") key 0 write;
+var 
+   i:integer,
+   e:integer,
+   bRet:bool,
+   bNext:bool,
+   j:integer;
+  i=int(0);
+  j=int(0);
+  e=int(0);
+  bRet=false;
+  rewind(r_clnid0);
+  initprogress(nrecords(r_clnid0),"Обработка","Просмотрено клиентов");
+  while (next(r_clnid0))
+    i=i+1;
+    useprogress(i);
+    rewind(r_cln0);
+    r_cln0.client=r_clnid0.newid;
+    if (geteq(r_cln0))
+      if (strlen(trim(r_cln0.userfield3))>0)
+        rewind(w_cln10);
+        w_cln10.client=r_clnid0.newid;
+        if (geteq(w_cln10))
+           bNext=true;
+           while (bNext)
+             if (w_cln10.client==r_clnid0.newid)
+               //если клиент, что нас интересует
+               if (strlen(trim(w_cln10.DOGNum))==0)
+                 w_cln10.DOGNum=trim(r_cln0.userfield3);
+                 if (update(w_cln10))
+                   println("Добавлен номер договора "+r_cln0.userfield3);
+                   j=j+1;
+                 else
+                   println("Ошибка обновления договора клиента "+r_clnid0.newid);
+                   e=e+1;
+                 end;
+               else
+                 println("Номер договора "+w_cln10.DOGNum+" уже проставлен. Клиент "+r_clnid0.newid);
+               end;
+               bNext=next(w_cln10)
+             else
+               bNext=false
+             end;
+           end;
+        end;
+      else
+         println("У клиента "+r_clnid0.newid+" не указан СТАРЫЙ код");
+      end;
+    else
+      println("Клиент с кодом "+r_clnid0.newid+" не найден в справочнике клиентов");  
+    end;
+  end;
+  remprogress(i);
+  close(r_cln0);
+  close(r_clnid0);
+  close(w_cln10);
+  println();
+  println("ДОБАВЛЕНО ДОГОВОРОВ "+j+" ОШИБОК ОБНОВЛЕНИЯ "+e);
+  if (j>0)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+//макрос возвращаюший перечень клиентов, которые закрыты,
+//но по которым есть открытые счета
+macro macCloseClnOpenAcc():bool
+  file r_cln0(client,"bank.def") key 0;
+  file r_acc4(account,"bank.def") key 4;
+  file r_accv4("account$","bank.def") key 4;
+var
+  i:integer,
+  j:integer,
+  k:integer,
+  iYesb:integer,
+  iYesv:integer;
+  i=int(0);
+  j=int(0);
+  k=int(0);
+  rewind(r_cln0);
+  initprogress(nrecords(r_cln0),"Идет обработка","Просмотрено клиентов");
+  while (next(r_cln0))
+    i=i+1;
+    useprogress(i);
+    if (r_cln0.bdFinishDate!=Date(0,0,0))
+      iYesb=int(0);
+      //клиент закрыт
+      iYesb=macFindAcc(r_acc4,r_cln0.client);
+      if (iYesb==int(0)) 
+        iYesb=macFindAcc(r_accv4,r_cln0.client);
+      end;
+      iYesv=int(0);
+      iYesv=macFindVAcc(w_bnk_obacn,r_cln0.client);
+      if (iYesv==int(0))
+        iYesv=macFindVAcc(w_bnk_obacntv,r_cln0.client);  
+      end;
+      if (iYesb!=int(0))
+        j=j+1;
+        println("По закрытому клиенту "+r_cln0.Client+" есть незакрытые счета (балансовые) Категория клиента "+r_cln0.szUserType);
+      end;
+      if (iYesv!=int(0))
+        k=k+1;
+        println("По закрытому клиенту "+r_cln0.Client+" есть незакрытые счета (внебалансовые) Категория клиента "+r_cln0.szUserType);
+      end;
+    end;
+  end;
+  remprogress(i);
+  close(r_cln0);
+  if ((j>0) or (k>0))
+    println("---");
+    println("Просмотрено клиентов "+i+" незакрытых счетов по закрытым клиентам:");
+    println("Балансовые: "+j);
+    println("Внебалансовые: "+k);
+    return true;
+  else
+    msgbox("Открытых счетов при закрытых клиентах не найдено");
+    return false;
+  end;
+end;
+
+//add Polyakov S.George 14.05.2012
+//добавлено для дополнительной обработки
+//структур, w_cln_vygoda и w_cln_dovopnac
+//которые были упущены при первоначальном проектировании 
+macro macVygDov():bool;            
+file r_clnid1(clnID,"bfsofia1.def") key 1;
+
+  var 
+     btT:btFileRef,
+     bRet:bool,
+     j:integer,
+     k:integer,
+     i:integer;
+  array 
+     aT;
+
+  aT(0)=w_cln_vygoda;
+  aT(1)=w_cln_dovopnac;
+
+  bRet=false;
+  k=int(0);
+  j=int(0);
+  while (j<=asize(aT)-1)
+    i=int(0);
+    btT=aT(j);
+    rewind(btT);
+    while (next(btT))
+      i=i+1;
+      message(i);
+      rewind(r_clnid1);
+      r_clnid1.oldID=btT(1);
+      if (geteq(r_clnid1))
+        btT(1)=r_clnid1.newID;
+        if (update(btT))
+          println(string(btT)+" "+r_clnid1.oldID+"  "+r_clnid1.NewID);
+          k=k+1;
+        end;
+      end;
+    end;
+    close(btT);
+    j=j+1;
+  end;
+  if (k>0)
+    bRet=true;
+  end;
+  return bRet;
+end;
+
+macro macEasyVer():bool
+  var 
+     oTblEx:Object,
+     oTblID:Object,
+     sTbl:string,
+     sDef:string,
+     k:integer,
+     bIns:bool,
+     sFldName:string;
+     sTbl="client.dbt";
+     sDef="bank.def";
+     sFldName="client";
+  if (getstring(sTbl,"Укажите таблицу для изменения"))
+    if (getstring(sDef,"Укажите словарь для этой таблицы"))
+      if (getstring(sFldName,"Укажите поле для измененения"))
+        if (gettrue(bIns,"Дублировать запись - ДА, Обновлять - НЕТ"))
+          oTblEx=TBFile(sTbl,"w",0,sTbl,sDef);
+        end;
+      end;
+    end;
+  end;
+end;
+ 
+macro macMainMenu()
+var
+  ik:integer,
+  bYes:bool;
+  array aM;
+
+aM(0)="Заполнить таблицу соответствий СТАРЫХ/НОВЫХ ID";
+aM(1)="Выполнить удаление ВСЕХ записей из таблицы соответствий ID";
+aM(2)="Выполнить ПОЛНУЮ замену старых ID новыми по всем структурам";
+aM(3)="Выполнить ОДИНОЧНУЮ замену старого ID новым";
+aM(4)="Выполнить ОДИНОЧНУЮ замену старого ID ТОЛЬКО по справочнику клиентов";
+aM(5)="Дополнить поле сортировки для справочника клиентов пробелами";
+aM(6)="Продублировать client.dbt в clien_.dbt";
+aM(7)="Выполнить замену только по внебалансовым счетам";
+aM(8)="Проставить номера договоров = СТАРОМУ номеру клиента";
+aM(9)="Вывести закрытых клиентов с открытыми счетами";
+aM(10)="Обработать дополнительно таблицы vygoda и dovopnac";
+aM(11)="Выполнить замену с указанием Таблицы, поля, словаря";
+bYes=true;
+  while (bYes)
+    ik=menu(aM,"Выбор","Необходимый выбор действий");
+    if (ik==0)
+      macReadCln();
+      bYes=false;
+    elif(ik==1)
+      if (not (macDelID()));
+        bYes=true;
+      end;
+    elif (ik==2)
+      macUpdateMain();
+      bYes=false;
+    elif (ik==3)
+      if (macInsOneID(false))
+        bYes=false;
+      end;
+    elif (ik==4)
+      if (macInsOneID(true))
+        bYes=false;
+      end;
+    elif (ik==5)
+      if (macAddSpaceSortCln())
+        bYes=false;
+      end;
+    elif (ik==6)
+      if (macDblCln_())
+        bYes=false;
+      end;
+    elif (ik==7)
+      if (macUpdVAccCln())
+        bYes=false;
+      end;
+    elif (ik==8)
+      if (macNumDogAdd())
+        bYes=false;
+      end;
+    elif (ik==9)
+      if (macCloseClnOpenAcc())
+        bYes=false;
+      end;
+    elif (ik==10)
+      if (macVygDov())
+        bYes=false;
+      end;
+    elif (ik==11)
+      if (macEasyVer())
+        bYes=false;
+      end;
+    else
+      if (getTrue(true,"Хотите завершить работу?"))
+        bYes=false;
+      end;
+    end;
+  end;
+end;
+
+//macMainMenu();

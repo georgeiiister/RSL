@@ -1,0 +1,199 @@
+file invCard  (invcrdc,  "bsmeans.def") key 1;
+file invCardD (invcrdck, "bsmeans.def") key 1;
+file invMove  (invmvmc,  "bsmeans.def") key 0;
+file invMoveD (invmvmck, "bsmeans.def") key 1;
+
+file LSheet   (lsheet, "zp.def")   key 0;
+file PTOffice (ptoffice) key 0;	
+file Officer  (officer)  key 0;	
+
+private array 
+  MonthName;
+
+  MonthName( 1) = "январь";
+  MonthName( 2) = "февраль";
+  MonthName( 3) = "март";
+  MonthName( 4) = "апрель";
+  MonthName( 5) = "май";
+  MonthName( 6) = "июнь";
+  MonthName( 7) = "июль";
+  MonthName( 8) = "август";
+  MonthName( 9) = "сентябрь";
+  MonthName(10) = "октябрь";
+  MonthName(11) = "ноябрь";
+  MonthName(12) = "декабрь";
+
+private var
+  ExcelApp       = null,
+  ExcelWorkBooks = null,
+  ExcelSheet     = null;
+             
+macro CreateExcel(FileName: string)
+  ExcelApp       = ActiveX("Excel.Application");
+  ExcelWorkBooks = ExcelApp.WorkBooks.Open("\\\\Polyakov1\\Sofia_main\\mac\\sofia\\" + FileName);
+end;
+
+macro PrintAct1(FileName: string, MoveID: integer, InvNumber: string): bool;
+                     
+  var Year, Month, Day;
+
+  invMove.InvCard_ID = MoveID;    
+  if (not GetEQ(invMove))
+    MsgBox("Не найден акт ввода в эксплуатацию");
+    return false;                                           
+  end;
+  
+  invMoveD.InvCard_ID  = invMove.InvCard_ID; 
+  invMoveD.InvCardKind = 1;
+  if (not GetEQ(invMoveD))
+    MsgBox("Не найдено содержимое акт ввода в эксплуатацию");
+    return false;                                           
+  end;
+ 
+  CreateExcel(FileName);
+
+  LSheet.TNumb      = invMove.CodePersonOwn;
+  GetEQ(LSheet);
+
+  PTOffice.PartyID  = LSheet.PartyID;
+  PTOffice.OfficeID = LSheet.OfficeID;
+  GetEQ(PTOffice);
+
+  Officer.PartyID   = LSheet.PartyID;
+  Officer.PersonID  = LSheet.PersonID;
+  GetEQ(Officer);
+
+  DateSplit(invMove.DateExpl, Day, Month, Year);
+
+  ExcelSheet = ExcelWorkBooks.WorkSheets.Item("Стр1");
+  ExcelSheet.Cells( 9, 10).Value = string(Day:2);
+  ExcelSheet.Cells( 9, 11).Value = MonthName(Month);
+  ExcelSheet.Cells( 9, 13).Value = string(Year:4) + "г.";
+
+  ExcelSheet.Cells(11,  9).Value = invMove.InvNumb;
+  ExcelSheet.Cells(18,  9).Value = invMove.DateExpl;
+  ExcelSheet.Cells(18, 13).Value = LSheet.Surname + " " + SubStr(LSheet.Name, 1, 1) + "." + SubStr(LSheet.Patronymic, 1, 1) + ".";
+
+  ExcelSheet.Rows(23).WrapText = True;
+  ExcelSheet.Rows(23).AutoFit();
+
+  ExcelSheet.Cells(23,  1).Value = Officer.Post + " " + PTOffice.OfficeName;
+  ExcelSheet.Cells(23,  8).Value = invMoveD.BeginSum;
+  ExcelSheet.Cells(23,  9).Value = invMoveD.UseYearQuant;
+  ExcelSheet.Cells(23, 11).Value = invMoveD.CoefDprc;
+  ExcelSheet.Cells(23, 12).Value = invMoveD.CodeDprc;
+  ExcelSheet.Cells(23, 14).Value = invMove.InvNumb;
+
+  ExcelSheet.Cells(30,  1).Value = invMove.NameMean;
+  ExcelSheet.Cells(34, 10).Value = PTOffice.OfficeName;
+
+  ExcelSheet = ExcelWorkBooks.WorkSheets.Item("Стр2");
+  ExcelSheet.Cells(43,  5).Value = Officer.Post + " " + PTOffice.OfficeName;
+
+  ExcelSheet.Rows(43).WrapText = True;
+  ExcelSheet.Rows(43).AutoFit();
+
+  ExcelSheet.Cells(43, 10).Value = LSheet.Surname + " " + SubStr(LSheet.Name, 1, 1) + "." + SubStr(LSheet.Patronymic, 1, 1) + ".";
+
+  ExcelSheet.Cells(53,  3).Value = string(Day:2);
+  ExcelSheet.Cells(53,  5).Value = MonthName(Month);
+  ExcelSheet.Cells(53,  7).Value = string(Year:4) + "г.";
+
+  ExcelApp.Visible = 1;  
+
+  return true;
+end;  
+
+macro PrintAct2(FileName: string, MoveID: integer, InvNumber: string): bool;
+                     
+  var Year, Month, Day, MonthCount, D;
+
+  invMove.InvCard_ID = MoveID;    
+  invMoveD.InvCardKind = 1;
+  if (not GetEQ(invMove))
+    MsgBox("Не найден акт ввода в эксплуатацию");
+    return false;                                           
+  end;
+  
+  invMoveD.InvCard_ID = MoveID;
+  if (not GetEQ(invMoveD))
+    MsgBox("Не найдено содержимое акт ввода в эксплуатацию");
+    return false;                                           
+  end;
+ 
+  CreateExcel(FileName);
+
+  LSheet.TNumb      = invMove.CodePersonOwn;
+  GetEQ(LSheet);
+
+  PTOffice.PartyID  = LSheet.PartyID;
+  PTOffice.OfficeID = LSheet.OfficeID;
+  GetEQ(PTOffice);
+
+  Officer.PartyID   = LSheet.PartyID;
+  Officer.PersonID  = LSheet.PersonID;
+  GetEQ(Officer);
+
+  ExcelSheet = ExcelWorkBooks.WorkSheets.Item("Стр1");
+  ExcelSheet.Cells( 10, 153).Value = invMove.DateNstmt;
+  ExcelSheet.Cells( 12, 153).Value = invMove.NstmtUnit;
+  ExcelSheet.Cells( 13, 153).Value = invMove.DateNstmt;
+
+  ExcelSheet.Cells( 15,  33).Value = LSheet.Surname + " " + SubStr(LSheet.Name, 1, 1) + "." + SubStr(LSheet.Patronymic, 1, 1) + ".";
+
+  ExcelSheet.Cells( 23,  71).Value = invMove.NstmtUnit;
+  ExcelSheet.Cells( 23,  90).Value = invMove.DateNstmt;
+
+  DateSplit(invMove.DateNstmt, Day, Month, Year);
+  ExcelSheet.Cells( 23, 132).Value = string(Day:2);
+  ExcelSheet.Cells( 23, 139).Value = MonthName(Month);
+  ExcelSheet.Cells( 23, 159).Value = SubStr(string(Year:4), 3, 2);
+
+  ExcelSheet.Cells( 33,   1).Value = invMove.NameMean;
+  ExcelSheet.Cells( 33,  34).Value = invMove.InvNumb;
+  ExcelSheet.Cells( 33,  85).Value = invMove.DateExpl;
+
+  MonthCount = Year * 24 + Month;
+  DateSplit(invMove.DateExpl, Day, Month, Year);
+  MonthCount = MonthCount - Year * 24 + Month;
+  ExcelSheet.Cells( 33, 101).Value = MonthCount;
+
+  ExcelSheet.Cells( 33, 139).Value = invMoveD.AccumDprcSum;
+  D = invMoveD.AccumDprcSum;
+
+  ExcelSheet.Rows(33).WrapText  = True;
+  ExcelSheet.Rows(33).AutoFit();
+
+  ExcelSheet.Cells( 50,  35).Value = "Акт от " + invMove.DateNstmt + " г.";
+
+  invMove.InvNumb = InvNumber;    
+  invMove.DirectOper  = 0;
+  GetEQ(invMove);
+
+  invMoveD.InvCard_ID = invMove.InvCard_ID;
+  GetEQ(invMoveD);
+  ExcelSheet.Cells( 33, 113).Value = invMoveD.BeginSum;
+  if (invMoveD.BeginSum - D > 0)
+    ExcelSheet.Cells( 33, 153).Value = invMoveD.BeginSum - D;
+  else
+    ExcelSheet.Cells( 33, 153).Value = 0;
+  end;
+  ExcelSheet.Visible = 1;
+
+  return true;
+end;
+   
+macro PrintAct(ActNumber: integer, MoveID: integer, InvNumber: string): bool;
+  invCard.InvNumb = InvNumber;
+  if (not GetEQ(invCard))
+    MsgBox("Неверно указан инвентарный номер объекта");
+    return false;
+  elif (ActNumber == 1)
+    return PrintAct1("ActIn.xls", MoveID, InvNumber);
+  elif (ActNumber == 1)
+    return PrintAct2("ActOut.xls", MoveID, InvNumber);
+  end;         
+
+  return false;
+end;
+

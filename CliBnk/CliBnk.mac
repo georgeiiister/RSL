@@ -1,0 +1,538 @@
+/*
+макропрограмма формирующая форматный файл для загрузки 
+пользователей системы klient-bank в систему iBank
+developer Polyakov S.George 31.05.2012
+edit 04.06.2012 Polyakov S.George
+*/
+
+import "..\\mac\\bfsofia\\clnid_cp.mac",
+        ClnInter,
+       "..\\mac\\bfsofia\\ContClnLib.mac";
+const 
+      S_PATH_A:string="..\\TxtFile\\uclients_account.uxf",
+      S_PATH_C:string="..\\TxtFile\\uclients.uxf",
+      S_BIC:string="043601981",
+      S_TYPE_ACC:string="Расчетный",
+      S_REG_DATE:string="06.08.2012",
+      S_STATE:string="Открыт",
+      S_COMMENT:string="Основной счет клиента",
+      S_RES:string="0",
+      S_LCK_WORD="stop06082012";
+
+//макрос возвращающий наименование клиента
+macro macCBGetNameCln(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+
+  sRet="";
+  Tbl=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+  rewind(Tbl);
+  Tbl.item("Client")=iCln;
+  if (geteq(Tbl))
+     sRet=trim(Tbl.item("Name_Client"));
+  end;
+  return sRet;
+end;
+
+//расчетные счета юридических лиц  
+macro macCBClnAccU(sAcc:string):bool
+  var
+    bRet:bool;
+
+  bRet=false;
+  
+  sAcc=SubStr(sAcc,1,5);
+  if (
+       (sAcc=="40502") or
+       (sAcc=="40602") or
+       (sAcc=="40702") or
+       (sAcc=="40802") or 
+       (sAcc=="40703") or
+       (sAcc=="40821")
+     )
+     bRet=true;     
+  end;
+  return bRet;
+end;
+
+//макрос возвращающий строку в формате dd.mm.yyyy на 
+//переданную дату
+macro macRetStrDate(dIn:date):string
+  var 
+     iDay:integer,
+     iMon:integer,
+     iYear:integer,
+     sRet:string;
+
+  sRet=string(dIn);
+  DateSplit(dIn,iDay,iMon,iYear);
+  sRet=string(iDay);
+  if (iDay<=9)
+    sRet="0"+string(iDay);
+  end;
+  sRet=sRet+".";
+  if (iMon<=9)
+    sRet=sRet+"0"+string(iMon);
+  else
+    sRet=sRet+string(iMon);
+  end;
+  sRet=sRet+"."+string(iYear);
+  return sRet;
+end;
+
+//макрос возвращающий серию и номер документа постановки на учет в налоговый орган
+macro macCBGetNalSvidReg(iCln:integer):string
+ var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("NalogSvSer"))+" "+trim(Tbl.item("NalogSvNum"));
+           
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос возвращающий серию и номер свидетельства о Государственной Регистарции
+macro macCBGetGosReg(iCln:integer):string
+ var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("SerSvidReg"))+" "+trim(Tbl.item("NumSvidReg"))
+           +"/"+macRetStrDate(Tbl.item("RegDate"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос выравниваюший первые буквы Фамилии Имени Отчества
+macro macCBFirstSymUpFIO(sIn:string):string
+  var
+    sR:string,
+    iC:integer,
+    iK:integer;
+  sR=sIn;
+  iC=Index(sIn," ");
+  if (iC!=0)
+    iK=Index(SubStr(sIn,iC+1)," ");
+    if (iK!=0)
+      sR=SubStr(sIn,1,iC-1);
+      sR=StrUpr(SubStr(sR,1,1))+StrLwr(SubStr(sR,2));
+      sR=sR+" "+StrUpr(SubStr(sIn,iC+1,1))+StrLwr(SubStr(sIn,iC+2,iK-2));
+      sR=sR+" "+StrUpr(SubStr(sIn,iK+iC+1,1))+StrLwr(SubStr(sIn,iK+iC+2));
+    end;
+  end;
+  return sR;
+end;
+
+//если передаваемое поле =="", то возвращается константа "Нет"
+macro macCBnz(sIn:string):string
+  if(strLen(trim(sIn))==int(0))
+    return "Нет";
+  else
+    return trim(sIn);
+  end;
+end;
+
+//макрос получения ОКПО клиента
+macro macCBGetOKPO(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szOKPO"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения KPP клиента
+macro macCBGetKPP(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      if (trim(Tbl.item("KPP"))!="0")
+        sRet=trim(Tbl.item("KPP"))
+      end;
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения fax/telex данных по клиенту
+macro macCBGetFax(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szTelexNumber"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения ОГРН клиента
+macro macCBGetOGRN(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("GosRegNum"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения E-mail клиента
+macro macCBGetEmail(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("Email"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения 1-го контактного телефона клиента
+macro macCBGetPhone1(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szPhoneNumber"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения первого лица (представителя) клиента
+macro macCBGetFIOFirstPer(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients3.dbt","r",0,"clients3.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("szFace1"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения номера договора клиента
+macro macCBGetNumContr(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("DOGNum"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//макрос получения кода страны клиента
+macro macCBGetCodeCountry(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("UrAddrCountry"));
+    end;
+    close(Tbl);
+    return sRet;
+end; 
+
+//макрос получения города клиента
+macro macCBGetTown(iCln:integer):string
+  var
+    sRet:string,
+    Tbl:object;
+    sRet="";
+    Tbl=TBFile("clients1.dbt","r",0,"clients1.dbt","sofia.def");
+    rewind(Tbl);
+    Tbl.item("Client")=iCln;
+    if (geteq(Tbl))
+      sRet=trim(Tbl.item("UrAddrTown"));
+    end;
+    close(Tbl);
+    return sRet;
+end;
+
+//выгружали ли уже клиента? (в перспективе можно проверить выгружали ли счет)
+macro macCBFindCln(iCln:integer):bool
+  var
+     bRet:bool,
+     TblC:object;
+
+  bRet=false;
+  TblC=TBFile("iBnkCln.dbt","r",1,"iBnkCln.dbt","bfsofia1.def");
+  rewind(TblC);
+  TblC.item("ClnID")=iCln;
+  if (getEq(Tblc))
+    bRet=true
+  end;
+  close(TblC);
+  return bRet;
+end;
+
+//iso код валюты
+macro macCBIsoCur(sCur:string):string
+  var
+     TblC:object,
+     sRet:string;
+     sRet="";
+     TblC=TBFile("isocur.dbt","r",1,"isocur.dbt","bank.def");
+     rewind(TblC);
+     TblC.item("NumberCode")=sCur;
+     if (getEq(TblC))
+       sRet=trim(TblC.item("ISOCode"));
+     end;
+     close(TblC);
+     return sRet;
+end;			
+
+//формируем форматный файл на счет
+macro macCBUploadAcc(
+                     bAdd:bool,sBic:string,sAcc:string,
+                     sCur:string,sType:string,sRDate:string,
+                     sRem:string,sRemN:string,sInn:string,sSt:string,
+                     sComm:string  
+                    )
+
+  SetOutput(S_PATH_A,bAdd);
+  [$ACCOUNT
+   BRANCH_BIC=#############
+   ACCOUNT=####################
+   CURRENCY=###
+   TYPE=#######################
+   CREATE_DATE=##########
+   REMAINDER=########################################################
+   REMAINDER_N=######################################################
+   CLIENT_INN=############
+   STATE=############################################################
+   COMMENTS=#########################################################
+   $ACCOUNT_END
+  ]
+  (sBic,sAcc,sCur,sType,sRDate,sRem,sremN,sInn,sSt,sComm)
+end;
+
+//формируем форматный файл на клиента
+macro macCBUploadCln(
+                     bAdd:bool,sCln:string,sClnLat:string,sRDate:string,
+                     sRes:string,sAdr:string,sAdrL:string,sCit:string,
+                     sCitLat:string,sDogNum:string,sFIO1:string,
+                     sPhone:string,sEmail:string,sFax:string,sLWord:string,
+                     sOKPO:string,sKPP:string,sINN:string,sOKATO:string,
+                     sOGRN:string,sOGRND:string,sNumCntr:string
+                    )
+
+  SetOutput(S_PATH_C,bAdd);
+  [$CLIENT
+   CLIENT_NAME=#########################################################################################################
+   CLIENT_NAME_LATIN=#########################################################################################################
+   REGISTRATION_DATE=##########
+   RESIDENT=#
+   ADDRESS=########################################################################################################
+   ADDRESS_LATIN=###########################################################################################################
+   CITY=###############################################
+   CITY_LATIN=#########################################
+   CONTRACT_NUM=#######################################
+   CONTACT_PERSON_FIO=#########################################################
+   CONTACT_PERSON_PHONE=###############################
+   CONTACT_PERSON_EMAIL=###############################
+   CONTACT_PERSON_FAX=#################################
+   LOCK_WORD=##########################################################
+   OKPO=###############################################
+   KPP=################################################
+   INN=################################################
+   OKATO=##############################################
+   OGRN=###############################################
+   OGRN_DATE=##########
+   COUNTRY_CODE=################
+   $CLIENT_END
+  ]
+  (
+   sCln,sClnLat,sRDate,sRes,sAdr,sAdrL,sCit,
+   sCitLat,sDogNum,sFIO1,sPhone,sEmail,sFax,
+   sLWord,sOKPO,sKPP,sINN,sOKATO,sOGRN,sOGRND,
+   sNumCntr
+   )
+end;
+
+//добавляем выгруженного клиента
+macro macCBAddC(iCln:integer):bool
+  var
+     bRet:bool,
+     Tbl:object;
+
+  bRet=false;
+  Tbl=TBFile("iBnkCln.dbt","w",0,"iBnkCln.dbt","bfsofia1.def");
+  clearrecord(Tbl);
+  Tbl.item("ClnID")=iCln;
+  bRet=insert(Tbl);
+  close(Tbl);
+  return bRet;
+end; 
+
+//макрос проверки счета и обработки клиента
+macro macCBAdd(sAcc:string):bool
+  var
+     TblA:object,
+     TblC:object,
+     bCNotUpl:bool,
+     sFirstP:string,
+     bRet:bool;
+
+     sFirstP="";
+     bCNotUpl=false;
+     bRet=false;
+     TblA=TBFile("account.dbt","r",0,"account.dbt","bank.def");
+     TblC=TBFile("client.dbt","r",0,"client.dbt","bank.def");
+     rewind(TblA);
+     TblA.item("Account")=sAcc; 
+     if (geteq(TblA))
+       if (macCheckRange(TblA.item("Client")))
+          rewind(TblC);
+          TblC.item("Client")=TblA.item("Client");
+          if (getEQ(TblC))
+             bCNotUpl=macCBFindCln(TblC.item("Client"));
+             /*******************************************/
+             //вызов выгрузки
+             if (not BCNotUpl)
+                sFirstP=macCBGetFIOFirstPer(TblC.item("Client"));
+                if (index(strUpr(trim(TblC.item("szUserType"))),"Ю")==0)
+                  sFirstP=macNoU(TblC.item("Name_Client"),true); //получили для ИП, КФХ и т.д. только ФИО
+                  sFirstP=macCBFirstSymUpFIO(sFirstP);  //выравняли ФИО
+                end;
+                sFirstP=macCBnz(sFirstP);
+                macCBUploadCln(
+                               true,
+                               trim(TblC.item("Name_Client")),   /*CLIENT_NAME*/
+                               "",                               /*CLIENT_NAME_LATIN*/
+                               S_REG_DATE,                       /*REGISTRATION_DATE*/
+                               S_RES,                            /*RESIDENT*/
+                               macCBGetCodeCountry(TblC.item("Client"))+", "+
+                               macGetUrAddr(TblC.item("Client")),  /*ADDRESS*/
+                               "",                                 /*ADDRESS_LATIN*/
+                               macCBGetTown(TblC.item("Client")),  /*CITY*/
+                               "",                                          /*CITY_LATIN*/
+                               macCBGetNumContr(TblC.item("Client"))+"/1",  /*CONTRACT_NUM*/
+                               sFirstP,    /*CONTACT_PERSON_FIO*/
+                               macCBnz(macCBGetPhone1(TblC.item("Client"))),/*CONTACT_PERSON_PHONE*/
+                               macCBGetEmail(TblC.item("Client")),          /*CONTACT_PERSON_EMAIL*/
+                               macCBGetFax(TblC.item("Client")),            /*CONTACT_PERSON_FAX*/
+                               S_LCK_WORD,                                  /*LOCK_WORD*/
+                               macCBGetOKPO(TblC.item("Client")),           /*OKPO*/
+                               macCBGetKPP(TblC.item("Client")),            /*KPP*/
+                               GetClientInn(TblC.item("Client")),           /*INN*/
+                               "",/*OKATO*/
+                               macCBGetOGRN(TblC.item("Client")),           /*OGRN*/
+                               macRetStrDate(TblC.item("bdCharterDate")),          /*OGRN_DATE*/
+                               macCBGetCodeCountry(TblC.item("Client"))     /*COUNTRY_CODE*/
+                              ) 
+             end;
+                 macCBUploadAcc
+                              (
+                               true,
+                               S_BIC,                                         /*BRANCH_BIC*/
+                               TblA.item("Account"),                          /*ACCOUNT*/
+                               macCBIsoCur(SubStr(TblA.item("Account"),6,3)), /*CURRENCY*/
+                               S_TYPE_ACC,                                    /*TYPE*/
+                               S_REG_DATE,
+                               "0.00",                                        /*REMAINDER*/
+                               "0.00",                                        /*REMAINDER_N*/
+                               GetClientInn(TblC.item("Client")),
+                               S_STATE,
+                               S_COMMENT
+                              ); 
+              macCBAddC(TblC.item("Client")); //запомнили, что клиента выгружали
+             /*******************************************/
+          end;
+       end;
+     end;
+     close(TblA);
+     close(TblC);
+     return bRet;
+end;
+
+//просмотр клиента на предмет владения ПО klient-bank и вызов макроса 
+//формирования форматного файла 
+macro macCBAllFindC():bool
+  var
+     bRet:bool,
+     i:integer,
+     TblA:object,
+     bNext:bool;
+
+     bNext=true;
+     i=0;
+     TblA=TBFile("account.dbt","r",0,"account.dbt","bank.def");
+     rewind(TblA);
+     TblA.item("Account")="40000000000000000000";
+     if (getGE(TblA))
+        while(bNext)
+          if ((TblA.item("Open_Close")!="З") and (index(TblA.item("usertypeaccount"),"A")!=0))
+            i=i+1;
+            bRet=true;
+            message("Просмотрено счетов: "+i);
+            macCBAdd(TblA.item("Account"));
+          end;
+          bNext=next(TblA);
+          if (TblA.item("Account")>"40900000000000000000")
+            bNext=false;
+          end;
+        end;
+     end;  
+     close(TblA);
+     return bRet;
+end;
+
+//macCBAllFindC()

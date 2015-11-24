@@ -1,0 +1,117 @@
+/*Макропрограмма для работы с остатками на счетах 7010?*/
+/* Developed Polyakov*/ 
+
+file acc(account) sort 0;
+file pos(postdoc) sort 2 write;
+
+var 
+   {curdate},
+   {oper},
+   {Name_Bank},
+   Curmon, 
+   Curyear,
+   NumSh,
+   Itog,
+   NumKv,
+   Res,
+   i=0,
+   j=0,
+   N,PaySh,RecSh,SumOth,
+   NR;
+
+Const
+   NumP=972;	    	
+
+
+
+/****************** Форма отчёта *******************/
+
+[Отчёт по закрытию остатков  на ##########
+----------------------------------------------------------------
+  N    Счёт плательщика      Счёт получателя         Сумма
+----------------------------------------------------------------]
+({curdate});
+
+
+/*********** Процедура формирования отчёта **********/
+
+macro Otch(N,PaySh,RecSh,SumOth,Itog)
+println(N:c:3,PaySh:c:22,RecSh:c:22,SumOth:a:15);
+End;
+
+
+/************* Точка входа в программу *************/
+
+DateSplit({curdate},null,curmon,curyear); 
+
+If ((Curmon==1) or (Curmon==2) or (Curmon==3)) 
+   NumSh="70301810301000000004";
+   NumKv=1;
+Elif ((Curmon==4) or (Curmon==5) or (Curmon==6))
+   NumSh="70301810601000000005";
+   NumKv=2; 
+Elif ((Curmon==7) or (Curmon==8) or (Curmon==9))
+   NumSh="70301810901000000006";
+   NumKv=3;
+Else 
+   NumSh="70301810201000000007";
+   NumKv=4;
+End;
+
+rewind(acc);
+clearrecord(acc);
+acc.account=NumSh;
+GetEQ(acc);
+Res=acc.NameAccount; 
+
+rewind(acc);
+clearrecord(acc);
+Itog=Money(0);
+NR=NRecords(acc);
+InitProgress(NR,"Подсчёт","Обработано строк");
+while(next(acc))
+  i=i+1;
+  UseProgress(i); 
+ 
+    If ((SubStr(trim(acc.balance),1,3)=="702") and 
+         acc.R0!=Money(0))  
+         j=j+1;
+         Itog=Itog+(acc.R0*(-1));
+         clearrecord(pos);
+         Copy(pos,acc);
+          pos.oper={oper};
+          pos.account_payer=NumSh;
+          pos.real_payer=NumSh;
+          pos.Shifr_Oper="09";
+          pos.Kind_oper="1";
+          pos.date_document={curdate};
+          pos.date_value={curdate};
+          pos.Dispatch=0;
+          pos.MFO_Receiver="";
+          pos.CorAcc_receiver="";
+          pos.Bank_receiver={Name_Bank};
+          pos.Payer=Res;
+          pos.Bank_Payer={Name_Bank};
+          pos.Receiver=acc.NameAccount;
+          pos.account_receiver=acc.account;
+          pos.real_receiver=acc.account;
+          pos.sum=(acc.R0)*(-1);
+          pos.Symbol_Cach="  0";
+	  pos.SymbNotBal="  0";
+          pos.ground="Закрывается остаток счёта на финансовый результат "+NumKv+" квартала "+curyear+"г.";
+	  pos.Number_Pack=NumP;
+          pos.iApplicationKind=0;
+          pos.ApplicationKey="";
+          pos.Kind_Carry=0;
+          pos.Numb_Document=j;
+          pos.Pay_Date={curdate};
+          pos.Payment=6;
+         Insert(pos);  
+         Otch(j,NumSh,acc.account,(acc.R0*(-1)),Itog);
+    End;                      
+End; 
+println("--Итого по расчёту--":c:47,Itog:a:15);
+RemProgress;
+
+/**************** Конец программы *****************/
+End;

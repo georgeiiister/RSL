@@ -1,0 +1,1646 @@
+/*             
+Переводы по системе "Юнистрим"
+Челбухов А.А. 18.11.2010
+*/
+import unisearch;
+import uni_imp;
+import ClnInter;
+import CurrInter;
+import BankInter, carrydoc;
+
+/*
+const UP = 328, DOWN = 336, PGUP = 329, CtrlPgUp = 388, PGDOWN = 337, CtrlPgDown = 374,
+      HOME = 327,ENDKEY = 335, ENTER = 13, F9 = 323, F8 = 322, F6 = 320, F2 = 316, 
+      F7 = 321, ESC = 27, F5 = 319, CTRLF5=354, F4=318, F3 = 317, DELKEY = 339,
+      SPACE = 32, INS = 338, DEL = 339, SHIFTF1 = 340, SHIFTF2 = 341,
+      SHIFTF3 = 342, SHIFTF4 = 343, SHIFTF5 = 344, SHIFTF6 = 345, SHIFTF7 = 346,
+      SHIFTF8 = 347, SHIFTF9 = 348, SHIFTF10 = 349, SHIFTF11 = 391,
+      SHIFTF12 = 392, F12 = 390, F11 = 389;
+*/
+import globals;
+import rslscr;
+
+
+replaceMacro ("FillUp", "myFillUp");
+replaceMacro ("FillDown", "myFillDown");
+replaceMacro ("ScrollMes", "myScrollMes");
+//replaceMacro ("OneUp", "myOneUp");
+//replaceMacro ("OneDown", "myOneDown");
+
+
+
+const C_F8 = 322, C_F6 = 320, C_F2 = 316, 
+      C_F7 = 321, C_F5 = 319, C_F4=318, C_F3 = 317, 
+      C_F12 = 390, C_F11 = 389;
+
+const ALT1 = 376, ALT2 = 377, ALT3 = 378, ALT4 = 379;
+const c_RIGHTKEY = 333, c_TABKEY = 9, c_CTRLRIGHTKEY = 372; 
+const c_LEFTKEY = 331, c_SHIFTTABKEY = 271, c_CTRLLEFTKEY = 371;
+const c_ENTERKEY = 13, c_F5KEY = 319, c_F6KEY = 320, c_F7KEY = 321, c_F8KEY = 322, c_F9KEY = 323;
+
+
+
+
+record unilist (unilist, "unistr.lbr") dialog;
+record uniedit (uniedit, "unistr.lbr") dialog;
+record _account("obacnt$.dbt");
+record _accountr("obacnt.dbt");
+record balanceOBR("accblnc.dbt");
+record balanceOBC("accblnc$.dbt");
+record RubDoc (postdoc, "bank.def");
+record CurDoc ("postdoc$.dbt", "bank.def");
+
+
+	myCashAccR 		= "20202810000000000001";
+	myCashAccUSD 		= "20202840600000000002";
+	myCashAccEUR 		= "20202978200000000002";
+        myTaxAccR		= "70601810600002102071";
+        myTaxAccCur		= "70601810300002102070";
+        my47422RUR		= "47422810900000300431";
+        my47422USD		= "47422840200000300431";
+        my47422EUR		= "47422978800000300431";
+
+        my47423RUR		= "47423810200000300431";
+        my47423USD		= "47423840500000300431";
+        my47423EUR		= "47423978100000300431";
+
+	myPackPrihod 		= "500";
+	myPackPrihod47422	= "7";
+	myPackRashod47423	= "7";
+	myPackRashod 		= "1";
+	myPackPrihodCurDoc	= "104";
+	myPackPrihodCurTax	= "104";
+	myPackRashodCurDoc	= "103";
+	myPackRashodCurTax	= "8";
+	myPackPrihodCur47422	= "8";
+	myPackRashodCur		= "1";
+	myShifrPrihod 		= "04";
+	myShifrRashod 		= "09";
+	myCurrency		= 0;
+	myRashodValutaKind_Carry= 1111;
+
+
+/*
+	Устанавливаем переменные для конкретной точки 
+*/
+
+if ({oper} == 24) //Доп. офис Кунцево
+//	myFilial = "ZRVO";
+
+	myCashAccR 		= "20202810900010000010";
+	myCashAccUSD 		= "20202840200010000010";
+	myCashAccEUR 		= "20202978800010000010";
+	myPackPrihod 		= "152";
+	myPackRashod 		= "153";
+	myPackPrihodCurDoc	= "1521";
+	myPackRashodCurDoc	= "1531";
+        myTaxAccR		= "70601810700012102071";
+        myTaxAccCur		= "70601810400012102070";
+	myTaxAccRCliring	= "70606810600015202015";
+end;
+
+
+
+
+if (({oper} == 43) or ({oper} == 44)) //Доп. офис Хамовники
+
+//	myFilial = "ZRVN";
+
+	myCashAccR 		= "20202810300020000011";
+	myCashAccUSD 		= "20202840600020000011";
+	myCashAccEUR 		= "20202978200020000011";
+	myPackPrihod 		= "162";
+	myPackRashod 		= "163";
+	myPackPrihod47422	= "167";
+	myPackPrihodCur47422	= "1671";
+	myPackPrihodCurDoc	= "1621";
+	myPackPrihodCurTax	= "1621";
+	myPackRashodCurDoc	= "1631";
+	myPackRashod47423	= "";
+        myTaxAccR		= "70601810800022102071";
+        myTaxAccCur		= "70601810500022102070";
+	myTaxAccRCliring	= "70606810700025202015";
+
+end;
+
+
+
+macro myFillDown (dl,pos)
+  macro ClearDlgFields (row)
+    var i = 0;
+    while (i < Nfields) 
+      dl (FldIndex (dl,DlgFields (i) + row)) = "";
+      i = i + 1
+    end 
+  end;
+
+  var stat,i = 0;
+
+  if (not pos)
+     return
+  end;
+
+  stat = GetDirect (Scrff,pos);
+
+  while (stat and (i < Nrec))
+
+    if (myView == 0) //отображать все записи
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i + 1;
+    elif (myView == 1) // только открытые счета
+     if (Scrff.RS_Account_Status == "открыт")
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i + 1;
+     end;
+    elif (myView == 2) // только закрытые счета
+     if (Scrff.RS_Account_Status == "закрыт")
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i + 1;
+     end;
+    else // только без счета
+     if (Scrff.RS_Account_Status == "нет счета")
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+//msgbox ("закрыт - Добавляем dl,i=", i);
+      SetDlgFields (dl,i);
+      i = i + 1;
+     end;
+    end;
+      stat = next (Scrff);    
+  end;      
+
+       
+  while (i < Nrec)   
+    ClearDlgFields (i); 
+    i = i + 1
+  end;             
+
+  UserFill (dl);
+  UpdateFields (dl)
+end;
+
+macro myFillUp (dl,pos)
+//msgbox ("up");
+  var stat,i = Nrec-1;
+
+  if (not pos)
+     return
+  end;
+
+  stat = GetDirect (Scrff,pos);
+
+  while ((i >= 0) and stat)        
+    if (myView == 0) //отображать все записи
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i - 1
+    elif (myView == 1) // только открытые счета
+     if (Scrff.RS_Account_Status == "открыт")
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i - 1
+     end;
+    elif (myView == 2) // только закрытые счета
+     if (Scrff.RS_Account_Status == "закрыт")
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i - 1
+     end;
+    else // только без счета
+     if (Scrff.RS_Account_Status == "нет счета")
+      lastUsed = i;
+      Apos (i) = GetPos (Scrff);
+      SetDlgFields (dl,i);
+      i = i - 1
+     end;
+    end;
+    stat = prev (Scrff);
+  end;      
+               
+  if (i >= 0)
+    FillDown (dl,Apos (i + 1))
+  else 
+    lastUsed = Nrec - 1;
+    UserFill (dl);
+    UpdateFields (dl);
+  end 
+end;
+
+
+
+macro myScrollMes (dl,cmd,id,key)
+
+  var curRow;    
+
+  macro CalcNrec
+    Nrec = 0;
+    while (FldIndex (dl,DlgFields (0) + Nrec) != -1)
+      Nrec = Nrec + 1
+    end;                 
+    Asize (Apos,Nrec)
+  end; 
+
+
+
+  macro CopyDown
+    var i = 0,j;
+    while (i < Nrec - 1)
+      j = 0;
+      while (j < Nfields)
+         dl (FldIndex (dl,DlgFields (j) + i)) = dl (FldIndex (dl,DlgFields (j) + (i+1)));
+         j = j + 1
+      end;
+      Apos (i) = Apos (i + 1);
+      i = i + 1
+    end 
+  end;
+  
+  macro CopyUp
+    var i = Nrec - 1,j;
+    while (i > 0)
+      j = 0;
+      while (j < Nfields)
+         dl (FldIndex (dl,DlgFields (j) + i)) = dl (FldIndex (dl,DlgFields (j) + (i-1)));
+         j = j + 1
+      end;
+      Apos (i) = Apos (i - 1);
+      i = i - 1
+    end 
+  end;
+
+
+
+   macro OneDown
+     var stat;
+     if (lastUsed != Nrec - 1)
+        return
+     end;
+
+     stat = GetDirect (Scrff,Apos (lastUsed));
+     if (stat and next (Scrff))
+        if (myView == 0) //отображать все записи
+	       CopyDown;
+	       SetDlgFields (dl,Nrec - 1);
+	       Apos (Nrec - 1) = GetPos (Scrff);
+	       UserFill (dl);
+	       UpdateFields (dl)
+        elif (myView == 1) // только открытые счета
+         if (Scrff.RS_Account_Status == "открыт")
+	       CopyDown;
+	       SetDlgFields (dl,Nrec - 1);
+	       Apos (Nrec - 1) = GetPos (Scrff);
+	       UserFill (dl);
+	       UpdateFields (dl)
+	 end;
+        elif (myView == 2) // только закрытые счета
+         if (Scrff.RS_Account_Status == "закрыт")
+	       CopyDown;
+	       SetDlgFields (dl,Nrec - 1);
+	       Apos (Nrec - 1) = GetPos (Scrff);
+	       UserFill (dl);
+	       UpdateFields (dl)
+	 end;
+        else // только без счета
+         if (Scrff.RS_Account_Status == "нет счета")
+	       CopyDown;
+	       SetDlgFields (dl,Nrec - 1);
+	       Apos (Nrec - 1) = GetPos (Scrff);
+	       UserFill (dl);
+	       UpdateFields (dl)
+	 end;
+	end;
+     end
+   end;
+
+   macro OneUp
+      var stat;
+      stat = GetDirect (Scrff,Apos (0));
+      if (stat and prev (Scrff))
+        if (myView == 0) //отображать все записи
+             CopyUp;
+             SetDlgFields (dl,0);       
+             Apos (0) = GetPos (Scrff);   
+             if (lastUsed < Nrec - 1)
+               lastUsed = lastUsed + 1
+             end;
+             UserFill (dl);
+             UpdateFields (dl)
+        elif (myView == 1) // только открытые счета
+         if (Scrff.RS_Account_Status == "открыт")
+             CopyUp;
+             SetDlgFields (dl,0);       
+             Apos (0) = GetPos (Scrff);   
+             if (lastUsed < Nrec - 1)
+               lastUsed = lastUsed + 1
+             end;
+             UserFill (dl);
+             UpdateFields (dl)
+	 end;
+        elif (myView == 2) // только закрытые счета
+         if (Scrff.RS_Account_Status == "закрыт")
+             CopyUp;
+             SetDlgFields (dl,0);       
+             Apos (0) = GetPos (Scrff);   
+             if (lastUsed < Nrec - 1)
+               lastUsed = lastUsed + 1
+             end;
+             UserFill (dl);
+             UpdateFields (dl)
+	 end;
+        else // только без счета
+         if (Scrff.RS_Account_Status == "нет счета")
+             CopyUp;
+             SetDlgFields (dl,0);       
+             Apos (0) = GetPos (Scrff);   
+             if (lastUsed < Nrec - 1)
+               lastUsed = lastUsed + 1
+             end;
+             UserFill (dl);
+             UpdateFields (dl)
+         end;
+        end;
+      end;
+   end;
+                
+
+   if (cmd == DLG_INIT)
+      CalcNrec;
+      rewind (Scrff);
+      if (next (Scrff))
+        FillDown (dl,GetPos (Scrff))
+      end
+   elif (cmd == DLG_KEY)
+      if ((key == PGDOWN) and (FindCol (dl,id) != -1))
+/*       FillDown (dl,Apos (lastUsed)) */
+         if (lastUsed == Nrec - 1)
+           FillDown (dl,Apos (lastUsed));
+           if  ( FindRow (dl,id) > lastUsed)
+             SetFocus (dl,FldIndex (dl,DlgFields (FindCol (dl,id)) + lastUsed))
+           end;
+         end;
+      elif ((key == PGUP) and (FindCol (dl,id) != -1))
+         FillUp (dl,Apos (0));
+
+/*      elif ((key == DOWN)  and (FindRow (dl,id) == Nrec-1))
+         OneDown;
+         return CM_IGNORE  */
+      elif (key == DOWN)
+         curRow = FindRow (dl,id);
+         if  ( curRow == Nrec-1)
+           OneDown;
+           return CM_IGNORE
+         elif  ( curRow == lastUsed)
+           return CM_IGNORE
+         end;
+      elif ((key == UP) and (FindRow (dl,id) == 0))
+         OneUp;
+         return CM_IGNORE
+      elif ( (key == HOME) or (key ==  CtrlPgUp) )
+         curRow = FindCol (dl,id);
+         if (curRow != -1)
+           rewind (Scrff);
+           if (next (Scrff))
+             FillDown (dl,GetPos (Scrff));
+             SetFocus (dl,FldIndex (dl,DlgFields (curRow) + 0))
+           end
+         end
+      elif ( (key == ENDKEY) or ( key == CtrlPgDown ) )
+         curRow = FindCol (dl,id);
+         if (curRow != -1)
+           rewind (Scrff);
+           if (prev (Scrff))
+             FillUp (dl,GetPos (Scrff));             
+             SetFocus (dl,FldIndex (dl,DlgFields (curRow) + lastUsed));
+           end
+         end
+      elif (key == ENTER)
+         curRow = FindRow (dl,id);
+         if (curRow >= 0)
+           if (curRow <= lastUsed)
+             GetDirect (Scrff,Apos (curRow));
+             return CM_SAVE
+           elif (curRow < Nrec)
+             return CM_IGNORE;
+           end
+         end
+      elif (key == F9)
+         return CM_IGNORE;
+      end
+   elif (cmd == DLG_DESTROY)
+     Asize (DlgFields,0);
+     Asize (FileFields,0);
+     Asize (Apos,0);
+   end;
+   return CM_DEFAULT; 
+end;
+
+
+
+
+
+	macro PrihodRubli()
+//	 msgbox("Формируем основной документ");
+ 	 RubDoc.Account_Payer 	= myCashAccR;
+	 RubDoc.Account_Receiver = unistr.RS_Account;
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	= myPackPrihod;
+	 RubDoc.Sum 		= unistr.Amount + unistr.Commis2 + unistr.Commis3;
+	 RubDoc.Code_Currency    = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date		= {curdate};
+	 RubDoc.Shifr_Oper	= "04";
+	 RubDoc.Kind_Oper	= " 3";
+	 RubDoc.Symbol_Cach	= "  0";
+	 RubDoc.Numb_Document	= "1";
+	 RubDoc.Payer		= unistr.RS_Client_Name;
+	 RubDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Прием денежных средств по системе \"Юнистрим\". Сумма перевода "+ StrSubst(string(unistr.Amount),".","-") +", сумма комиссии " + StrSubst(string(Unistr.Commis2 + Unistr.Commis3),".","-") + ".";
+
+	 RubDoc.Ground		= myGround;
+		
+         myError1 = MakePostDoc (1, RubDoc);
+         if(myError1 != 0)
+	  msgbox(myError1);
+	 end;
+//	 msgbox("Формируем документ комиссии");
+ 	 RubDoc.Account_Payer 	= myCashAccR;
+	 RubDoc.Account_Receiver = myTaxAccR;
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	= myPackPrihod;
+	 RubDoc.Sum 		= unistr.Commis1;
+	 RubDoc.Code_Currency    = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date		= {curdate};
+	 RubDoc.Shifr_Oper	= "04";
+	 RubDoc.Kind_Oper	= " 3";
+	 RubDoc.Symbol_Cach	= " 32";
+	 RubDoc.Numb_Document	= "2";
+	 RubDoc.Payer		= GetNameAccount (RubDoc.Account_Payer);
+	 RubDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Комиссия за перевод по системе \"Юнистрим\" от " + {curdate}; 
+
+	 RubDoc.Ground		= myGround;
+		
+         myError2 = MakePostDoc (1, RubDoc);
+         if(myError2 != 0)
+	  msgbox(myError2);
+ 	  end;
+
+//	 msgbox("Формируем документ приход на транзитный счет 47422");
+ 	 RubDoc.Account_Payer 	= unistr.RS_Account;;
+	 RubDoc.Account_Receiver = my47422RUR; 
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	=  myPackPrihod47422;
+	 RubDoc.Sum 		= unistr.Amount;
+	 RubDoc.Code_Currency    = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date		= {curdate};
+	 RubDoc.Shifr_Oper	= "09";
+	 RubDoc.Kind_Oper	= " 1";
+	 RubDoc.Symbol_Cach	= "  0";
+	 RubDoc.Numb_Document	= "3";
+	 RubDoc.Payer		= GetNameAccount (RubDoc.Account_Payer);
+	 RubDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Сумма перевода по системе Юнистрим от "+  unistr.Transfer_Date;
+
+	 RubDoc.Ground		= myGround;
+		
+         myError3 = MakePostDoc (1, RubDoc);
+         if(myError3 != 0)
+	  msgbox(myError3);
+	  end;
+
+
+//	 msgbox("Формируем документ приход комиссии на транзитный счет 47422");
+ 	 RubDoc.Account_Payer 	= unistr.RS_Account;;
+	 RubDoc.Account_Receiver = my47422RUR; 
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	=  myPackPrihod47422;
+	 RubDoc.Sum 		= unistr.Commis2 + unistr.Commis3;
+	 RubDoc.Code_Currency    = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date	= {curdate};
+	 RubDoc.Shifr_Oper	= "09";
+	 RubDoc.Kind_Oper	= " 1";
+	 RubDoc.Symbol_Cach	= "  0";
+	 RubDoc.Numb_Document	= "4";
+	 RubDoc.Payer		= GetNameAccount (RubDoc.Account_Payer);
+	 RubDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Комиссия Юнистрим за перевод "+ StrSubst(string(unistr.Amount),".","-")+ " рублей от "+ unistr.Transfer_Date;
+
+	 RubDoc.Ground		= myGround;
+
+		
+         myError4 = MakePostDoc (1, RubDoc);
+         if(myError4 != 0)
+	  msgbox(myError4);
+	 end;
+	
+	 if ((myError1 == 0) and (myError2 == 0) and (myError3 == 0) and (myError4 == 0))
+	     msgbox ("Сформированы отложенные документы"); 
+	 end;
+	end;
+
+
+
+
+	macro RashodRubli()
+	//Формируем списание с 47423 и зачисление клиенту (40905)
+ 	 RubDoc.Account_Payer 	= my47423RUR;
+	 RubDoc.Account_Receiver = unistr.RS_Account;
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	= myPackRashod47423;
+	 RubDoc.Sum 		= unistr.Amount;
+	 RubDoc.Code_Currency   = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date	= {curdate};
+	 RubDoc.Shifr_Oper	= "09";
+	 RubDoc.Kind_Oper	= " 1";
+	 RubDoc.Symbol_Cach	= "  0";
+	 RubDoc.Numb_Document	= "1";
+	 RubDoc.Payer		= GetNameAccount (RubDoc.Account_Payer);
+	 RubDoc.Receiver	= unistr.RS_Client_Name;
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Выплата " + StrSubst(string(unistr.Amount),".","-") + " рублей, поступивших по системе \"Юнистрим\". , комиссия банка " + StrSubst(string(unistr.Commis1),".","-");
+
+	 RubDoc.Ground		= myGround;
+		
+         myError1 = MakePostDoc (1, RubDoc);
+         if(myError1 != 0)
+	  msgbox(myError1);
+	 end;
+
+	//Формируем списание с клиента (выдача из кассы)
+ 	 RubDoc.Account_Payer 	= unistr.RS_Account;
+	 RubDoc.Account_Receiver = myCashAccR;
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	= "501";
+	 RubDoc.Sum 		= unistr.Amount ;
+	 RubDoc.Code_Currency   = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date	= {curdate};
+	 RubDoc.Shifr_Oper	= "03";
+	 RubDoc.Kind_Oper	= " 3";
+	 RubDoc.Symbol_Cach	= " 56";
+	 RubDoc.Numb_Document	= "2";
+	 RubDoc.Payer		= unistr.RS_Client_Name;
+	 RubDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Выплата " + StrSubst(string(unistr.Amount),".","-")+ " руб., поступивших по системе \"Юнистрим\".";
+
+	 RubDoc.Ground		= myGround;
+		
+         myError2 = MakePostDoc (1, RubDoc);
+         if(myError2 != 0)
+	  msgbox(myError2);
+	 end;
+
+
+
+	//формируем списание с 47423 комиссии на 70601
+ 	 RubDoc.Account_Payer 	= my47423RUR;
+	 RubDoc.Account_Receiver = myTaxAccR;
+	 RubDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Payer));
+	 RubDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(RubDoc.Account_Receiver));
+	 RubDoc.Number_Pack	= myPackRashod47423;
+	 RubDoc.Sum 		= unistr.Commis1;
+	 RubDoc.Code_Currency   = myCurrency;
+	 RubDoc.Date_Document	= {curdate};
+	 RubDoc.Pay_Date	= {curdate};
+	 RubDoc.Shifr_Oper	= "09";
+	 RubDoc.Kind_Oper	= " 1";
+	 RubDoc.Symbol_Cach	= "  0";
+	 RubDoc.Numb_Document	= "3";
+	 RubDoc.Payer		= GetNameAccount (RubDoc.Account_Payer);
+	 RubDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 RubDoc.iApplicationKind = 8;
+	 RubDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Комиссия банка за выплату перевода по системе \"Юнистрим\". Сумма "+ StrSubst(string(unistr.Amount),".","-") +" рублей. Без НДС.";
+
+	 RubDoc.Ground		= myGround;
+		
+         myError3 = MakePostDoc (1, RubDoc);
+         if(myError3 != 0)
+	  msgbox(myError3);
+	 end;
+
+	 if ((myError1 == 0) and (myError2 == 0) and (myError3 == 0))
+	     msgbox ("Сформированы отложенные документы"); 
+	 end;
+	
+	end;
+
+
+
+macro PrihodValuta()
+//	 msgbox("Формируем валютный документ комиссии");
+	 if (myCurrency == 840)
+ 	 CurDoc.Account_Payer 	= myCashAccUSD;
+	 elif (myCurrency == 978)
+ 	 CurDoc.Account_Payer 	= myCashAccEUR;
+	 end;
+
+	 CurDoc.Account_Receiver = myTaxAccCur;
+	 CurDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.Number_Pack	= myPackPrihodCurTax;
+	 CurDoc.Sum 		= unistr.Commis1;
+	 CurDoc.Code_Currency    = myCurrency;
+	 CurDoc.Date_Document	= {curdate};
+	 CurDoc.Pay_Date		= {curdate};
+	 CurDoc.Shifr_Oper	= "04";
+	 CurDoc.Kind_Oper	= " 3";
+	 CurDoc.Kind_Carry	= 1111;
+	 CurDoc.Symbol_Cach	= "  0";
+	 CurDoc.Numb_Document	= "1";
+	 CurDoc.Payer		= unistr.RS_Client_Name;
+	 CurDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 CurDoc.UserField1	= unistr.RS_Client_Name;
+	 CurDoc.iApplicationKind = 8;
+	 CurDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Комиссия банка за перевод "+ StrSubst(string(unistr.Amount),".","-") + " " + GetCurrencyName(myCurrency) + " по системе \"Юнистрим\".";
+	 CurDoc.Ground		= myGround;
+         myError1 = MakePostDoc (1, CurDoc);
+         if(myError1 != 0)
+	  msgbox(myError1);
+	 end;
+
+
+//	 msgbox("Формируем основной валютный документ ");
+	 if (myCurrency == 840)
+ 	 CurDoc.Account_Payer 	= myCashAccUSD;
+	 elif (myCurrency == 978)
+ 	 CurDoc.Account_Payer 	= myCashAccEUR;
+	 end;
+
+	 CurDoc.Account_Receiver = unistr.RS_Account;
+	 CurDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.Number_Pack	= myPackPrihodCurDoc;
+	 CurDoc.Sum 		= unistr.Amount + unistr.Commis2 + unistr.Commis3;
+	 CurDoc.Code_Currency    = myCurrency;
+	 CurDoc.Date_Document	= {curdate};
+	 CurDoc.Pay_Date		= {curdate};
+	 CurDoc.Shifr_Oper	= "04";
+	 CurDoc.Kind_Oper	= " 3";
+	 CurDoc.Kind_Carry	= 0;
+	 CurDoc.Symbol_Cach	= "  0";
+	 CurDoc.Numb_Document	= "2";
+	 CurDoc.Payer		= unistr.RS_Client_Name;
+	 CurDoc.Receiver	= unistr.RS_Client_Name;
+	 CurDoc.UserField1	= unistr.RS_Client_Name;
+	 CurDoc.iApplicationKind = 8;
+	 CurDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Прием денежных средств для перевода по системе \"Юнистрим\". Сумма перевода " + StrSubst(string(unistr.Amount),".","-") + " " + GetCurrencyName(myCurrency) + ", сумма комиссии "+ StrSubst(string(unistr.Commis2 + unistr.Commis3),".","-") + " " + GetCurrencyName(myCurrency);
+	 CurDoc.Ground		= myGround;
+
+         myError2 = MakePostDoc (1, CurDoc);
+         if(myError2 != 0)
+	  msgbox(myError2);
+	 end;
+
+//	 msgbox("Формируем списание комиссии с 47422 ");
+	 CurDoc.Account_Payer = unistr.RS_Account;
+
+	 if (myCurrency == 840)
+ 	 CurDoc.Account_Receiver = my47422USD;
+	 elif (myCurrency == 978)
+ 	 CurDoc.Account_Receiver = my47422EUR;
+	 end;
+
+	 CurDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.Number_Pack	= myPackPrihodCur47422;
+	 CurDoc.Sum 		= unistr.Commis2 + unistr.Commis3;
+	 CurDoc.Code_Currency    = myCurrency;
+	 CurDoc.Date_Document	= {curdate};
+	 CurDoc.Pay_Date		= {curdate};
+	 CurDoc.Shifr_Oper	= "09";
+	 CurDoc.Kind_Oper	= " 1";
+	 CurDoc.Kind_Carry	= 0;
+	 CurDoc.Symbol_Cach	= "  0";
+	 CurDoc.Numb_Document	= "3";
+	 CurDoc.Payer		= unistr.RS_Client_Name;
+	 CurDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 CurDoc.iApplicationKind = 8;
+	 CurDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Комиссия Юнистрим за перевод " + StrSubst(string(unistr.Amount),".","-") + " " + GetCurrencyName(myCurrency);
+	 CurDoc.Ground		= myGround;
+
+         myError3 = MakePostDoc (1, CurDoc);
+         if(myError3 != 0)
+	  msgbox(myError3);
+	 end;
+
+//	 msgbox("Формируем списание средств с 47422 ");
+	 CurDoc.Account_Payer = unistr.RS_Account;
+
+	 if (myCurrency == 840)
+ 	 CurDoc.Account_Receiver = my47422USD;
+	 elif (myCurrency == 978)
+ 	 CurDoc.Account_Receiver = my47422EUR;
+	 end;
+
+	 CurDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.Number_Pack	= myPackPrihodCur47422;
+	 CurDoc.Sum 		= unistr.Amount;
+	 CurDoc.Code_Currency    = myCurrency;
+	 CurDoc.Date_Document	= {curdate};
+	 CurDoc.Pay_Date		= {curdate};
+	 CurDoc.Shifr_Oper	= "09";
+	 CurDoc.Kind_Oper	= " 1";
+	 CurDoc.Kind_Carry	= 0;
+	 CurDoc.Symbol_Cach	= "  0";
+	 CurDoc.Numb_Document	= "4";
+	 CurDoc.Payer		= unistr.RS_Client_Name;
+	 CurDoc.Receiver	= GetNameAccount (RubDoc.Account_Receiver);
+	 CurDoc.iApplicationKind = 8;
+	 CurDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Перевод денежных средств по системе Юнистрим. Сумма " + StrSubst(string(unistr.Amount),".","-") + " " + GetCurrencyName(myCurrency) +" комиссия " + StrSubst(string(unistr.Commis2 + unistr.Commis3),".","-") + " " + GetCurrencyName(myCurrency) + ".";
+	 CurDoc.Ground		= myGround;
+
+         myError4 = MakePostDoc (1, CurDoc);
+         if(myError4 != 0)
+	  msgbox(myError4);
+	 end;
+
+
+
+
+
+
+
+	 if ((myError1 == 0) and (myError2 == 0) and (myError3 == 0) and (myError4 == 0))
+	     msgbox ("Сформированы отложенные документы"); 
+	 end;
+
+end;
+
+
+
+macro RashodValuta()
+//	 msgbox("Формируем основной валютный документ");
+
+	 CurDoc.Account_Payer = unistr.RS_Account;
+	 if (myCurrency == 840)
+ 	 CurDoc.Account_Receiver = myCashAccUSD;
+	 elif (myCurrency == 978)
+ 	 CurDoc.Account_Receiver = myCashAccEUR;
+	 end;
+
+
+	 CurDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.Number_Pack	= myPackRashodCurDoc;
+	 CurDoc.Sum 		= unistr.Amount;
+	 CurDoc.Code_Currency   = myCurrency;
+	 CurDoc.Date_Document	= {curdate};
+	 CurDoc.Pay_Date	= {curdate};
+	 CurDoc.Shifr_Oper	= "03";
+	 CurDoc.Kind_Oper	= " 3";
+	 CurDoc.Symbol_Cach	= "  0";
+	 CurDoc.Kind_Carry	= 0;
+	 CurDoc.Numb_Document	= "1";
+	 CurDoc.Payer		= unistr.RS_Client_Name;
+	 CurDoc.Receiver	= unistr.RS_Client_Name;
+	 CurDoc.iApplicationKind = 8;
+	 CurDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Выплата денежных средств, поступивших по системе \"Юнистрим\". ";
+
+	 CurDoc.Ground		= myGround;
+		
+         myError1 = MakePostDoc (1, CurDoc);
+         if(myError1 != 0)
+	  msgbox(myError1);
+	 end;
+
+
+//	 msgbox("Формируем документ комиссии (сложная проводка 1111)");
+	 if (myCurrency == 840)
+	 CurDoc.Account_Payer = my47423USD;
+	 elif (myCurrency == 978)
+	 CurDoc.Account_Payer = my47423EUR;
+	 end;
+
+	 CurDoc.Account_Receiver = myTaxAccCur;
+	 CurDoc.OKPO_Payer	=  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.OKPO_Receiver   =  GetClientINN(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.KPP_Payer       =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Payer));
+	 CurDoc.KPP_Receiver    =  GetClientKPP(GetClientCodeByAccount(CurDoc.Account_Receiver));
+	 CurDoc.Number_Pack	= myPackRashodCurTax;
+	 CurDoc.Sum 		= unistr.Commis1 ;
+	 CurDoc.Code_Currency   = myCurrency;
+	 CurDoc.Date_Document	= {curdate};
+	 CurDoc.Pay_Date	= {curdate};
+	 CurDoc.Shifr_Oper	= "09";
+	 CurDoc.Kind_Oper	= " 1";
+	 CurDoc.Symbol_Cach	= "  0";
+	 CurDoc.Kind_Carry	= myRashodValutaKind_Carry;
+	 CurDoc.Numb_Document	= "2";
+	 CurDoc.Payer		= GetNameAccount(CurDoc.Account_Payer);
+	 CurDoc.Receiver	= GetNameAccount(CurDoc.Account_Receiver);
+	 CurDoc.iApplicationKind = 8;
+	 CurDoc.ApplicationKey	= GetApplicationKey ();
+         myGround = "Комиссия банка за выплату денежных средств, поступивших по системе \"Юнистрим\" от " + unistr.Transfer_Date;
+
+	 CurDoc.Ground		= myGround;
+		
+         myError2 = MakePostDoc (1, CurDoc);
+         if(myError2 != 0)
+	  msgbox(myError2);
+	 end;
+
+
+
+	 if ((myError1 == 0) and (myError2 == 0))
+	     msgbox ("Сформированы отложенные документы"); 
+	 end;
+
+end;
+
+
+macro myEdit(dl,cmd,id,key)
+
+myReturn = 0;
+
+  macro SaveData(status)
+  //процедура сохраняет в структуре unistr
+  //клиента, счет и т.д.
+   if (status == "no_acc") //счета нет вообще
+	  unistr.RS_Account = "";
+	  unistr.RS_Account_Status = "нет счета";
+	  Update (unistr);
+	  dl.RS_Account_Status = unistr.RS_Account_Status;
+         UpdateFields(dl);
+   end;
+
+
+   if (status == "open_acc") //открыли новый счет
+	  unistr.RS_Account = dl.RS_Account;
+	  unistr.RS_Account_Status = "открыт";
+	  Update (unistr);
+	  dl.RS_Account_Status = unistr.RS_Account_Status;
+         UpdateFields(dl);
+   end;
+
+   if (status == "close_acc") //закрыли счет
+	  unistr.RS_Account = dl.RS_Account;
+	  unistr.RS_Account_Status = "закрыт";
+	  Update (unistr);
+	  dl.RS_Account_Status = unistr.RS_Account_Status;
+         UpdateFields(dl);
+   end;
+
+
+   if (status == "open_cl") //привязали клиента
+          unistr.RS_Client_Code = dl.RS_C_C;
+	  unistr.RS_Client_Name = dl.RS_C_N;
+	  Update (unistr);
+   end;
+  end;
+
+
+macro SetCloseAcc(myAccount)
+
+ file Acc (account, "bank.def") key 0 write;
+ file AccCurr ("account$.dbt", "bank.def") key 0 write;
+
+  // процедура закрывает счет
+    // 1- проверить остаток
+    myCurrency = Int(SubStr(myAccount, 6, 3));
+    if (myCurrency == 810)
+	myCurrency = 0;
+    end;
+    if (myCurrency == 0)
+      if (RestA(myAccount) != 0)
+         msgbox ("На счете ненулевой остаток!!!");
+         return CM_IGNORE; 
+      end;
+    else
+      if ((RestA(myAccount) != 0) or (RestAC(myAccount, myCurrency) != 0))
+         msgbox ("На счете ненулевой остаток!!!");
+         return CM_IGNORE; 
+      end;
+    end;
+    // закрываем счет
+
+      Acc.Account = myAccount;
+      if (GetEQ(Acc))
+        if (Acc.Open_Close ==  "З");
+	  msgbox ("Рублевый счет ",myAccount," был закрыт ранее");
+        else
+         Acc.Open_Close = "З";
+         Acc.Close_Date = {curdate};
+         Update (Acc);
+         msgbox("Рублевый счет закрыт");
+         SaveData("close_acc");
+        end;
+      else
+         msgbox("Рублевый счет не найден");
+      end;
+
+      if (myCurrency != 0)
+      AccCurr.Account = myAccount;
+      AccCurr.Code_Currency = myCurrency;
+        if (GetEQ(AccCurr))
+         if (AccCurr.Open_Close ==  "З");
+   	   msgbox ("Валютный счет ",myAccount," был закрыт ранее");
+         else
+           AccCurr.Open_Close = "З";
+           AccCurr.Close_Date = {curdate};
+           Update (AccCurr);
+           SaveData("close_acc");
+         msgbox("Валютный счет закрыт");
+         end;
+	 else
+         msgbox("Рублевый счет не найден");
+        end;
+      end;
+
+
+end;
+
+
+
+
+MACRO MyCarryAcc()
+// открытие счета
+var   _error=0,                               /* код ошибки выполнения транзакции    */
+      _errorMessage="",                        /* текст ошибки выполнения транзакции  */
+      atmp="";
+
+var   l,i,tmp="",k="";
+//var   s="11";
+//var   hv="00015";
+var   client = dl.RS_C_C;
+var   szAccountName = dl.RS_C_N;
+var myCurrency;
+
+   ClearRecord(balanceOBR);
+   ClearRecord(balanceOBC);
+
+// определяем валюту
+   if (Substr(dl.RS_Account,6,3) == "810")
+	myCurrency = 0;
+   else
+       myCurrency = int(Substr(dl.RS_Account,6,3));
+   end;
+
+ if (myCurrency != 0)
+   // открываем 2 счета - покрытие и валюта
+   _accountr.Account= dl.RS_Account;
+   atmp=_accountr.Account;
+   _accountr.Balance=SubStr(_accountr.Account,1,5);
+   _accountr.Kind_Account="П";
+   _accountr.Type_Account="П";
+   _accountr.client=dl.RS_C_C;//Како-то код неважно
+   _accountr.NameAccount=szAccountName;//Какое-то название неважно
+   _accountr.oper={oper};
+   _accountr.Open_date={curdate};
+  
+   CarryAccount( 1, 
+                    0, 
+                    _accountr.Account, 
+                    _accountr, 
+                    balanceOBR, 
+                    1, 
+                    _error, 
+                    _errorMessage );
+
+   if(_error==0)
+      // устанавливаем схему переоценки для счета
+      mySetORScheme (atmp);
+   end;
+   
+   if(_error!=0)
+      msgbox("Ошибка при открытии счета покрытия ",_errorMessage);
+      myReturn = -1;
+      return -1;
+   end;
+
+   
+//   _account.Account = dl.RS_Account;
+   _account.Account=atmp;
+   _account.Connect_Account=atmp;
+   _account.Balance=SubStr(_account.Account,1,5);
+   _account.Kind_Account="П";
+
+   _account.client=client;
+   _account.NameAccount=szAccountName;
+
+   _account.oper={oper};
+   _account.Open_date={curdate};
+  
+   CarryAccount( 1, 
+                 myCurrency, 
+                 _account.Account, 
+                 _account, 
+                 balanceOBC, 
+                 1, 
+                 _error, 
+                 _errorMessage );
+
+  if(_error!=0)
+      msgbox("Ошибка при открытии вал.счета ",_errorMessage);
+      myReturn = -1;
+      return -1;
+  else
+      myReturn = 0;
+      return 0;
+  end;
+
+
+
+ else
+   // только рубли
+   _accountr.Account= dl.RS_Account;
+   atmp=_accountr.Account;
+   _accountr.Balance=SubStr(_accountr.Account,1,5);
+   _accountr.Kind_Account="П";
+   _accountr.Type_Account="";
+   _accountr.client=dl.RS_C_C;//Како-то код неважно
+   //   _accountr.NameAccount=szAccountName;//Какое-то название неважно
+   _accountr.NameAccount="Операции по переводам средств клиентов-физ.лиц по системе \"Юнистрим\"";
+   _accountr.oper={oper};
+   _accountr.Open_date={curdate};
+  
+   CarryAccount( 1, 
+                    0, 
+                    _accountr.Account, 
+                    _accountr, 
+                    balanceOBR, 
+                    1, 
+                    _error, 
+                    _errorMessage );
+   
+   if(_error!=0)
+      msgbox("Ошибка при открытии руб.счета ",_errorMessage);
+      myReturn = -1;
+      return -1;
+   end;
+ end;
+  
+END;
+
+
+
+
+if (cmd == DLG_INIT)
+	Message("~F2~-открыть счет ~F3~-синхро/спр. клиентов ~F4~-поиск клиента ~F8~-закрыть счет ~F9~- в отложенные");
+//заполнение полей
+dl.P_FIO 	= unistr.SENDER_LASTNAME +" "+ unistr.SENDER_FIRSTNAME +" "+ unistr.SENDER_MIDDLENAME;
+dl.P_Doc_Type 	= GetDocName(GetUnistreamDocType (unistr.Sender_DocID));
+dl.P_Doc_Num	= unistr.Sender_DocSeries + " " + unistr.Sender_DocNumber;
+dl.Sum		= unistr.RealAmount;
+dl.Payment_Date      = unistr.Transfer_Date;	
+
+if (unistr.Currency_ID == 810)
+	dl.Cur		= "Рубли РФ"
+end;
+if (unistr.Currency_ID == 840)
+	dl.Cur		= "Доллары США"
+end;
+if (unistr.Currency_ID == 978)
+	dl.Cur		= "ЕВРО"
+end;
+
+dl.P_Number	= unistr.Alter_Control;
+dl.R_FIO 	= unistr.Receiver_LastName +" "+ unistr.Receiver_FirstName +" "+ unistr.Receiver_MiddleName;
+dl.R_Doc_Type 	= GetDocName(GetUnistreamDocType (unistr.Receiver_DocID));
+dl.R_Doc_Num	= unistr.Receiver_DocSeries + " " + unistr.Receiver_DocNumber;
+
+if (unistr.RS_Client_Code != 0) 
+  // стоит реальный код клиента
+  dl.RS_C_N 	= unistr.RS_Client_Name;
+  dl.RS_C_C	= unistr.RS_Client_Code;
+  dl.RS_C_D_T = GetClientDocType(unistr.RS_Client_Code);
+  dl.RS_D_N   = GetClientDocSer(unistr.RS_Client_Code) + " " + GetClientDocNum(unistr.RS_Client_Code);
+else
+  dl.RS_C_N 	= "";
+  dl.RS_C_C	= 0;
+end;
+dl.RS_Account	= unistr.RS_Account;
+dl.RS_Account_Status	= unistr.RS_Account_Status;
+
+UpdateFields(dl);
+end;
+
+if (cmd == DLG_KEY)
+
+  if (key == C_F2)
+
+	if (unistr.RS_Account_Status == "закрыт")
+  	    msgbox("Счет закрыт!! Операции по данному переводу запрещены");
+        return CM_IGNORE; 
+        end;
+
+
+        if (String(unistr.Currency_ID) != SubStr(dl.RS_Account,6,3))
+           msgbox ("Вы пытаетесь открыть счет не в той валюте!");
+          return CM_IGNORE; 
+        end;
+
+	if (dl.RS_Account_Status == "открыт")
+	   msgbox ("Счет уже открыт");
+          return CM_IGNORE; 
+	end;
+
+/*
+	if (dl.RS_Account_Status == "закрыт")
+	   msgbox ("Закрытый счет повторно не открывается");
+          return CM_IGNORE; 
+	end;
+*/
+
+	if (StrLen(dl.RS_Account) != 20)
+	   msgbox ("Длина счета 20 знаков");
+          return CM_IGNORE; 
+	end;
+
+       if (dl.RS_C_C == 0) 
+          msgbox("Сначала заведите клиента!");
+          return CM_IGNORE; 
+       end;
+
+	dl.RS_Account = GetKey(dl.RS_Account, "682");
+	UpdateFields(dl);
+
+	//здесь проверим, а нет ли счета среди закрытых в RS-Bank
+	//вот здесь проверим, а не открыт ли счет в RS-Bank
+       if (unistr.Currency_ID == 810)
+           if (isAccOpenR (dl.RS_Account))
+	        if( GetTRUE(TRUE, "Этот счет открыт ранее. Привязать его к этому переводу?"))
+		        SaveData("open_acc");
+			return CM_IGNORE; 
+		end;
+    	   end;  
+           if (isAccCloseR (dl.RS_Account))
+	        if( GetTRUE(TRUE, "Этот счет уже закрыт ранее. Привязать его к этому переводу?"))
+		        SaveData("close_acc");
+			return CM_IGNORE; 
+		 else
+			return CM_IGNORE; 
+		 end;
+    	   end;  
+
+	else
+           if (isAccOpenC (dl.RS_Account))
+	        if( GetTRUE(TRUE, "Этот счет открыт ранее. Привязать его к этому переводу?"))
+		        SaveData("open_acc");
+			return CM_IGNORE; 
+		end;
+    	   end;  
+           if (isAccCloseC (dl.RS_Account))
+	        if( GetTRUE(TRUE, "Этот счет уже закрыт ранее. Привязать его к этому переводу?"))
+		        SaveData("close_acc");
+			return CM_IGNORE; 
+		 else
+			return CM_IGNORE; 
+		 end;
+    	   end;  
+	end;
+
+	ret=ProcessTrn(5,"MyCarryAcc");
+	if (myReturn == 0)
+        SaveData("open_acc");
+	msgbox ("Счет открыт - данные сохранены в БД");
+	else
+	msgbox ("Ошибка при открытии счета - Обратитесь к администратору");
+	end;
+
+    return CM_IGNORE; 
+  end;
+
+
+
+  if (key == C_F3)
+
+	if (unistr.RS_Account_Status == "закрыт")
+  	    msgbox("Счет закрыт!! Операции по данному переводу запрещены");
+        return CM_IGNORE; 
+        end;
+
+
+
+// 11 - поле Клиент в базе RS-Bank
+// 12 - поле Счет
+    if (id == 11)
+        myClientID = 0;
+	myClientCode = 0;
+        // вызываем справочник клиентов
+		ListClient (0,0,0,myClientID,0, myClientCode);
+                if((myClientCode) != 0)
+		        if( GetTRUE(TRUE, "Привязать выбранного клиента к переводу?"))
+		         dl.RS_C_C 	= myClientCode;
+		         dl.RS_C_N 	= getClientName(myClientCode);
+		         dl.RS_C_D_T = getClientDocType(myClientCode);
+		         dl.RS_D_N	= Trim(getClientDocSer(myClientCode) + " " + getClientDocNum(myClientCode));
+		         UpdateFields(dl);
+			 SaveData("open_cl");    
+			 return CM_IGNORE; 
+			end;
+		end
+    elif (id == 12)
+
+	msgbox ("Синхро");
+        if (SubStr(dl.RS_Account,6,3) == "810") 
+	// рубли
+
+		// проверяем наличие счета
+		if (NOT IsExistAccr(dl.RS_Account))
+		    	msgbox ("Нет счета");
+			SaveData("no_acc");
+		    return CM_IGNORE; 
+		end;
+
+		// счет есть, смотрим статус
+		if (IsAccCloseR(dl.RS_Account))
+		//счет закрыт
+		        SaveData("close_acc");
+		    return CM_IGNORE; 
+		else
+		        SaveData("open_acc");
+		    return CM_IGNORE; 
+
+		end;
+		
+	else
+	// валюта
+
+		// проверяем наличие счета
+		if (NOT IsExistAccC(dl.RS_Account))
+		    	msgbox ("Нет счета");
+			SaveData("no_acc");
+		    return CM_IGNORE; 
+		end;
+
+		// счет есть, смотрим статус
+		if (IsAccCloseC(dl.RS_Account))
+		//счет закрыт
+		        SaveData("close_acc");
+		    return CM_IGNORE; 
+		else
+		        SaveData("open_acc");
+		    return CM_IGNORE; 
+
+		end;
+
+	end;
+
+    return CM_IGNORE; 
+   end;
+  end;
+
+  if (key == C_F4)
+
+	if (unistr.RS_Account_Status == "закрыт")
+  	    msgbox("Счет закрыт!! Операции по данному переводу запрещены");
+        return CM_IGNORE; 
+        end;
+
+
+	if (myUniFilial == Trim(unistr.RealBank_Prefix))
+	//	msgbox("прием перевода");
+		ContactWay = 1;  //Направление перевода. 0-отправляем, 1-принимаем
+	else
+	//	msgbox("отправка перевода");
+		ContactWay = 0;
+	end;
+
+
+
+
+      myVal = Search_Client(unistr.RS_Client_Name, unistr.alter_control);
+      if (myVal != "0")
+         // получили код найденного клиента
+         dl.RS_C_C 	= myVal;
+         dl.RS_C_N 	= getClientName(myVal);
+         dl.RS_C_D_T = getClientDocType(myVal);
+         dl.RS_D_N	= Trim(getClientDocSer(myVal) + " " + getClientDocNum(myVal));
+         UpdateFields(dl);
+	  SaveData("open_cl");    
+      end;
+    return CM_IGNORE; 
+  end;
+
+/*
+  if (key == C_F7)
+	msgbox("Процедура печати ордера");
+    return CM_IGNORE; 
+  end;
+*/
+
+  if (key == C_F8)
+    //	msgbox("Процедура закрытия счета");
+    //1- проверяем, может счет уже закрыт из другого меню RS-Bank
+
+	if (unistr.RS_Account_Status == "закрыт")
+  	    msgbox("Счет закрыт!! Операции по данному переводу запрещены");
+        return CM_IGNORE; 
+        end;
+
+
+    if( NOT GetTRUE(TRUE, "Вы действительно хотите закрыть счет?") )
+    return CM_IGNORE; 
+    end;
+
+    if (SubStr(unistr.RS_Account,6,3) == "810") 
+       //рубли
+	if (IsAccCloseR(unistr.RS_Account))
+         msgbox("Счет уже был закрыт ранее - статус изменен");
+         //счет закрыт, нужно обновить инфу
+         SaveData("close_acc");
+         return CM_IGNORE; 
+	else
+    //2- Проверяем, что в отложенных документах нет док-ов с этим счетом	
+         if (IsPostDoc(unistr.RS_Account))
+  	   msgbox ("В отложенных есть документы с таким счетом - сначала удалите их");
+           return CM_IGNORE; 
+	 end;
+         // закрываем счет
+         SetCloseAcc(unistr.RS_Account);
+	end;
+     else
+       //(валюта)
+	if (IsAccCloseC(unistr.RS_Account))
+         msgbox("Счет уже был закрыт ранее - статус изменен");
+         //счет закрыт, нужно обновить инфу
+         SaveData("close_acc");
+         return CM_IGNORE; 
+	else
+         // закрываем счет
+         SetCloseAcc(unistr.RS_Account);
+	end;
+
+     end;
+
+    return CM_IGNORE; 
+  end;
+
+  if (key == C_F9)
+
+
+	if (unistr.RS_Account_Status == "закрыт")
+  	    msgbox("Счет закрыт!! Операции по данному переводу запрещены");
+        return CM_IGNORE; 
+        end;
+
+
+//msgbox(" проверка на внутренний перевод между доп. офисами банка");
+/*
+	if (((Trim(contpaym.Bank_Payer)=="ZRVM") or
+             (Trim(contpaym.Bank_Payer)=="ZRVO") or
+             (Trim(contpaym.Bank_Payer)=="ZRVN")) and
+ 	    ((Trim(contpaym.Bank_Receiver)=="ZRVM") or
+             (Trim(contpaym.Bank_Receiver)=="ZRVO") or
+             (Trim(contpaym.Bank_Receiver)=="ZRVN")))
+
+		msgbox ("Внутренний перевод!!! - Определите направление для печати док.");
+		myArr(0) = "Прием перевода";
+		myArr(1) = "Выплата перевода";
+		myMenu = menu(myArr, "Выберите тип перевода для печати документов");
+		if (myMenu < 0)
+		        return CM_IGNORE; 
+		end;
+
+		if (myMenu == 0)
+			myPrihod = true;
+		else
+			myPrihod = false;
+		end;
+
+//проверка для всех "наших" точек контакта
+	elif ((Trim(contpaym.Bank_Payer)=="ZRVM") or
+             (Trim(contpaym.Bank_Payer)=="ZRVO") or
+             (Trim(contpaym.Bank_Payer)=="ZRVN"))
+
+//	msgbox("прием перевода");
+	myPrihod = true;
+	else
+//	msgbox("выплата перевода");
+	myPrihod = false;
+	end;
+*/
+        if (unistr.RealBank_Prefix == myUniFilial)
+//	msgbox("выплата перевода");
+	myPrihod = false;
+	else
+//	msgbox("прием перевода");
+	myPrihod = true;
+        end;
+
+	if (SubStr(unistr.RS_Account, 6, 3) == "810")
+//		msgbox("рублевый платеж");
+	myCurrency = 0;
+	RubDoc.Oper = {oper};
+	if (myPrihod)
+		PrihodRubli();
+	else
+		RashodRubli();
+	end;
+
+	else
+	//валюта
+	myCurrency = int(SubStr(unistr.RS_Account, 6, 3));
+
+	if (myPrihod)
+		PrihodValuta();
+	else
+		RashodValuta();
+	end;
+
+	end;
+    return CM_IGNORE; 
+  end;
+
+end;
+
+
+
+//msgbox (contpaym.RS_Client_Name);
+end;
+
+
+macro MainList()
+ SetScroll(unistr,"Num","RS_Client_Code","Dat","Transfer_Date","Ac","RS_Account","CC","RS_Account_Status","F","RS_Client_Name");
+ unilist.header = "            Список операций по системе \"Юнистрим\"";
+ if (RunDialog(unilist,"myScroll"))
+	    RunDialog (uniedit,"myEdit");
+ end;
+end;
+
+
+
+
+macro myScroll (dl,cmd,id,key)
+
+if (cmd == DLG_INIT)
+	Message("~F2~-загрузить документ ~Alt-1~ - ~Alt-4~ -фильтр  ~ENTER~ - Ред.");
+end;
+
+
+if (cmd == DLG_KEY)
+
+if ((key == ENTER) and (FindCol (dl, id) == -1))
+  return CM_IGNORE; 
+end;
+
+
+ if ((key == c_RIGHTKEY) or 
+       (key == c_TABKEY) or
+       (key == c_CTRLRIGHTKEY))
+//MsgBox(FindCol (dl, id));
+   if (FindCol (dl, id) == 3) return CM_IGNORE; 
+   end;
+
+ elif ((key == c_LEFTKEY) or
+       (key == c_SHIFTTABKEY) or
+       (key == c_CTRLLEFTKEY))
+   if (FindCol (dl, id) == 0) return CM_IGNORE; 
+   end;
+
+
+ elif (key == C_F2)
+
+   Import_Unistream(unistr);
+   KeyNum (unistr,0);
+   rewind (unistr);
+   FillUp (dl, GetPos(unistr));
+
+//    if (row > lastUsed)
+     SetFocus (dl, FldIndex (dl, DlgFields (FindCol (dl, id)) + lastUsed))
+//    end;
+//переместить курсор на первую строку
+
+ elif (key == ALT1) // без фильтра
+    myView = 0;
+         curRow = FindCol (dl,id);
+         if (curRow != -1)
+           rewind (Scrff);
+           if (next (Scrff))
+             FillDown (dl,GetPos (Scrff));
+             SetFocus (dl,FldIndex (dl,DlgFields (curRow) + 0));
+           end;
+         end;
+    UpdateFields(dl);
+
+ elif (key == ALT2) //фильтр открытые
+    myView = 1;
+         curRow = FindCol (dl,id);
+         if (curRow != -1)
+           rewind (Scrff);
+           if (next (Scrff))
+             FillDown (dl,GetPos (Scrff));
+             SetFocus (dl,FldIndex (dl,DlgFields (curRow) + 0));
+           end;
+         end;
+    UpdateFields(dl);
+
+ elif (key == ALT3) //фильтр закрытые
+    myView = 2;
+         curRow = FindCol (dl,id);
+         if (curRow != -1)
+           rewind (Scrff);
+           if (next (Scrff))
+             FillDown (dl,GetPos (Scrff));
+             SetFocus (dl,FldIndex (dl,DlgFields (curRow) + 0));
+           end;
+         end;
+    UpdateFields(dl);
+
+ elif (key == ALT4) //фильтр - нет счета
+    myView = 3;
+         curRow = FindCol (dl,id);
+         if (curRow != -1)
+           rewind (Scrff);
+           if (next (Scrff))
+             FillDown (dl,GetPos (Scrff));
+             SetFocus (dl,FldIndex (dl,DlgFields (curRow) + 0));
+           end;
+         end;
+    UpdateFields(dl);
+
+ elif (key == ENTER)
+         curRow = FindRow (dl,id);
+         if (curRow >= 0)
+           if (curRow <= lastUsed)
+             if (GetDirect (Scrff,Apos (curRow)))
+
+		if (NOT IsYourDepartUnistream(unistr.alter_control, {oper}))
+		  return CM_IGNORE; 
+		end;
+               RunDialog (uniedit,"myEdit");
+		 SetDlgFields (dl, curRow);
+               UpdateFields(dl);
+             end;
+
+             return CM_IGNORE;
+           end
+         end
+ end;
+
+
+end;
+	return ScrollMes (dl, cmd, id, key);
+
+end;
+
+
+
+
+
+mainlist();
+exit (1);
+
+
+end;

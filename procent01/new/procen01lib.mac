@@ -1,0 +1,144 @@
+import "..\\mac\\bfsofia\\UtlLib.mac";
+import "..\\mac\\bfsofia\\ClnLib.mac";
+import "..\\mac\\bfsofia\\AccLib.mac";
+import ClnInter;
+import "param.mac";
+
+//add Polyakov S.George 15.10.2012
+//макрос для проверки сумм для исключения из удержания процента
+macro macP01lCheckNotSum(dprt1:integer,sAcc2:string,bReceiv:bool,mfo:string):bool
+//bPayer==true  sAcc2-получатель
+//bPayer==false sAcc2-плательщик
+  var
+     bal3:string,
+     bal5:string,
+     bRet:bool;
+  bRet=false;
+  if (bReceiv)
+    bal3=SubStr(sAcc2,1,3);
+    bal5=SubStr(sAcc2,1,5);
+    if (
+        (bal3=="452") or
+        (bal3=="453") or
+        (bal3=="454") or
+        (bal5=="70601") or
+        (bal5=="47422")
+       )
+       bRet=true;
+    end;   
+  else
+   bal3=SubStr(sAcc2,1,3);
+   bal5=SubStr(sAcc2,1,5);
+   if (
+       (bal5=="30302") or
+       (bal3=="452") or
+       (bal3=="453") or
+       (bal3=="454") or
+       (
+        (int(bal3)>401) and
+        (int(bal3)<409) and
+        (bal5!="40817")
+       ) 
+      )
+     bRet=true;
+   end;
+  end;
+  return bRet;
+end;
+
+//формирование документа для проводки по передаваемой сумме
+//add Polyakov S.George 11.10.2012
+macro macP01lpostdoc(iNum:integer,mSum:money,sAccPayer:string):bool
+  var
+     bRet:bool,
+     oTblPost:object,
+     iD:integer,iM:integer,iY:integer,
+     sINNP:string,
+     sNotePay:string,
+     iOper:integer,
+     sNamePayer:string,
+     iDep:integer,
+     iCodePayer:integer,
+     sKppPayer:string,
+     sAccRec:string,
+     iNumPack:string,
+     sNameReceiver:string;
+
+  const
+     S_ACC_REC1:string="70601810402022102015", //счет для зачисления
+     I_NUM_PACK1:integer=111,
+     S_SHIFR_OPER:string="17",
+     I_PAYMENT:integer=6,
+     S_KIND_OPER:string="1",
+     S_SYMBOL_CACH:string="  0";
+
+  bRet=false;
+  iD=0;iM=0;iY=0;
+  iCodePayer=0;
+  sNamePayer="";
+  sNameReceiver="";
+  sINNP="";
+  iDep=0;
+  iOper=-2;
+  sKppPayer="";
+  DateSplit({curdate},iD,iM,iY);
+  sNotePay="Комиссия за исполнение пл.поручений в день зачисления денежных "+
+           "средств за "+macULGetStrDate({curdate})+"г. согласно "+ 
+           "установленных тарифов. Без НДС.";
+  oTblPost=TBFile("postdoc.dbt","w",0,null,"bank.def");
+  sAccRec=S_ACC_REC1;
+  iNumPack=I_NUM_PACK1;
+  clearrecord(oTblPost);
+  oTblPost.rec.Account_Payer=sAccPayer;
+  oTblPost.rec.Real_Payer=sAccPayer;
+  oTblPost.rec.Account_Receiver=sAccRec;
+  oTblPost.rec.Real_Receiver=sAccRec;
+  oTblPost.rec.Sum=mSum;
+  oTblPost.rec.Number_Pack=iNumPack;
+  oTblPost.rec.Date_Value={curdate};
+  oTblPost.rec.Numb_Document=String(iNum);
+  oTblPost.rec.Date_Document={curdate};
+  oTblPost.rec.Kind_Oper=S_KIND_OPER;
+  sNamePayer=macClGetNameClnAcc(sAccPayer,true);
+  if (StrLen(sNamePayer)!=0)
+    iCodePayer=int(MacULGetOneT(sNamePayer,false,"^"));
+    sNamePayer=MacULGetOneT(sNamePayer,true,"^");
+    oTblPost.rec.Payer=sNamePayer;
+    sNameReceiver=macClGetNameClnAcc(sAccRec);
+    if (StrLen(sNameReceiver)!=0)
+      oTblPost.rec.Receiver=MacULGetOneT(sNameReceiver,true,"^");
+      oTblPost.rec.Bank_Payer={Name_Bank};
+      oTblPost.rec.Bank_Receiver={Name_Bank};
+      oTblPost.rec.Ground=sNotePay;
+      if (iCodePayer!=0)
+        sINNP=GetClientInn(iCodePayer);
+        if (StrLen(sINNP)!=0)
+          oTblPost.rec.okpo_payer=sINNP;
+          oTblPost.rec.okpo_receiver=ИНН;
+          oTblPost.rec.symbol_Cach=S_SYMBOL_CACH;
+          oTblPost.rec.Payment=I_PAYMENT;
+          oTblPost.rec.Pay_Date={curdate};
+          iDep=macALGetDprtAcc(sAccPayer);
+          if (iDep!=-2)
+            oTblPost.rec.Department=iDep;
+            oTblPost.rec.shifr_oper=S_SHIFR_OPER;
+            iOper=macALGetOperAcc(sAccPayer);
+            if (iOper!=-2)
+              oTblPost.rec.oper=iOper;
+              sKppPayer=macCLGetKPP(iCodePayer);
+              if (StrLen(sKppPayer)!=0)
+                oTblPost.rec.KPP_Payer=sKppPayer;   
+              end;
+              bRet=true;
+            end;
+          end;
+        end;
+      end;
+    end;
+  end;
+  if (bRet)
+    bRet=insert(oTblPost);
+  end;
+  return bRet;
+end;
+

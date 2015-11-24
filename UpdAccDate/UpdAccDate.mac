@@ -1,0 +1,220 @@
+/*
+Макрос обновления даты открытия счета
+developer Polyakov S.George 28.09.2012
+v.1.00-28.09.2012
+*/
+
+import "..\\mac\\bfsofia\\AccLib.mac";
+import "..\\mac\\bfsofia\\UtlLib.mac";
+import clninter;
+
+//наши клиентские счета с единицей в 14 позиции 
+macro macUDDFindAcc3()
+  var
+     i:integer,
+     j:integer,
+     oTbl_new:object;
+
+  oTbl_new=TBFile("account.dbt","r",0,null,"bank.def");
+  i=0;
+  j=0;
+  rewind(oTbl_new);
+  while(next(oTbl_new))
+    i=i+1;
+    message(i);
+    if (
+        (macALCheckClnAcc(oTbl_new.rec.account)) and
+        (macALYesSym14Acc(oTbl_new.rec.userfield3))
+        )
+      if (
+          (oTbl_new.rec.Department==3) or
+          (oTbl_new.rec.Department==4)   
+         )
+        j=j+1;
+        println(oTbl_new.rec.NameAccount+" Счет новый:"
+                +oTbl_new.rec.account+" Счет старый: "
+                +oTbl_new.rec.userfield3+"\n");
+      end;
+    end;
+  end;
+  println("Итого:"+j);
+end;
+
+//отразить клиентские счета, которые 
+//не закрыты и которые были проигнорированы при обновлении
+macro macUDDFindAcc2()
+  var
+     i:integer,
+     j:integer,
+     oTbl_new:object;
+
+  oTbl_new=TBFile("account.dbt","r",0,null,"bank.def");
+  i=0;
+  j=0;
+  rewind(oTbl_new);
+  while(next(oTbl_new))
+    i=i+1;
+    message(i);
+    if (
+        (macALNotUpdAcc1(oTbl_new.rec.account)) 
+        )
+      if (oTbl_new.rec.Open_close!="З")
+        j=j+1;
+        println("Код клиента:"+oTbl_new.rec.Client+" Счет новый:"
+                +oTbl_new.rec.account+" Счет старый: "+oTbl_new.rec.userfield3+"\n");
+      else
+        println("Закрыт: "+oTbl_new.rec.account+"\n");
+      end;
+    end;
+  end;
+  println("Итого:"+j);
+end;
+
+//отразить клиентские счета, которые были открыты 06.08.2012
+macro macUDDFindAcc1()
+  var
+     i:integer,
+     j:integer,
+     oTbl_new:object;
+
+  oTbl_new=TBFile("account.dbt","r",0,null,"bank.def");
+  i=0;
+  j=0;
+  rewind(oTbl_new);
+  while(next(oTbl_new))
+    i=i+1;
+    message(i);
+    if (
+        (oTbl_new.rec.Open_Date==Date(6,8,2012)) and
+        (macALCheckClnAcc(oTbl_new.rec.account))  
+        )
+      j=j+1;
+      println(oTbl_new.rec.NameAccount+" Счет новый:  "
+              +oTbl_new.rec.account+" Подр-е: "+oTbl_new.rec.department
+              +" Счет открыт 06.08.2012\n");
+    end;
+  end;
+  println("Итого:"+j);
+end;
+
+//счета, открытые 06.08.2012, но не 3 или 4 подразделения
+macro macUDDFindAcc()
+  var
+     i:integer,
+     oTbl_new:object;
+
+  oTbl_new=TBFile("account.dbt","r",0,null,"bank.def");
+  i=0;
+  rewind(oTbl_new);
+  while(next(oTbl_new))
+    i=i+1;
+    if (
+        (oTbl_new.rec.Open_Date==Date(6,8,2012)) and
+        (oTbl_new.rec.Department!=3) and
+        (oTbl_new.rec.Department!=4)
+        )
+      println("Счет новый:  "
+              +oTbl_new.rec.account+" Подр-е: "+oTbl_new.rec.department
+              +" Счет открыт 06.08.2012 но не 3 и 4 \n");
+    end;
+  end;
+end;
+
+//основной макрос
+macro macUDDMain()
+  var
+     oTbl_old:object,
+     sOldTmp:string,
+     dChg:date,
+     i:integer,
+     e:integer,
+     k:integer,
+     j:integer,
+     oTbl_new:object;
+
+  oTbl_old=TBFile("account.dbt","r",0,"..\\account.dbt","bank.def");
+  oTbl_new=TBFile("account.dbt","w","0",null,"bank.def");
+  i=0;
+  j=0;
+  k=0;
+  e=0;
+  rewind(oTbl_new);
+  while(next(oTbl_new))
+    i=i+1;
+    if (
+        (
+         (oTbl_new.rec.department==3) or
+         (oTbl_new.rec.department==4)
+        ) and
+        (
+         oTbl_new.rec.Open_close!="З"
+        )
+       )
+      if (macALCheckClnAcc(oTbl_new.rec.account))
+        if ((strlen(GetClientINN(oTbl_new.rec.client))!=0))
+          sOldTmp=trim(oTbl_new.rec.userfield3);
+          if (strlen(sOldTmp)!=0)
+            if (macALLenAcc(sOldTmp))
+               if (macULIsNum(sOldTmp))
+                 if (macALNotUpdAcc1(oTbl_new.rec.account)) 
+                     rewind(oTbl_old);
+                     oTbl_old.rec.account=sOldTmp;
+                     if (geteq(oTbl_old))
+                       if (oTbl_old.rec.open_date!=oTbl_new.rec.Open_Date)
+                         j=j+1; //готов к обновлению
+                         dChg=oTbl_new.rec.open_date;
+                         oTbl_new.rec.open_date=oTbl_old.rec.open_date;
+                         if (update(oTbl_new))
+                           k=k+1;
+                           println("Счет старый: "+sOldTmp+"\nСчет новый:  "
+                                    +oTbl_new.rec.account+" Подр-е: "+oTbl_new.rec.department+" "
+                                    +macULGetStrDate(dChg)+" Замена на > "+macULGetStrDate(oTbl_old.rec.open_date)+"\n");
+                         end;
+                       else
+                         e=e+1;
+                         println("Счет старый: "+sOldTmp+"\nСчет новый:  "
+                                 +oTbl_new.rec.account+" Подр-е: "+oTbl_new.rec.department
+                                 +" Даты открытия совпадают \n");
+                       end;
+                     else
+                       e=e+1;
+                       println("Счет: "+sOldTmp+" Подр-е: "+oTbl_new.rec.department
+                                + " не найден в СТАРОМ RS-Bank\n");
+                     end;
+                 end;
+               else
+                 e=e+1;
+                 println("Счет: "+sOldTmp+" Подр-е:"+oTbl_new.rec.department
+                          +" Некорректные символы в СТАРОМ счете\n");
+               end;
+            else
+              e=e+1;
+              println("Счет: "+sOldTmp+" Подр-е: "+oTbl_new.rec.department
+                       +" Некорректная длина СТАРОГО счета!\n");
+            end;
+          else
+            if (oTbl_new.rec.Open_Date==Date(6,8,2012))
+              e=e+1;
+              println("Счет: "+oTbl_new.rec.account+" Подр-е: "+oTbl_new.rec.department
+                       +" Не указан СТАРЫЙ счет!\n");
+            end;
+          end;
+        else
+           println("Счет: "+oTbl_new.rec.account+" Код клиент: "+oTbl_new.rec.client
+                  +" Подр-е: "+oTbl_new.rec.department
+                  +" Отсутствует ИНН!\n");
+        end;
+      end;
+    end;
+  end;
+  println("Найдено счетов для обновления:"+j);
+  println("Успешно обновлено:"+k);
+  println("Проигнорировано:"+e);
+end;
+
+
+if (gettrue(false,"Вы действительно хотите ОБНОВИТЬ даты ОТКРЫТИЯ счетов?"))
+  macUDDMain()
+end;
+
+

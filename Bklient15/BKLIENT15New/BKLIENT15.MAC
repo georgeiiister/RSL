@@ -1,0 +1,94 @@
+ /* Расчет за "Банк-Клиент"
+Просмотр базы счетов, выборка счетов с содержанием в пользовательском поле 
+значения "A" и формирование в отложенных документах проводки на оплату 
+15$ по текущему курсу из currency.dbt  */
+
+file cl (client) key 0;
+file acc (account);
+file post (postdoc) key 0 write;
+file cdat (curdate);
+file tblcur(currency) key 0;
+
+ARRAY keys;
+  keys(0) = "январь ";  keys(1) = "февраль ";  keys(2) = "март ";
+  keys(3) = "апрель ";  keys(4) = "май ";  keys(5) = "июнь ";
+  keys(6) = "июль ";  keys(7) = "август ";  keys(8) = "сентябрь ";
+  keys(9) = "октябрь ";  keys(10) = "ноябрь ";  keys(11) = "декабрь ";
+
+var ndoc=1,  /* начальный номер документа */
+    npack=404, /* номер пачки */
+    acc_res="70107810901001731701", /* счет получателя */
+    nai_res="Доходы за обслуживание системы 'Банк-клиент'",
+    gr,
+    nnom=1,
+    sumi=0,
+    year,
+    mon,
+    day,
+    {curdate},
+    {oper},
+    naim_mes,
+    {name_bank},
+    cur_date;
+
+rewind(tblcur);
+tblcur.code_currency=840;
+getEQ(tblcur);
+cur_date=tblcur.cur_rate/100;
+rewind(cdat);
+next(cdat);
+DateSplit(cdat.prevdate,day,mon,year);
+naim_mes=keys(mon-1); 
+gr="За обслуживание системы 'Банк-Клиент' за "+keys(mon-1)+" "+string(year)+
+  "г. согласно договора и установленных тарифов. Без НДС";
+[Список оплаты за систему 'Банк-Клиент' за ######## #### г.
+
+N п/п|         Счет         |  Сумма
+----------------------------------------------------------------------------]
+(naim_mes,year);
+rewind(acc);
+while(next(acc))
+  if (acc.Open_Close!="З")
+    If (Index(trim(acc.UserTypeAccount), "A"))
+      post.Oper={oper};
+      post.Account_Payer=acc.Account;
+      post.Real_Payer=acc.Account;
+      post.Account_Receiver=acc_res;
+      post.Real_Receiver=acc_res;
+      post.Sum=7*Round(cur_date,2);
+      post.Result_Carry=1;
+      post.Number_Pack=404;
+      post.Date_Value={curdate};
+      post.Numb_Document=nnom;
+      post.Date_Document={curdate};
+      post.Kind_Oper=" 1";
+      post.symbol_cach="  0";  
+      post.Payer=acc.NameAccount;
+      post.Receiver=nai_res;
+      post.Bank_Payer={name_bank};
+      post.Bank_Receiver={name_bank};
+      post.symbnotbal="  0";
+      post.Ground=gr;
+      post.Payment=6;
+      post.Pay_Date={curdate};
+      post.Shifr_Oper="09";
+      cl.Client=acc.Client;
+      if (getEQ(cl))
+        post.OKPO_Payer=cl.inn;
+        post.KPP_Payer=cl.KPP;
+      end;
+      insert(post);
+[ ### | #################### | ######
+############################################################################
+----------------------------------------------------------------------------]
+(nnom,acc.Account,post.sum,acc.NameAccount);
+      sumi=sumi+post.Sum;              
+      nnom=nnom+1;
+    end;
+  end;
+end;
+nnom=nnom-1;
+[Итого ### клиентов на общую сумму ###########]
+(nnom,sumi);
+end;
+

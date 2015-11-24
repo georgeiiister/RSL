@@ -1,0 +1,514 @@
+/*
+Макрос с диалогом lbr (!!!) для ручного заполнения журнала регистрации приостановлений 
+developer Polyakov S.George 17.02.2010
+edit Polyakov S.George 30.08.2011
+edit Polyakov S.George 01.09.2011
+edit Polyakov S.George 01.06.2012
+*/
+
+array arrTypeKind;
+array arrStopReas;
+
+//file acc(account,"bank.def") key 0; edit Polyakov S.George 01.09.2011 
+file r_acc0(account,"bank.def") key 0;
+file r_accv0("account$","bank.def") key 0;
+file stop(stop_op,"bank.def") write;
+file stop5(stop_op,"bank.def") key 5;
+file r_stop6(stop_op,"bank.def") key 6;
+file r_ac_ar0(ac_arest,"bank.def") key 0;
+file ac_ar(ac_arest,"bank.def") write;
+file cln(client,"bank.def") key 0;
+file reg(regdoc,"bank.def") key 0;
+file sn("..\\obj\\soun1.dbf") dbf;
+
+record inp (in322p,"..\\lbr\\bfsofia\\bfsofia1.lbr") dialog; //приостановление
+record ino (in322o,"..\\lbr\\bfsofia\\bfsofia1.lbr") dialog; //отмена
+
+strMesLowDlg="~F9~-продолжить ~Esc~ - отменить";
+
+strAcc=""; //Номер счета клиента
+intCode_Cur=0; //Код валюты
+intTypeKind=-1; //Тип сообщения
+strRegNum="";
+strStopNum="";
+dteStopDate=Date(0,0,0);
+strRecNum="";
+dteRecDate=Date(0,0,0);
+mneRecSum=Moneyl(0);
+intStopReas=-1;
+strFileName="";
+strKind="";
+strCanStopN="";
+dteCanStopD=Date(0,0,0);
+chrCanStopKind="";
+flgRet=false;
+flgDblAcc=false;
+bNext=true;
+acc="";
+strStopCirc="";
+strCodeStopReas="";
+strFlgSendSum="";
+bSendSum=true;
+
+const
+     I_CHAPTER=int(1),
+     I_VAL=int(810); //константа национальной валюты
+
+//add Polyakov S.George 01.06.2012
+macro macAddSpace(sIn:string,iLen:integer,sSpace):string
+  var 
+     sRet:string,
+     i:integer;
+  sRet=sIn;
+  i=int(0);
+  if (strLen(sSpace)>0)
+    while(i<iLen-strlen(sIn))
+      sRet=sSpace+sRet;
+      i=i+1;
+    end;
+  end;
+  return sRet;
+end;
+
+//подпрограмма проверки повторного ручного ввода
+macro macCheckRow()
+  intday=0;
+  intmon=0;
+  intyear=0;
+  DateSplit(dteStopDate,intday,intmon,intyear);
+  strday="";
+  strmon="";
+  if (StrLen(String(intday))==1)
+    strday="0"+String(intday);
+  else
+    strday=String(intday);
+  end;
+  if (StrLen(String(intmon))==1)
+    strmon="0"+String(intmon);
+  else
+    strmon=String(intmon);
+  end;
+  strFileName=Trim(String(sn.KOD))+String(intyear)+strmon+strday+"_"+Trim(strStopNum)+"_"+strAcc+"_"+String(mneRecSum)+"_M";
+  if (intTypeKind==1)
+    strKind="Р";
+    strFileName="RPO16359826_"+strFileName;
+  elif (intTypeKind==0)
+    strKind="О";
+    strFileName="ROO16359826_"+strFileName;
+  end;
+  rewind(stop5);
+  stop5.Kind=strKind;
+  stop5.FileName=strFileName;
+  if (getEQ(stop5))
+    return true;
+  else
+    //проверяем на совпадение по номеру и дате сообщения
+    //add Polyakov S.George 30.08.2011
+    rewind(r_stop6);
+    r_stop6.StopNumber=strStopNum;
+    r_stop6.StopDate=dteStopDate;
+    r_stop6.Kind=strKind;
+    if (
+        getEQ(r_stop6)
+       )
+       //найдено дублирующее совпадение
+       //проверить по этому же счету оно
+       //если - ДА, то дубликат полный
+       rewind(r_ac_ar0);
+       r_ac_ar0.ID=r_stop6.ID;
+       if (getEQ(r_ac_ar0))
+         //проверяем полное соответствие - счет, глава счетов, код валюты
+         bNext=true;
+         flgDblAcc=false;
+         //msgbox(intCode_Cur+" "+strAcc);
+         while (bNext)
+           if (r_ac_ar0.ID==r_stop6.ID)
+             if (
+                  (r_ac_ar0.Chapter==I_CHAPTER) and
+                  (r_ac_ar0.Code_Currency==intCode_Cur) and
+                  (r_ac_ar0.Account==strAcc)
+                )
+                //полное совпадение 
+               flgNextAcc=true;
+               bNext=false;
+               return flgNextAcc;
+             else
+               bNext=next(r_ac_ar0);
+             end;
+           else
+             bNext=false;
+           end;
+         end;
+         //закончили цикл - проверяем флаг
+         if (flgNextAcc)
+           return flgNextAcc;
+         else
+           return false;
+         end;
+       else
+         return false;
+       end;
+    else
+       return false;
+    end;
+  end;
+end;
+
+macro macDlgInp(inp,cmd,id,key)
+  if (cmd==DLG_INIT)
+    message(strMesLowDlg);
+    inp.fldAcc=strAcc;
+    inp.fldINN=Trim(reg.regNum);
+    inp.fldShName=Trim(cln.szShortName);
+    inp.fldRegNum=strRegNum;
+    inp.fldStopNum="";
+    inp.fldStopDate=Date(0,0,0);
+    inp.fldRecNum="";
+    inp.fldRecDate=Date(0,0,0);
+    inp.fldRecSum=Moneyl(0);
+    UpdateFields(inp);
+  elif (cmd==DLG_SAVE)
+    //Проверка кода налоговой
+    if (StrLen(Trim(inp.fldRegNum))!=0)
+       flgSn=false;
+        lngCnt=0;
+        rewind(sn);
+        while((not flgSn) and (next(sn)))
+          lngCnt=lngCnt+1;
+          message("ИДЕТ ПРОСМОТР СПРАВОЧНИКА СОУН:"+lngCnt);
+          if ((Trim(inp.fldRegNum)==Trim(sn.KOD)) and (Trim(sn.DATAK)==""))
+            flgSn=true;
+          end;
+        end;
+        message(strMesLowDlg);
+        if (not flgSn)
+          MsgBox("В СПРАВОЧНИКЕ СОУН НЕ НАЙДЕН ДАННЫЙ НО!");
+          SetFocus(inp,0);
+          return CM_CANCEL
+        else
+          strRegNum=fldRegNum;
+        end;
+    else
+       MsgBox("НЕ ПРОСТАВЛЕН КОД НАЛОГОВОГО ОРГАНА");
+       SetFocus(inp,0);
+       Return CM_CANCEL;
+    end;
+    //Проверка номера решения о приостановлении
+    if (StrLen(Trim(inp.fldStopNum))==0)
+      MsgBox("НЕ ПРОСТАВЛЕН НОМЕР РЕШЕНИЯ О ПРИОСТАНОВЛЕНИИ!");
+      SetFocus(inp,1);
+      Return CM_CANCEL;
+    else
+      strStopNum=Trim(inp.fldStopNum);
+    end;
+    if (inp.fldStopDate==Date(0,0,0))
+      MsgBox("УКАЖИТЕ ДАТУ РЕШЕНИЯ О ПРИОСТАНОВЛЕНИИ!");
+      SetFocus(inp,2);
+      Return CM_CANCEL;
+    else
+      dteStopDate=inp.fldStopDate;
+    end;
+    if (StrLen(Trim(inp.fldRecNum))!=0)
+      strRecNum=Trim(inp.fldRecNum);  
+    else
+      strRecNum="";
+    end;
+    dteRecDate=inp.fldRecDate;
+    mneRecSum=inp.fldRecSum;
+    if (macCheckRow)
+      MsgBox("ПОВТОРНЫЙ ВВОД! ЗАПИСЬ УЖЕ ПРИСУТСТВУЕТ В ЖУРНАЛЕ!");
+      Return CM_CANCEL;
+    end;
+  elif(cmd==DLG_DESTROY)
+  elif (cmd==DLG_KEY)
+    if (key==27) //ESC
+      if (not GetTrue(true,"ХОТИТЕ ОТМЕНИТЬ ВВОД?"))
+        Return CM_IGNORE;
+      else
+        Return CM_CANCEL;
+      end;
+    end;
+  end;
+end;
+
+macro macDlgIno(ino,cmd,id,key)
+  if (cmd==DLG_INIT)
+    message(strMesLowDlg);
+    ino.fldAcc=strAcc;
+    ino.fldINN=Trim(reg.regNum);
+    ino.fldShName=Trim(cln.szShortName);
+    ino.fldRegNum=strRegNum;
+    ino.fldStopNum="";
+    ino.fldStopDate=Date(0,0,0);
+    ino.fldRecNum="";
+    ino.fldRecDate=Date(0,0,0);
+    ino.fldCanStopN="";
+    ino.fldCanStopD=Date(0,0,0);
+    ino.fldCanStopKind="1";
+    UpdateFields(ino);
+  elif (cmd==DLG_SAVE)
+    //Проверка кода налоговой
+    if (StrLen(Trim(ino.fldRegNum))!=0)
+       flgSn=false;
+        lngCnt=0;
+        rewind(sn);
+        while((not flgSn) and (next(sn)))
+          lngCnt=lngCnt+1;
+          message("ИДЕТ ПРОСМОТР СПРАВОЧНИКА СОУН:"+lngCnt);
+          if ((Trim(ino.fldRegNum)==Trim(sn.KOD)) and (Trim(sn.DATAK)==""))
+            flgSn=true;
+          end;
+        end;
+        message(strMesLowDlg);
+        if (not flgSn)
+          MsgBox("В СПРАВОЧНИКЕ СОУН НЕ НАЙДЕН ДАННЫЙ НО!");
+          SetFocus(ino,0);
+          return CM_CANCEL
+        else
+          strRegNum=fldRegNum;
+        end;
+    else
+       MsgBox("НЕ ПРОСТАВЛЕН КОД НАЛОГОВОГО ОРГАНА");
+       SetFocus(ino,0);
+       Return CM_CANCEL;
+    end;
+    //Проверка номера решения о приостановлении
+    if (StrLen(Trim(ino.fldStopNum))==0)
+      MsgBox("НЕ ПРОСТАВЛЕН НОМЕР РЕШЕНИЯ ОБ ОТМЕНЕ!");
+      SetFocus(ino,1);
+      Return CM_CANCEL;
+    else
+      strStopNum=Trim(ino.fldStopNum);
+    end;
+    if (ino.fldStopDate==Date(0,0,0))
+      MsgBox("УКАЖИТЕ ДАТУ РЕШЕНИЯ ОБ ОТМЕНЕ!");
+      SetFocus(ino,2);
+      Return CM_CANCEL;
+    else
+      dteStopDate=ino.fldStopDate;
+    end;
+    if (StrLen(Trim(ino.fldCanStopN))==0)
+      MsgBox("НЕ ПРОСТАВЛЕН НОМЕР ОТМЕНЯЕМОГО РЕШЕНИЯ!");
+      SetFocus (ino,5);
+      Return CM_CANCEL;
+    else
+      strCanStopN=Trim(ino.fldCanStopN)
+    end;
+    if (ino.fldCanStopD==Date(0,0,0))
+      MsgBox("УКАЖИТЕ ДАТУ ОТМЕНЯЕМОГО РЕШЕНИЯ!");
+      SetFocus(ino,6);
+      Return CM_CANCEL;
+    else
+      dteCanStopD=ino.fldCanStopD
+    end;
+    if (StrLen(ino.fldCanStopKind)==0)
+       MsgBox("УКАЖИТЕ ВИД ОТМЕНЕННОГО РЕШЕНИЯ!");
+       SetFocus(ino,7);
+       Return CM_CANCEL;
+    else
+       chrCanStopKind=ino.fldCanStopKind;
+    end;
+    if (StrLen(Trim(ino.fldRecNum))!=0)
+      strRecNum=Trim(ino.fldRecNum);  
+    else
+      strRecNum="";
+    end;
+    dteRecDate=ino.fldRecDate;
+    if (macCheckRow)
+      MsgBox("ПОВТОРНЫЙ ВВОД! ЗАПИСЬ УЖЕ ПРИСУТСТВУЕТ В ЖУРНАЛЕ!");
+      Return CM_CANCEL;
+    end;
+  elif(cmd==DLG_DESTROY)
+  elif (cmd==DLG_KEY)
+    if (key==27) //ESC
+      if (not GetTrue(true,"ХОТИТЕ ОТМЕНИТЬ ВВОД?"))
+        Return CM_IGNORE;
+      else
+        Return CM_CANCEL;
+      end;
+    end;
+  end;
+end;
+
+macro macInsMan()
+
+flg=0;
+
+//поиск счета
+//strAcc="40702810701000001326";
+if (GetString(strAcc,"Введите номер счета",20))
+  if (StrLen(Trim(strAcc))!=0)
+    if (substr(strAcc,6,3)==I_VAL)
+      acc=r_acc0;
+    else
+      acc=r_accv0;
+    end;
+    rewind(acc);
+    acc.account=strAcc;
+    acc.code_currency=substr(strAcc,6,3);
+    if (getEQ(acc))
+        //MsgBox("!");
+        flg=1;
+        strAcc=Trim(acc.Account);
+        intCode_Cur=acc.Code_Currency;
+        //msgbox(intCode_cur);
+    else
+      MsgBox("УКАЗАННЫЙ СЧЕТ НЕ НАЙДЕН!");
+    end;
+  end;
+end;
+
+if (flg==1)
+  flg=0;
+  arrTypeKind(0)="РЕШЕНИЕ ОБ ОТМЕНЕ";
+  arrTypeKind(1)="РЕШЕНИЕ О ПРИОСТАНОВЛЕНИИ";
+  intTypeKind=menu(arrTypeKind,"Укажите тип сообщения","Укажите тип собщения");
+  if ((intTypeKind==1) or (intTypeKind==0))
+    //MsgBox(intTypeKind);
+    flg=1;
+  end;
+end;
+
+if (flg==1)
+  flg=0;
+  //поиск клиента и ИНН
+  cln.Client=acc.Client;
+  if (getEQ(cln))
+    //найден клиент в таблице client.dbt
+    reg.Client=cln.Client;
+    reg.RDKind=100; //!!! Извлекаем ИНН
+    if (getEQ(reg))
+      strRegNum=SubStr(Trim(reg.RegNum),1,4);
+      flg=1;
+    else
+      if (GetTrue(true,"ИНН ДЛЯ КЛИЕНТА НЕ НАЙДЕН! ПРОДОЛЖИТЬ?"))
+         flg=1;
+      end;
+    end;
+  else
+    MsgBox("КЛИЕНТ С ДАННЫМ СЧЕТОМ НЕ НАЙДЕН!");
+  end;
+end;
+
+//работа с диалогом
+
+if (flg==1)
+  flg=0;
+  if (intTypeKind==0) //отмена
+    if (RunDialog(ino,"macDlgIno"))
+     flg=1;
+    end;
+  elif (intTypeKind==1)
+    if (RunDialog(inp,"macDlgInp"))
+      arrStopReas(0)="НЕИСПОЛНЕНИЕ ТРЕБОВАНИЯ ОБ УПЛАТЕ НАЛОГА, СБОРА, ПЕНИ, ШТРАФА (П. 2 СТ 76 НК РФ)";
+      arrStopReas(1)="НЕПРЕДСТАВЛЕНИЕ НАЛОГОВОЙ ДЕКЛАРАЦИИ В НАЛОГОВЫЙ ОРГАН В ТЕЧЕНИЕ 10 ДНЕЙ ПО ИСТЕЧЕНИИ УСТАНОВЛЕННОГО СРОКА ЕЕ ПРЕДСТАВЛЕНИЯ (П. 3 СТ. 76 НК РФ)";
+      intStopReas=menu(arrStopReas,"УКАЖИТЕ ПРИЧИНУ ПРИОСТАНОВЛЕНИЯ","УКАЖИТЕ ПРИЧИНУ ПРИОСТАНОВЛЕНИЯ");
+      if (intStopReas>=0)
+        strCodeStopReas="";
+        //add Polyakov S.George 01.06.2012
+        strCodeStopReas=macAddSpace(String(intStopReas+1),2,"0");
+        flg=1;
+      end;  
+    end;
+  end;
+end;
+
+//add Polyakov S.George 01.06.2012
+if (flg==1)
+  if (intTypeKind==1)
+    strStopCirc="";
+    getstring(strStopCirc,"УКАЖИТЕ ОБСТОЯТЕЛЬСТВА ФАКТА НАРУШЕНИЯ (Детальная информация по причине)");
+    strStopCirc=StrUpr(Trim(strStopCirc));
+  end;
+end;
+
+//add Polyakov S.George 01.06.2012
+if (flg==1)
+  if (intTypeKind==1)
+    strFlgSendSum="";
+    bSendSum=true;
+    if (getTrue(bSendSum,"ТРЕБУЕТСЯ ЛИ СООБЩИТЬ ОБ ОСТАТКАХ?"))
+      strFlgSendSum="Х";
+    end;
+  end;
+end;  
+
+//Добавляем строки
+
+if (flg==1)
+  flg=0;
+  clearrecord(stop);
+  rewind(stop);
+  if (intTypeKind==1)
+    stop.StopReason=arrStopReas(intStopReas);
+    stop.CodeStopReason=strCodeStopReas;
+    stop.RecoverSum=mneRecSum;
+    stop.StopCircumstance=strStopCirc;
+    stop.FlSendMsgAccSum=strFlgSendSum;
+  elif (intTypeKind==0)
+    stop.CancStopNumber=strCanStopN;
+    stop.CancStopDate=dteCanStopD;
+    stop.CancStopKind=chrCanStopKind;
+  end;  
+    stop.Kind=strKind;
+    stop.FileName=strFileName;
+    stop.RecoverNumber=strRecNum;
+    stop.RecoverDate=dteRecDate;
+    stop.Client=cln.Client;
+    stop.CodeNO=Trim(sn.KOD);
+    stop.NameNO=StrUpr(Trim(sn.NAIMK));
+    stop.Oper={oper};
+    stop.DateFormLoad={curdate};
+    stop.TimeFormLoad=Time();
+    stop.StopNumber=strStopNum;
+    stop.StopDate=dteStopDate;
+    insert(stop);
+    intID=stop.ID;
+    close(stop);
+    
+    rewind(ac_ar);
+    clearrecord(ac_ar);
+    ac_ar.ID=intID;
+    ac_ar.Code_Currency=intCode_cur;
+    ac_ar.Account=strAcc;
+    ac_ar.DateArest=dteStopDate;
+    if (intTypeKind==1) 
+      ac_ar.SumArest=mneRecSum;
+    end;
+    ac_ar.Chapter=I_CHAPTER;
+    ac_ar.KindAcc="РАСЧЕТНЫЙ";
+    insert(ac_ar);
+    close(ac_ar);
+    flgRet=true;
+    MsgBox("ВВОД ДАННЫХ ВЫПОЛНЕН УСПЕШНО!");
+end;
+
+if (flgRet)
+  return true
+else
+  return false
+end;
+
+end;
+
+/**************************** Точка входа в программу***********************/
+
+//macInsMan;
+
+blnId=true;
+while(blnId)
+  if (macInsMan)
+    if (GetTrue(blnId,"ПРОДОЛЖИТЬ ВВОД ДАННЫХ?"))
+       flgRet=false;
+    else
+      blnId=false;
+    end;
+  else
+    if (GetTrue(blnId,"ДАННЫЕ НЕ ДОБАВЛЕНЫ! НАЧАТЬ ВВОД СНОВА?"))
+    else
+      blnId=false;
+    end;
+  end;
+end;
+exit(1);
+

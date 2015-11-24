@@ -1,0 +1,57 @@
+/*
+Макрос работы с макропрограммами из 322lib.mac и 322elib.mac
+Позволяет устанавливать тип счета в "Д" для применения ограничений проводок по счету
+developer Polyakov S.George 13.01.2011-14.01.2011
+*/
+import "..\\mac\\bfsofia\\322lib.mac";
+import "..\\mac\\bfsofia\\322elib.mac";
+
+file r_acc0(account,"bank.def") key 0;
+file w_acc0(account,"bank.def") key 0 write;
+
+var bUpd=false,sAcc="",iK=0,iErr=int(0),iUpd=int(0);
+
+if (gettrue(false,"Выполнить добавление символа Д по счетам с приостановками?"))
+   bUpd=true;
+else
+  MsgBox("Будет выведен только отчет по арестованным счетам!");
+end;
+
+//анализируем что возвращает макрос
+
+while (next(r_acc0))
+  if (((trim(r_acc0.balance)=="40502") Or (trim(r_acc0.balance)=="40602") Or (trim(r_acc0.balance)=="40702")  Or (trim(r_acc0.balance)=="40703") Or (trim(r_acc0.balance)=="40802")) and (r_acc0.Open_Close!="З"))
+    iK=iK+1;  
+    sAcc=(r_acc0.account);
+    //выбираем только с приостановками или с ошибками
+    iErr=macMain(sAcc,true,true);
+    //MsgBox (sAcc+"  "+iErr+"  "+ArrErr(iErr));
+    if ((iErr==int(0)) Or (iErr==int(5)) Or (iErr==int(6)) Or (iErr==int(7)))
+      if (not bUpd)
+        printLn(sAcc+"  "+ArrErr(iErr));  	
+      end;
+      if (bUpd)
+        rewind(w_acc0);    
+        clearrecord(w_acc0);
+        w_acc0.account=sAcc;
+        if (getEQ(w_acc0))
+          //+++++++++++++++
+          if (index(w_acc0.Type_Account,"Д")==0);
+             w_acc0.Type_Account=w_acc0.Type_Account+"Д";
+             update(w_acc0);
+             iUpd=iUpd+1;
+             printLn(sAcc+"  "+ArrErr(iErr));
+          end;
+        //+++++++++++++++
+      end;
+    end;	
+    end;
+  end;
+end;
+if ((bUpd) and (iUpd==0))
+  MsgBox("Счета для обновления не найдены!");
+else
+  if (iUpd>0)
+    MsgBox("Обновлено счетов "+iUpd);
+  end;  
+end;

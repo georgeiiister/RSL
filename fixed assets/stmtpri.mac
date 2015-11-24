@@ -1,0 +1,16 @@
+/*-RSL------------------------------------------------------------------------*/
+/*---------------Печать АКТа приемки-сдачи основных средств-------------------*/
+import print_act;
+
+
+file mvm (invmvmc, "bsmeans.def") key 0;
+
+macro АКТ_ПРИХОДА(Mvm_FormPrint, ID)
+  mvm.InvCard_Id  = ID;
+  if (GetEQ(mvm))   
+    PrintAct(1, ID, mvm.InvNumb);
+  else
+    MsgBox("Акт не найден!");
+  end;
+end;
+

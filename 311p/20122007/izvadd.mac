@@ -1,0 +1,195 @@
+/* */
+
+//import globals;
+
+file  izv (nal_out,"sofia.def") key 0 write;
+file  acc1 (account,  "sofia.def") key 0;
+file  acc0 (account,  "sofia.def") key 0;
+file  clt1 (client,   "sofia.def") key 0;
+file  clt0 (client,   "sofia.def") key 0;
+file  cls1 (clients1, "sofia.def") key 0;
+file  cls3 (clients3, "sofia.def") key 0;
+
+array Acc_change;                
+Acc_change(0)  = "ОТКРЫТИЕ НОВОГО СЧЕТА";
+Acc_change(1)  = "ОТКРЫТИЕ СЧЕТА ПРИ ИЗМЕНЕНИИ НОМЕРА СЧЕТА";
+Acc_change(2)  = "ЗАКРЫТИЕ СЧЕТА";
+Acc_change(3)  = "ЗАКРЫТИЕ СЧЕТА ПРИ ИЗМЕНЕНИИ НОМЕРА СЧЕТА";
+
+macro F_CheckFull(Clt, typech)
+    flag1 = 0;
+    flag2 = 0;
+    flag3 = 0;
+    Rezident = 0;
+    rewind(clt0);
+    ClearRecord(clt0);
+    clt0.Client = Clt;
+    if(flag1 = (GetEQ(clt0)))
+      if(clt0.NotResident == "X")
+        Rezident = 0;
+      else
+        Rezident = 1;
+      end;
+      TypeWork   = "";
+      TypeWork   = clt0.szUserType;
+      if(Index(TypeWork,"Ф") > 0)
+      else
+        if(StrLen(Trim(clt0.KPP)) > 0)
+        else
+           flag1 = 0;
+//           MsgBox("КПП Не заполнен!");
+           if(gettrue(TRUE,"КПП Не заполнен! ПРИНЯТЬ ?")) 
+              flag1 = 1;
+           else
+              flag1 = 0;
+           end;
+        end;
+      end;
+      if(StrLen(Trim(clt0.inn)) > 0)
+      else
+          flag1 = 0;
+//          MsgBox("ИНН Не заполнен!");
+           if(gettrue(TRUE,"ИНН Не заполнен! ПРИНЯТЬ ?")) 
+              flag1 = 1;
+           else
+              flag1 = 0;
+           end;
+      end;
+    end;
+    rewind(cls1);
+    ClearRecord(cls1);
+    cls1.Client = Clt;
+    flag2 = (GetEQ(cls1));
+    if(flag2)
+      if((Index(TypeWork,"И") > 0) Or (Rezident == 0))
+      else
+        if(StrLen(Trim(cls1.GosRegNum)) > 0)
+        else
+           flag2 = 0;
+           MsgBox("ОГРН налогоплательщика Не заполнен!");
+        end;
+      end;
+      if((Index(TypeWork,"И") > 0) Or (Rezident == 0))
+      else
+         if(StrLen(Trim(cls1.SerSvidReg)) > 0)
+         else
+             flag2 = 0;
+             MsgBox("СЕРИЯ СВИДЕТЕЛЬСЕТВА О ГОС. РЕГИСТРАЦИИ Не заполнена!");
+         end;
+         if(StrLen(Trim(cls1.NumSvidReg)) > 0)
+         else
+             flag2 = 0;
+             MsgBox("НОМЕР СВИДЕТЕЛЬСЕТВА О ГОС. РЕГИСТРАЦИИ  Не заполнен!");
+         end;
+      end;
+      if((tapech == 0) Or (tapech == 1))
+         if(StrLen(Trim(cls1.NalogSvSer)) > 0)
+         else
+             flag2 = 0;
+             MsgBox("СЕРИЯ СВИДЕТЕЛЬСЕТВА О ПОСТАНОВКЕ НА УЧЕТ Не заполнена!");
+         end;
+         if(StrLen(Trim(cls1.NalogSvNum)) > 0)
+         else
+             flag2 = 0;
+             MsgBox("НОМЕР СВИДЕТЕЛЬСЕТВА О ПОСТАНОВКЕ НА УЧЕТ Не заполнен!");
+         end;
+      end;
+    end;                                                                  
+
+//MsgBox("!");
+
+ if((flag1 == 0) Or (flag2 == 0))
+     return 0;
+ else
+     return 1;
+ end;
+end;
+
+macro WriteBase_NalOut(acc, clt, typechange, dateoper, operator, AccSm)
+//macro WriteBase_NalOut(acc, clt, typechange, dateoper, operator)
+	clearrecord(izv);
+	izv.Account = acc;
+	izv.Client  = clt;
+	izv.Type_Change = typechange;
+	izv.Date_Change = dateoper;
+	izv.Code_Currency = SubStr(acc,6,3);
+	izv.Balance = SubStr(acc,1,5);
+	izv.Oper = operator;
+	izv.Flag_Send = 1;
+	if((operator == 22) or
+           (operator == 23) or
+           (operator == 24) or
+           (operator == 25) 
+	  )
+	  izv.Departament = 2;
+	else
+	  izv.Departament = 1;
+	end;
+	izv.Account_SM = AccSm;
+	insert(izv);
+	close(izv);
+end;
+
+macro main()
+ flag_work = 1;
+ while(flag_work)
+  AccountSm = "";
+  Account   = "";
+  GetString(Account,"Введите номер СЧЕТА для извещения",20);
+  rewind(acc1);
+  ClearRecord(acc1);
+  acc1.Account = Account;
+  flag1 = (GetEQ(acc1));
+  if(flag1)
+     Client=acc1.Client;
+     Menu_change = menu(Open_change);
+     AccSm = "";
+     Menu_Change = menu(Acc_change);
+     if(Menu_change == 0)
+         typechange = 0;		//Открыли 
+         DateOper = acc1.Open_Date;
+     elif(Menu_change == 1)
+         typechange = 10;		//Открыли взамен СТАРОГО СЧЕТА
+         DateOper = acc1.Open_Date;
+         GetString(AccountSm , "Введите СТАРЫЙ СЧЕТ", 20);
+     elif(Menu_change == 2)
+         typechange = 2;		//Закрыли
+         DateOper = acc1.Close_Date;
+         if(acc1.Open_Close != "З")
+            MsgBox("Возможно счет не закрыт!");
+            flag_work = 0;
+         end;
+     elif(Menu_change == 3)
+         typechange = 12;		//Закрыли после открытия НОВОГО СЧЕТА
+         DateOper = acc1.Close_Date;
+         if(acc1.Open_Close != "З")           
+            MsgBox("Возможно счет не закрыт!");
+            flag_work = 0;
+         else
+  	    GetString(AccountSm , "Введите НОВЫЙ СЧЕТ", 20);
+         end;
+     end;
+     Oper = acc1.Oper;
+     CheckFull = 0;
+     CheckFull = F_CheckFull(Client, typechange);
+     if((flag_work == 0) Or (CheckFull == 0))
+     else
+	WriteBase_NalOut(Account, Client, typechange, DateOper, Oper, AccSm);
+     end;	
+     flag_work = 1;
+  else
+     if(gettrue(TRUE,"СЧЕТ не найден. Продолжить ?")) 
+       flag_work = 1;
+     else
+       flag_work = 0;
+     end;
+  end;
+  flag_work = 1;
+  if(gettrue(TRUE," Продолжить ?")) 
+    flag_work = 1;
+  else
+    flag_work = 0;
+  end;
+ end;
+end;
+main();

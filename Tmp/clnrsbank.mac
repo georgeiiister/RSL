@@ -1,0 +1,7 @@
+import bankInter;
+println(passivA("40702810601000000786"));
+println(debetA("40702810601000000786"));
+println(restA("40702810601000000786"));
+println(activB("40702810601000000786"));
+println(debetB("40702810601000000786"));
+println(restB("40702810601000000786"))
